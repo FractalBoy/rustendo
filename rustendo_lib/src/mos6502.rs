@@ -93,6 +93,10 @@ impl StatusRegister {
         self.carry = carry;
     }
 
+    pub fn get_carry(&self) -> bool {
+        self.carry
+    }
+
     pub fn set(&mut self, byte: u8) {
         self.carry = (byte & (1 << 0)) != 0;
         self.zero = (byte & (1 << 1)) != 0;
@@ -669,7 +673,7 @@ pub struct Mos6502 {
 
 enum IndexRegister {
     X,
-    Y
+    Y,
 }
 
 impl Mos6502 {
@@ -693,8 +697,7 @@ impl Mos6502 {
     pub fn run(&mut self) {
         loop {
             self.read_instruction();
-            self.do_instruction();
-            self.registers.pc.increment();
+            self.execute_instruction();
         }
     }
 
@@ -741,7 +744,7 @@ impl Mos6502 {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
                 Some(self.get_byte_at_address_high_low(address_high, address_low))
-            },
+            }
             AddressingMode::AbsoluteX => Some(self.absolute_indexed_addressing(IndexRegister::X)),
             AddressingMode::AbsoluteY => Some(self.absolute_indexed_addressing(IndexRegister::Y)),
             AddressingMode::Accumulator => None,
@@ -754,12 +757,12 @@ impl Mos6502 {
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
                 Some(self.get_byte_from_zero_page(zero_page_offset))
-            },
+            }
             AddressingMode::ZeroPageX => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.registers.x = self.registers.x.wrapping_add(zero_page_offset);
                 Some(self.get_byte_from_zero_page(self.registers.x))
-            },
+            }
             AddressingMode::ZeroPageY => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.registers.y = self.registers.y.wrapping_add(zero_page_offset);
@@ -769,23 +772,29 @@ impl Mos6502 {
     }
 
     fn read_instruction(&mut self) {
+        self.registers.pc.increment();
+        let next_instruction = self.fetch_next_byte();
+        self.data_bus.write(next_instruction);
         self.registers
             .instruction_register
             .read_from_bus(&self.data_bus);
     }
 
-    fn do_instruction(&mut self) {
+    fn execute_instruction(&mut self) {
         match self.registers.instruction_register.decode_instruction() {
-            Instruction::ADC(mode, width, cycles, penalty) => {
-                match self.get_operand(mode) {
-                    Some(operand) => {
-                        let (sum, carry) = self.registers.a.register.overflowing_add(operand);
-                        self.data_bus.write(sum);
-                        self.registers.a.read_from_bus(&self.data_bus);
-                        self.registers.p.set_carry(carry);
-                    },
-                    None => return
+            Instruction::ADC(mode, width, cycles, penalty) => match self.get_operand(mode) {
+                Some(operand) => {
+                    let (carry_sum, carry_carry) = self
+                        .registers
+                        .a
+                        .register
+                        .overflowing_add(self.registers.p.get_carry() as u8);
+                    let (sum, carry) = self.registers.a.register.overflowing_add(carry_sum);
+                    self.data_bus.write(sum);
+                    self.registers.a.read_from_bus(&self.data_bus);
+                    self.registers.p.set_carry(carry_carry || carry);
                 }
+                None => return,
             },
             _ => panic!("not implemented"),
         }
