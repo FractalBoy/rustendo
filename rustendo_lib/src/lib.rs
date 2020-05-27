@@ -2,7 +2,7 @@
 mod tests {
     #[test]
     fn new_mos_6502() {
-        assert!(true);
+        assert_eq!(u8::MAX.wrapping_add(1), 0);
     }
 }
 

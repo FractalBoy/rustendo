@@ -89,6 +89,10 @@ impl StatusRegister {
         p
     }
 
+    pub fn set_carry(&mut self, carry: bool) {
+        self.carry = carry;
+    }
+
     pub fn set(&mut self, byte: u8) {
         self.carry = (byte & (1 << 0)) != 0;
         self.zero = (byte & (1 << 1)) != 0;
@@ -141,6 +145,10 @@ impl InstructionRegister {
 
     pub fn read_from_bus(&mut self, bus: &DataBus) {
         self.register = bus.read();
+    }
+
+    pub fn set_value(&mut self, value: u8) {
+        self.register = value;
     }
 
     pub fn decode_instruction(&self) -> Instruction {
@@ -659,6 +667,11 @@ pub struct Mos6502 {
     pub not_reset: bool,
 }
 
+enum IndexRegister {
+    X,
+    Y
+}
+
 impl Mos6502 {
     pub fn new() -> Self {
         Mos6502 {
@@ -685,6 +698,76 @@ impl Mos6502 {
         }
     }
 
+    fn get_byte_at_address_high_low(&self, address_high: u8, address_low: u8) -> u8 {
+        let address = ((address_high as u16) << 8) | (address_low as u16);
+        self.get_byte_at_address(address)
+    }
+
+    fn get_byte_at_address(&self, address: u16) -> u8 {
+        self.internal_ram[address as usize]
+    }
+
+    fn get_byte_from_zero_page(&self, offset: u8) -> u8 {
+        self.internal_ram[offset as usize]
+    }
+
+    fn fetch_next_byte(&mut self) -> u8 {
+        self.registers.pc.increment();
+        self.address_bus = self.registers.pc.get_high_and_low();
+        self.get_byte_at_address(self.address_bus)
+    }
+
+    fn absolute_indexed_addressing(&mut self, index: IndexRegister) -> u8 {
+        let address_low = self.fetch_next_byte();
+        let mut address_high = self.fetch_next_byte();
+        let register: &mut u8 = match index {
+            IndexRegister::X => &mut self.registers.x,
+            IndexRegister::Y => &mut self.registers.y,
+        };
+        let (new_index, carry) = register.overflowing_add(address_low);
+        *register = new_index;
+        if carry {
+            // a carry occurred, need to add one to high byte of address
+            // and increment program counter
+            address_high += 1;
+            self.registers.pc.increment();
+        }
+        self.get_byte_at_address_high_low(address_high, address_low)
+    }
+
+    fn get_operand(&mut self, mode: AddressingMode) -> Option<u8> {
+        match mode {
+            AddressingMode::Absolute => {
+                let address_low = self.fetch_next_byte();
+                let address_high = self.fetch_next_byte();
+                Some(self.get_byte_at_address_high_low(address_high, address_low))
+            },
+            AddressingMode::AbsoluteX => Some(self.absolute_indexed_addressing(IndexRegister::X)),
+            AddressingMode::AbsoluteY => Some(self.absolute_indexed_addressing(IndexRegister::Y)),
+            AddressingMode::Accumulator => None,
+            AddressingMode::Immediate => Some(self.fetch_next_byte()),
+            AddressingMode::Implied => None,
+            AddressingMode::Indirect => None,
+            AddressingMode::IndirectX => None,
+            AddressingMode::IndirectY => None,
+            AddressingMode::Relative => None,
+            AddressingMode::ZeroPage => {
+                let zero_page_offset = self.fetch_next_byte();
+                Some(self.get_byte_from_zero_page(zero_page_offset))
+            },
+            AddressingMode::ZeroPageX => {
+                let zero_page_offset = self.fetch_next_byte();
+                self.registers.x = self.registers.x.wrapping_add(zero_page_offset);
+                Some(self.get_byte_from_zero_page(self.registers.x))
+            },
+            AddressingMode::ZeroPageY => {
+                let zero_page_offset = self.fetch_next_byte();
+                self.registers.y = self.registers.y.wrapping_add(zero_page_offset);
+                Some(self.get_byte_from_zero_page(self.registers.y))
+            }
+        }
+    }
+
     fn read_instruction(&mut self) {
         self.registers
             .instruction_register
@@ -693,7 +776,18 @@ impl Mos6502 {
 
     fn do_instruction(&mut self) {
         match self.registers.instruction_register.decode_instruction() {
-            _ => panic!(),
+            Instruction::ADC(mode, width, cycles, penalty) => {
+                match self.get_operand(mode) {
+                    Some(operand) => {
+                        let (sum, carry) = self.registers.a.register.overflowing_add(operand);
+                        self.data_bus.write(sum);
+                        self.registers.a.read_from_bus(&self.data_bus);
+                        self.registers.p.set_carry(carry);
+                    },
+                    None => return
+                }
+            },
+            _ => panic!("not implemented"),
         }
     }
 }
