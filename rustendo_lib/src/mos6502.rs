@@ -29,6 +29,41 @@ impl Registers {
     }
 }
 
+pub struct AddressBus {
+    adh: u8,
+    adl: u8,
+}
+
+impl AddressBus {
+    pub fn new() -> Self {
+        AddressBus { adl: 0, adh: 0 }
+    }
+
+    pub fn write_from_program_counter(&mut self, pc: &ProgramCounter) {
+        self.adh = pc.high();
+        self.adl = pc.low();
+    }
+
+    pub fn write_wide(&mut self, address: u16) {
+        let [high, low] = address.to_be_bytes();
+        self.adh = high;
+        self.adl = low;
+    }
+
+    pub fn write(&mut self, high: u8, low: u8) {
+        self.adh = high;
+        self.adl = low;
+    }
+
+    pub fn read(&self) -> (u8, u8) {
+        (self.adh, self.adl)
+    }
+
+    pub fn read_wide(&self) -> u16 {
+        (self.adh as u16) << 8 | self.adl as u16
+    }
+}
+
 pub struct ProgramCounter {
     pch: u8,
     pcl: u8,
@@ -39,26 +74,34 @@ impl ProgramCounter {
         ProgramCounter { pch: 0, pcl: 0 }
     }
 
-    pub fn set_low(&mut self, value: u8) {
-        self.pcl = value;
+    pub fn write_high(&mut self, bus: &DataBus) {
+        self.pch = bus.read();
     }
 
-    pub fn set_high(&mut self, value: u8) {
-        self.pch = value;
+    pub fn write_low(&mut self, bus: &DataBus) {
+        self.pcl = bus.read();
     }
 
-    pub fn set_high_and_low(&mut self, value: u16) {
-        let bytes = value.to_be_bytes();
-        self.pch = bytes[0];
-        self.pcl = bytes[1];
+    pub fn write_wide(&mut self, value: u16) {
+        let [high, low] = value.to_be_bytes();
+        self.pch = high;
+        self.pcl = low;
     }
 
-    pub fn get_high_and_low(&self) -> u16 {
+    pub fn high(&self) -> u8 {
+        self.pch
+    }
+
+    pub fn low(&self) -> u8 {
+        self.pcl
+    }
+
+    pub fn wide(&self) -> u16 {
         (self.pch as u16) << 8 | self.pcl as u16
     }
 
     pub fn increment(&mut self) {
-        self.set_high_and_low(self.get_high_and_low() + 1);
+        self.write_wide(self.wide().wrapping_add(1));
     }
 }
 
@@ -147,7 +190,7 @@ impl InstructionRegister {
         InstructionRegister { register: 0 }
     }
 
-    pub fn read_from_bus(&mut self, bus: &DataBus) {
+    pub fn write_from_bus(&mut self, bus: &DataBus) {
         self.register = bus.read();
     }
 
@@ -656,13 +699,40 @@ impl DataBus {
     }
 }
 
+struct InternalMemory {
+    ram: [u8; 0x800],
+    abh: u8,
+    abl: u8,
+}
+
+impl InternalMemory {
+    pub fn new() -> Self {
+        InternalMemory {
+            ram: [0; 0x800],
+            abh: 0,
+            abl: 0,
+        }
+    }
+
+    pub fn write_address(&mut self, address_bus: &AddressBus) {
+        let (high, low) = address_bus.read();
+        self.abh = high;
+        self.abl = low;
+    }
+
+    pub fn read(&self) -> u8 {
+        let address = ((self.abh as u16) << 8) | (self.abl as u16);
+        self.ram[address as usize]
+    }
+}
+
 pub struct Mos6502 {
-    internal_ram: [u8; 0x800],
+    internal_ram: InternalMemory,
     registers: Registers,
     pub data_bus: DataBus,
     pub output_clock1: bool,
     pub output_clock2: bool,
-    pub address_bus: u16,
+    pub address_bus: AddressBus,
     pub ready: bool,
     pub not_irq: bool,
     pub not_nmi: bool,
@@ -679,12 +749,12 @@ enum IndexRegister {
 impl Mos6502 {
     pub fn new() -> Self {
         Mos6502 {
-            internal_ram: [0; 0x800],
+            internal_ram: InternalMemory::new(),
             data_bus: DataBus::new(),
             registers: Registers::new(),
             output_clock1: false,
             output_clock2: false,
-            address_bus: 0,
+            address_bus: AddressBus::new(),
             ready: false,
             not_irq: true,
             not_nmi: true,
@@ -701,23 +771,16 @@ impl Mos6502 {
         }
     }
 
-    fn get_byte_at_address_high_low(&self, address_high: u8, address_low: u8) -> u8 {
-        let address = ((address_high as u16) << 8) | (address_low as u16);
-        self.get_byte_at_address(address)
-    }
-
-    fn get_byte_at_address(&self, address: u16) -> u8 {
-        self.internal_ram[address as usize]
-    }
-
-    fn get_byte_from_zero_page(&self, offset: u8) -> u8 {
-        self.internal_ram[offset as usize]
+    fn copy_address_bus_to_memory(&mut self) {
+        self.internal_ram.write_address(&self.address_bus);
     }
 
     fn fetch_next_byte(&mut self) -> u8 {
         self.registers.pc.increment();
-        self.address_bus = self.registers.pc.get_high_and_low();
-        self.get_byte_at_address(self.address_bus)
+        self.address_bus
+            .write_from_program_counter(&self.registers.pc);
+        self.internal_ram.write_address(&self.address_bus);
+        self.internal_ram.read()
     }
 
     fn absolute_indexed_addressing(&mut self, index: IndexRegister) -> u8 {
@@ -735,7 +798,9 @@ impl Mos6502 {
             address_high += 1;
             self.registers.pc.increment();
         }
-        self.get_byte_at_address_high_low(address_high, address_low)
+        self.address_bus.write(address_high, address_low);
+        self.copy_address_bus_to_memory();
+        self.internal_ram.read()
     }
 
     fn get_operand(&mut self, mode: AddressingMode) -> Option<u8> {
@@ -743,7 +808,9 @@ impl Mos6502 {
             AddressingMode::Absolute => {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
-                Some(self.get_byte_at_address_high_low(address_high, address_low))
+                self.address_bus.write(address_high, address_low);
+                self.internal_ram.write_address(&self.address_bus);
+                Some(self.internal_ram.read())
             }
             AddressingMode::AbsoluteX => Some(self.absolute_indexed_addressing(IndexRegister::X)),
             AddressingMode::AbsoluteY => Some(self.absolute_indexed_addressing(IndexRegister::Y)),
@@ -756,17 +823,23 @@ impl Mos6502 {
             AddressingMode::Relative => None,
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
-                Some(self.get_byte_from_zero_page(zero_page_offset))
+                self.address_bus.write(0, zero_page_offset);
+                self.copy_address_bus_to_memory();
+                Some(self.internal_ram.read())
             }
             AddressingMode::ZeroPageX => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.registers.x = self.registers.x.wrapping_add(zero_page_offset);
-                Some(self.get_byte_from_zero_page(self.registers.x))
+                self.address_bus.write(0, self.registers.x);
+                self.copy_address_bus_to_memory();
+                Some(self.internal_ram.read())
             }
             AddressingMode::ZeroPageY => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.registers.y = self.registers.y.wrapping_add(zero_page_offset);
-                Some(self.get_byte_from_zero_page(self.registers.y))
+                self.address_bus.write(0, self.registers.y);
+                self.copy_address_bus_to_memory();
+                Some(self.internal_ram.read())
             }
         }
     }
@@ -777,7 +850,7 @@ impl Mos6502 {
         self.data_bus.write(next_instruction);
         self.registers
             .instruction_register
-            .read_from_bus(&self.data_bus);
+            .write_from_bus(&self.data_bus);
     }
 
     fn execute_instruction(&mut self) {
