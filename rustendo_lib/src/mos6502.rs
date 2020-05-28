@@ -199,8 +199,8 @@ impl InstructionRegister {
     }
 
     pub fn decode_instruction(&self) -> Instruction {
-        let low_nibble = self.register & 0x01;
-        let high_nibble = (self.register & 0x10) >> 4;
+        let low_nibble = self.register & 0x0F;
+        let high_nibble = (self.register & 0xF0) >> 4;
 
         match low_nibble {
             0x0 => match high_nibble {
@@ -523,6 +523,7 @@ impl InstructionRegister {
     }
 }
 
+#[derive(Debug)]
 pub enum AddressingMode {
     Accumulator,
     Immediate,
@@ -539,6 +540,7 @@ pub enum AddressingMode {
     IndirectY,
 }
 
+#[derive(Debug)]
 pub enum Penalty {
     /// Don't add clock cycles
     None,
@@ -550,6 +552,7 @@ pub enum Penalty {
 }
 
 /// Tuple is (addressing mode, instruction bytes, clock cycles,ClockCycles)
+#[derive(Debug)]
 pub enum Instruction {
     /// Add Memory to Accumulator with Carry
     ADC(AddressingMode, u32, u32, Penalty),
@@ -699,19 +702,23 @@ impl DataBus {
     }
 }
 
-struct InternalMemory {
+pub struct InternalMemory {
     ram: [u8; 0x800],
     abh: u8,
     abl: u8,
 }
 
 impl InternalMemory {
-    pub fn new() -> Self {
-        InternalMemory {
+    pub fn new(memory: Option<&[u8]>) -> Self {
+        let mut mem = InternalMemory {
             ram: [0; 0x800],
             abh: 0,
             abl: 0,
+        };
+        if let Some(memory) = memory {
+            mem.ram.copy_from_slice(memory);
         }
+        mem
     }
 
     pub fn write_address(&mut self, address_bus: &AddressBus) {
@@ -724,11 +731,17 @@ impl InternalMemory {
         let address = ((self.abh as u16) << 8) | (self.abl as u16);
         self.ram[address as usize]
     }
+
+    pub fn write(&mut self, bus: &DataBus) {
+        let address = ((self.abh as u16) << 8) | (self.abl as u16);
+        self.ram[address as usize] = bus.read();
+    }
 }
 
 pub struct Mos6502 {
-    internal_ram: InternalMemory,
+    pub internal_ram: InternalMemory,
     registers: Registers,
+    halt: bool,
     pub data_bus: DataBus,
     pub output_clock1: bool,
     pub output_clock2: bool,
@@ -747,9 +760,9 @@ enum IndexRegister {
 }
 
 impl Mos6502 {
-    pub fn new() -> Self {
+    pub fn new(memory: Option<&[u8]>) -> Self {
         Mos6502 {
-            internal_ram: InternalMemory::new(),
+            internal_ram: InternalMemory::new(memory),
             data_bus: DataBus::new(),
             registers: Registers::new(),
             output_clock1: false,
@@ -761,6 +774,7 @@ impl Mos6502 {
             not_reset: true,
             not_set_overflow: true,
             sync: false,
+            halt: false,
         }
     }
 
@@ -768,7 +782,15 @@ impl Mos6502 {
         loop {
             self.read_instruction();
             self.execute_instruction();
+
+            if self.halt {
+                break;
+            }
         }
+    }
+
+    fn halt(&mut self) {
+        self.halt = true;
     }
 
     fn copy_address_bus_to_memory(&mut self) {
@@ -845,8 +867,10 @@ impl Mos6502 {
     }
 
     fn read_instruction(&mut self) {
-        self.registers.pc.increment();
-        let next_instruction = self.fetch_next_byte();
+        self.address_bus
+            .write_from_program_counter(&self.registers.pc);
+        self.internal_ram.write_address(&self.address_bus);
+        let next_instruction = self.internal_ram.read();
         self.data_bus.write(next_instruction);
         self.registers
             .instruction_register
@@ -854,22 +878,35 @@ impl Mos6502 {
     }
 
     fn execute_instruction(&mut self) {
-        match self.registers.instruction_register.decode_instruction() {
+        let instruction = self.registers.instruction_register.decode_instruction();
+        match instruction {
             Instruction::ADC(mode, width, cycles, penalty) => match self.get_operand(mode) {
                 Some(operand) => {
-                    let (carry_sum, carry_carry) = self
+                    let (sum, carry_carry) = self
                         .registers
                         .a
                         .register
                         .overflowing_add(self.registers.p.get_carry() as u8);
-                    let (sum, carry) = self.registers.a.register.overflowing_add(carry_sum);
+                    self.data_bus.write(sum);
+                    self.registers.a.read_from_bus(&self.data_bus);
+                    let (sum, carry) = self.registers.a.register.overflowing_add(operand);
                     self.data_bus.write(sum);
                     self.registers.a.read_from_bus(&self.data_bus);
                     self.registers.p.set_carry(carry_carry || carry);
                 }
                 None => return,
             },
-            _ => panic!("not implemented"),
+            Instruction::STA(mode, width, cycles, penalty) => {
+                let _ = self.get_operand(mode).unwrap();
+                self.registers.a.write_to_bus(&mut self.data_bus);
+                self.internal_ram.write(&self.data_bus);
+            },
+            Instruction::BRK(mode, width, cycles, penalty) => {
+                self.halt();
+            }
+            instruction => panic!("{:?} not implemented", instruction),
         }
+
+        self.registers.pc.increment();
     }
 }
