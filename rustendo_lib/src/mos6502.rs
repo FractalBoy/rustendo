@@ -10,7 +10,7 @@ pub struct Registers {
     /// Stack register
     s: u8,
     /// Status register
-    p: StatusRegister,
+    pub p: StatusRegister,
     /// Instruction register
     instruction_register: InstructionRegister,
 }
@@ -106,7 +106,7 @@ impl ProgramCounter {
 }
 
 pub struct StatusRegister {
-    carry: bool,
+    pub carry: bool,
     zero: bool,
     irq_disable: bool,
     decimal_mode: bool,
@@ -740,7 +740,7 @@ impl InternalMemory {
 
 pub struct Mos6502 {
     pub internal_ram: InternalMemory,
-    registers: Registers,
+    pub registers: Registers,
     halt: bool,
     pub data_bus: DataBus,
     pub output_clock1: bool,
