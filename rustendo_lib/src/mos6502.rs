@@ -1,47 +1,20 @@
-pub struct Registers {
-    /// Accumulator
-    a: Accumulator,
-    /// X index register
-    x: u8,
-    /// Y index register
-    y: u8,
-    /// Program counter
-    pc: ProgramCounter,
-    /// Stack register
-    s: u8,
-    /// Status register
-    pub p: StatusRegister,
-    /// Instruction register
-    instruction_register: InstructionRegister,
-}
-
-impl Registers {
-    pub fn new() -> Self {
-        Registers {
-            a: Accumulator::new(),
-            x: 0,
-            y: 0,
-            pc: ProgramCounter::new(),
-            s: 0xFD,
-            p: StatusRegister::new(),
-            instruction_register: InstructionRegister::new(),
-        }
-    }
-}
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct AddressBus {
     adh: u8,
     adl: u8,
+    pc: Rc<RefCell<ProgramCounter>>,
 }
 
 impl AddressBus {
-    pub fn new() -> Self {
-        AddressBus { adl: 0, adh: 0 }
+    pub fn new(pc: Rc<RefCell<ProgramCounter>>) -> Self {
+        AddressBus { adl: 0, adh: 0, pc }
     }
 
-    pub fn write_from_program_counter(&mut self, pc: &ProgramCounter) {
-        self.adh = pc.high();
-        self.adl = pc.low();
+    pub fn write_from_program_counter(&mut self) {
+        self.adh = self.pc.borrow().high();
+        self.adl = self.pc.borrow().low();
     }
 
     pub fn write_wide(&mut self, address: u16) {
@@ -165,33 +138,41 @@ impl StatusRegister {
 
 pub struct Accumulator {
     register: u8,
+    data_bus: Rc<RefCell<DataBus>>,
 }
 
 impl Accumulator {
-    pub fn new() -> Self {
-        Accumulator { register: 0 }
+    pub fn new(data_bus: Rc<RefCell<DataBus>>) -> Self {
+        Accumulator {
+            register: 0,
+            data_bus,
+        }
     }
 
-    pub fn write_to_bus(&self, bus: &mut DataBus) {
-        bus.write(self.register);
+    pub fn write_to_bus(&self) {
+        self.data_bus.borrow_mut().write(self.register);
     }
 
-    pub fn read_from_bus(&mut self, bus: &DataBus) {
-        self.register = bus.read();
+    pub fn read_from_bus(&mut self) {
+        self.register = self.data_bus.borrow().read();
     }
 }
 
 pub struct InstructionRegister {
     register: u8,
+    data_bus: Rc<RefCell<DataBus>>,
 }
 
 impl InstructionRegister {
-    pub fn new() -> Self {
-        InstructionRegister { register: 0 }
+    pub fn new(data_bus: Rc<RefCell<DataBus>>) -> Self {
+        InstructionRegister {
+            register: 0,
+            data_bus,
+        }
     }
 
-    pub fn write_from_bus(&mut self, bus: &DataBus) {
-        self.register = bus.read();
+    pub fn write_from_bus(&mut self) {
+        self.register = self.data_bus.borrow().read();
     }
 
     pub fn set_value(&mut self, value: u8) {
@@ -706,14 +687,22 @@ pub struct InternalMemory {
     ram: [u8; 0x800],
     abh: u8,
     abl: u8,
+    data_bus: Rc<RefCell<DataBus>>,
+    address_bus: Rc<RefCell<AddressBus>>,
 }
 
 impl InternalMemory {
-    pub fn new(memory: Option<&[u8]>) -> Self {
+    pub fn new(
+        data_bus: Rc<RefCell<DataBus>>,
+        address_bus: Rc<RefCell<AddressBus>>,
+        memory: Option<&[u8]>,
+    ) -> Self {
         let mut mem = InternalMemory {
             ram: [0; 0x800],
             abh: 0,
             abl: 0,
+            data_bus,
+            address_bus,
         };
         if let Some(memory) = memory {
             mem.ram.copy_from_slice(memory);
@@ -721,8 +710,8 @@ impl InternalMemory {
         mem
     }
 
-    pub fn write_address(&mut self, address_bus: &AddressBus) {
-        let (high, low) = address_bus.read();
+    pub fn write_address(&mut self) {
+        let (high, low) = self.address_bus.borrow().read();
         self.abh = high;
         self.abl = low;
     }
@@ -732,20 +721,33 @@ impl InternalMemory {
         self.ram[address as usize]
     }
 
-    pub fn write(&mut self, bus: &DataBus) {
+    pub fn write(&mut self) {
         let address = ((self.abh as u16) << 8) | (self.abl as u16);
-        self.ram[address as usize] = bus.read();
+        self.ram[address as usize] = self.data_bus.borrow().read();
     }
 }
 
 pub struct Mos6502 {
     pub internal_ram: InternalMemory,
-    pub registers: Registers,
+    /// Accumulator
+    a: Accumulator,
+    /// X index register
+    x: u8,
+    /// Y index register
+    y: u8,
+    /// Program counter
+    pc: Rc<RefCell<ProgramCounter>>,
+    /// Stack register
+    s: u8,
+    /// Status register
+    pub p: StatusRegister,
+    /// Instruction register
+    instruction_register: InstructionRegister,
     halt: bool,
-    pub data_bus: DataBus,
+    pub data_bus: Rc<RefCell<DataBus>>,
     pub output_clock1: bool,
     pub output_clock2: bool,
-    pub address_bus: AddressBus,
+    pub address_bus: Rc<RefCell<AddressBus>>,
     pub ready: bool,
     pub not_irq: bool,
     pub not_nmi: bool,
@@ -761,13 +763,27 @@ enum IndexRegister {
 
 impl Mos6502 {
     pub fn new(memory: Option<&[u8]>) -> Self {
-        Mos6502 {
-            internal_ram: InternalMemory::new(memory),
-            data_bus: DataBus::new(),
-            registers: Registers::new(),
+        let mut cpu = Mos6502 {
+            // Temporarily initializing some fields
+            // Will be reinitialized later in the function to point to the correct DataBus
+            internal_ram: InternalMemory::new(
+                Rc::new(RefCell::new(DataBus::new())),
+                Rc::new(RefCell::new(AddressBus::new(Rc::new(RefCell::new(ProgramCounter::new()))))),
+                memory,
+            ),
+            a: Accumulator::new(Rc::new(RefCell::new(DataBus::new()))),
+            instruction_register: InstructionRegister::new(Rc::new(RefCell::new(DataBus::new()))),
+            address_bus: Rc::new(RefCell::new(AddressBus::new(Rc::new(RefCell::new(
+                ProgramCounter::new(),
+            ))))),
+            x: 0,
+            y: 0,
+            pc: Rc::new(RefCell::new(ProgramCounter::new())),
+            s: 0xFD,
+            p: StatusRegister::new(),
+            data_bus: Rc::new(RefCell::new(DataBus::new())),
             output_clock1: false,
             output_clock2: false,
-            address_bus: AddressBus::new(),
             ready: false,
             not_irq: true,
             not_nmi: true,
@@ -775,7 +791,16 @@ impl Mos6502 {
             not_set_overflow: true,
             sync: false,
             halt: false,
-        }
+        };
+        cpu.address_bus = Rc::new(RefCell::new(AddressBus::new(Rc::clone(&cpu.pc))));
+        cpu.internal_ram = InternalMemory::new(
+            Rc::clone(&cpu.data_bus),
+            Rc::clone(&cpu.address_bus),
+            memory,
+        );
+        cpu.a = Accumulator::new(Rc::clone(&cpu.data_bus));
+        cpu.instruction_register = InstructionRegister::new(Rc::clone(&cpu.data_bus));
+        cpu
     }
 
     pub fn run(&mut self) {
@@ -794,14 +819,15 @@ impl Mos6502 {
     }
 
     fn copy_address_bus_to_memory(&mut self) {
-        self.internal_ram.write_address(&self.address_bus);
+        self.internal_ram.write_address();
     }
 
     fn fetch_next_byte(&mut self) -> u8 {
-        self.registers.pc.increment();
+        self.pc.borrow_mut().increment();
         self.address_bus
-            .write_from_program_counter(&self.registers.pc);
-        self.internal_ram.write_address(&self.address_bus);
+            .borrow_mut()
+            .write_from_program_counter();
+        self.internal_ram.write_address();
         self.internal_ram.read()
     }
 
@@ -809,8 +835,8 @@ impl Mos6502 {
         let address_low = self.fetch_next_byte();
         let mut address_high = self.fetch_next_byte();
         let register: &mut u8 = match index {
-            IndexRegister::X => &mut self.registers.x,
-            IndexRegister::Y => &mut self.registers.y,
+            IndexRegister::X => &mut self.x,
+            IndexRegister::Y => &mut self.y,
         };
         let (new_index, carry) = register.overflowing_add(address_low);
         *register = new_index;
@@ -818,9 +844,11 @@ impl Mos6502 {
             // a carry occurred, need to add one to high byte of address
             // and increment program counter
             address_high += 1;
-            self.registers.pc.increment();
+            self.pc.borrow_mut().increment();
         }
-        self.address_bus.write(address_high, address_low);
+        self.address_bus
+            .borrow_mut()
+            .write(address_high, address_low);
         self.copy_address_bus_to_memory();
         self.internal_ram.read()
     }
@@ -830,8 +858,10 @@ impl Mos6502 {
             AddressingMode::Absolute => {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
-                self.address_bus.write(address_high, address_low);
-                self.internal_ram.write_address(&self.address_bus);
+                self.address_bus
+                    .borrow_mut()
+                    .write(address_high, address_low);
+                self.internal_ram.write_address();
                 Some(self.internal_ram.read())
             }
             AddressingMode::AbsoluteX => Some(self.absolute_indexed_addressing(IndexRegister::X)),
@@ -845,21 +875,21 @@ impl Mos6502 {
             AddressingMode::Relative => None,
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
-                self.address_bus.write(0, zero_page_offset);
+                self.address_bus.borrow_mut().write(0, zero_page_offset);
                 self.copy_address_bus_to_memory();
                 Some(self.internal_ram.read())
             }
             AddressingMode::ZeroPageX => {
                 let zero_page_offset = self.fetch_next_byte();
-                self.registers.x = self.registers.x.wrapping_add(zero_page_offset);
-                self.address_bus.write(0, self.registers.x);
+                self.x = self.x.wrapping_add(zero_page_offset);
+                self.address_bus.borrow_mut().write(0, self.x);
                 self.copy_address_bus_to_memory();
                 Some(self.internal_ram.read())
             }
             AddressingMode::ZeroPageY => {
                 let zero_page_offset = self.fetch_next_byte();
-                self.registers.y = self.registers.y.wrapping_add(zero_page_offset);
-                self.address_bus.write(0, self.registers.y);
+                self.y = self.y.wrapping_add(zero_page_offset);
+                self.address_bus.borrow_mut().write(0, self.y);
                 self.copy_address_bus_to_memory();
                 Some(self.internal_ram.read())
             }
@@ -868,45 +898,41 @@ impl Mos6502 {
 
     fn read_instruction(&mut self) {
         self.address_bus
-            .write_from_program_counter(&self.registers.pc);
-        self.internal_ram.write_address(&self.address_bus);
+            .borrow_mut()
+            .write_from_program_counter();
+        self.internal_ram.write_address();
         let next_instruction = self.internal_ram.read();
-        self.data_bus.write(next_instruction);
-        self.registers
-            .instruction_register
-            .write_from_bus(&self.data_bus);
+        self.data_bus.borrow_mut().write(next_instruction);
+        self.instruction_register.write_from_bus();
     }
 
     fn execute_instruction(&mut self) {
-        let instruction = self.registers.instruction_register.decode_instruction();
+        let instruction = self.instruction_register.decode_instruction();
         match instruction {
             Instruction::ADC(mode, width, cycles, penalty) => match self.get_operand(mode) {
                 Some(operand) => {
-                    let (sum, carry_carry) = self
-                        .registers
-                        .a
-                        .register
-                        .overflowing_add(self.registers.p.get_carry() as u8);
-                    self.data_bus.write(sum);
-                    self.registers.a.read_from_bus(&self.data_bus);
-                    let (sum, carry) = self.registers.a.register.overflowing_add(operand);
-                    self.data_bus.write(sum);
-                    self.registers.a.read_from_bus(&self.data_bus);
-                    self.registers.p.set_carry(carry_carry || carry);
+                    let (sum, carry_carry) =
+                        self.a.register.overflowing_add(self.p.get_carry() as u8);
+                    self.data_bus.borrow_mut().write(sum);
+                    self.a.read_from_bus();
+                    let (sum, carry) = self.a.register.overflowing_add(operand);
+                    self.data_bus.borrow_mut().write(sum);
+                    self.a.read_from_bus();
+                    self.p.set_carry(carry_carry || carry);
                 }
                 None => return,
             },
             Instruction::STA(mode, width, cycles, penalty) => {
                 let _ = self.get_operand(mode).unwrap();
-                self.registers.a.write_to_bus(&mut self.data_bus);
-                self.internal_ram.write(&self.data_bus);
-            },
+                self.a.write_to_bus();
+                self.internal_ram.write();
+            }
             Instruction::BRK(mode, width, cycles, penalty) => {
                 self.halt();
             }
             instruction => panic!("{:?} not implemented", instruction),
         }
 
-        self.registers.pc.increment();
+        self.pc.borrow_mut().increment();
     }
 }

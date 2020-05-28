@@ -20,8 +20,8 @@ mod tests {
         );
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
         mos6502.run();
-        mos6502.address_bus.write_wide(0x8);
-        mos6502.internal_ram.write_address(&mos6502.address_bus);
+        mos6502.address_bus.borrow_mut().write_wide(0x8);
+        mos6502.internal_ram.write_address();
         assert_eq!(mos6502.internal_ram.read(), 2, "0x1 + 0x1 = 0x2");
     }
 
@@ -43,10 +43,10 @@ mod tests {
         );
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
         mos6502.run();
-        mos6502.address_bus.write_wide(0x8);
-        mos6502.internal_ram.write_address(&mos6502.address_bus);
+        mos6502.address_bus.borrow_mut().write_wide(0x8);
+        mos6502.internal_ram.write_address();
         assert_eq!(mos6502.internal_ram.read(), 0xFE, "0xFF + 0xFF = 0xFE");
-        assert!(mos6502.registers.p.carry, "0xFF + 0xFF sets carry flag");
+        assert!(mos6502.p.carry, "0xFF + 0xFF sets carry flag");
     }
 }
 
