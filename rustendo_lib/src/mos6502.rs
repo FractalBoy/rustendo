@@ -857,13 +857,13 @@ impl Mos6502 {
             }
             AddressingMode::AbsoluteX => Some(self.absolute_indexed_addressing(IndexRegister::X)),
             AddressingMode::AbsoluteY => Some(self.absolute_indexed_addressing(IndexRegister::Y)),
-            AddressingMode::Accumulator => None,
+            AddressingMode::Accumulator => unimplemented!("{:?} unimplemented", mode),
             AddressingMode::Immediate => Some(self.fetch_next_byte()),
-            AddressingMode::Implied => None,
-            AddressingMode::Indirect => None,
-            AddressingMode::IndirectX => None,
-            AddressingMode::IndirectY => None,
-            AddressingMode::Relative => None,
+            AddressingMode::Implied => unimplemented!("{:?} unimplemented", mode),
+            AddressingMode::Indirect => unimplemented!("{:?} unimplemented", mode),
+            AddressingMode::IndirectX => unimplemented!("{:?} unimplemented", mode),
+            AddressingMode::IndirectY => unimplemented!("{:?} unimplemented", mode),
+            AddressingMode::Relative => unimplemented!("{:?} unimplemented", mode),
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.address_bus.borrow_mut().write(0, zero_page_offset);
