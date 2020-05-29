@@ -919,7 +919,7 @@ impl Mos6502 {
             Instruction::BRK(_, _, _, _) => {
                 self.halt();
             }
-            instruction => panic!("{:?} not implemented", instruction),
+            instruction => unimplemented!("{:?} instruction is unimplemented", instruction)
         }
 
         self.pc.borrow_mut().increment();
