@@ -113,6 +113,22 @@ impl StatusRegister {
         self.carry
     }
 
+    pub fn set_zero(&mut self, zero: bool) {
+        self.zero = zero;
+    }
+
+    pub fn get_zero(&self) -> bool {
+        self.zero
+    }
+
+    pub fn set_negative(&mut self, negative: bool) {
+        self.negative = negative;
+    }
+
+    pub fn get_negative(&self) -> bool {
+        self.negative
+    }
+
     pub fn set(&mut self, byte: u8) {
         self.carry = (byte & (1 << 0)) != 0;
         self.zero = (byte & (1 << 1)) != 0;
@@ -504,7 +520,7 @@ impl InstructionRegister {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum AddressingMode {
     Accumulator,
     Immediate,
@@ -909,7 +925,17 @@ impl Mos6502 {
                     self.a.read_from_bus();
                     self.p.set_carry(carry_carry || carry);
                 }
-                None => return,
+                None => panic!("no operand for {:?}", mode),
+            },
+            Instruction::AND(mode, _, _, _) => match self.get_operand(mode) {
+                Some(operand) => {
+                    let and_result = self.a.register & operand;
+                    self.data_bus.borrow_mut().write(and_result);
+                    self.a.read_from_bus();
+                    self.p.set_zero(and_result == 0);
+                    self.p.set_negative(and_result & 0x80 == 0x80);
+                }
+                None => panic!("no operand for {:?}", mode),
             },
             Instruction::STA(mode, _, _, _) => {
                 let _ = self.get_operand(mode).unwrap();
@@ -919,7 +945,7 @@ impl Mos6502 {
             Instruction::BRK(_, _, _, _) => {
                 self.halt();
             }
-            instruction => unimplemented!("{:?} instruction is unimplemented", instruction)
+            instruction => unimplemented!("{:?} instruction is unimplemented", instruction),
         }
 
         self.pc.borrow_mut().increment();
