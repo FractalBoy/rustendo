@@ -763,25 +763,27 @@ enum IndexRegister {
 
 impl Mos6502 {
     pub fn new(memory: Option<&[u8]>) -> Self {
-        let mut cpu = Mos6502 {
-            // Temporarily initializing some fields
-            // Will be reinitialized later in the function to point to the correct DataBus
+        // Temporarily initializing some fields
+        // Will be reinitialized later in the function to point to the correct references.
+        let pc = Rc::new(RefCell::new(ProgramCounter::new()));
+        let data_bus = Rc::new(RefCell::new(DataBus::new()));
+        let address_bus = Rc::new(RefCell::new(AddressBus::new(Rc::clone(&pc))));
+
+        Mos6502 {
             internal_ram: InternalMemory::new(
-                Rc::new(RefCell::new(DataBus::new())),
-                Rc::new(RefCell::new(AddressBus::new(Rc::new(RefCell::new(ProgramCounter::new()))))),
+                Rc::clone(&data_bus),
+                Rc::clone(&address_bus),
                 memory,
             ),
-            a: Accumulator::new(Rc::new(RefCell::new(DataBus::new()))),
-            instruction_register: InstructionRegister::new(Rc::new(RefCell::new(DataBus::new()))),
-            address_bus: Rc::new(RefCell::new(AddressBus::new(Rc::new(RefCell::new(
-                ProgramCounter::new(),
-            ))))),
+            a: Accumulator::new(Rc::clone(&data_bus)),
+            instruction_register: InstructionRegister::new(Rc::clone(&data_bus)),
+            address_bus,
             x: 0,
             y: 0,
-            pc: Rc::new(RefCell::new(ProgramCounter::new())),
+            pc,
             s: 0xFD,
             p: StatusRegister::new(),
-            data_bus: Rc::new(RefCell::new(DataBus::new())),
+            data_bus: Rc::clone(&data_bus),
             output_clock1: false,
             output_clock2: false,
             ready: false,
@@ -791,16 +793,7 @@ impl Mos6502 {
             not_set_overflow: true,
             sync: false,
             halt: false,
-        };
-        cpu.address_bus = Rc::new(RefCell::new(AddressBus::new(Rc::clone(&cpu.pc))));
-        cpu.internal_ram = InternalMemory::new(
-            Rc::clone(&cpu.data_bus),
-            Rc::clone(&cpu.address_bus),
-            memory,
-        );
-        cpu.a = Accumulator::new(Rc::clone(&cpu.data_bus));
-        cpu.instruction_register = InstructionRegister::new(Rc::clone(&cpu.data_bus));
-        cpu
+        }
     }
 
     pub fn run(&mut self) {
@@ -824,9 +817,7 @@ impl Mos6502 {
 
     fn fetch_next_byte(&mut self) -> u8 {
         self.pc.borrow_mut().increment();
-        self.address_bus
-            .borrow_mut()
-            .write_from_program_counter();
+        self.address_bus.borrow_mut().write_from_program_counter();
         self.internal_ram.write_address();
         self.internal_ram.read()
     }
@@ -897,9 +888,7 @@ impl Mos6502 {
     }
 
     fn read_instruction(&mut self) {
-        self.address_bus
-            .borrow_mut()
-            .write_from_program_counter();
+        self.address_bus.borrow_mut().write_from_program_counter();
         self.internal_ram.write_address();
         let next_instruction = self.internal_ram.read();
         self.data_bus.borrow_mut().write(next_instruction);
@@ -909,7 +898,7 @@ impl Mos6502 {
     fn execute_instruction(&mut self) {
         let instruction = self.instruction_register.decode_instruction();
         match instruction {
-            Instruction::ADC(mode, width, cycles, penalty) => match self.get_operand(mode) {
+            Instruction::ADC(mode, _, _, _) => match self.get_operand(mode) {
                 Some(operand) => {
                     let (sum, carry_carry) =
                         self.a.register.overflowing_add(self.p.get_carry() as u8);
@@ -922,12 +911,12 @@ impl Mos6502 {
                 }
                 None => return,
             },
-            Instruction::STA(mode, width, cycles, penalty) => {
+            Instruction::STA(mode, _, _, _) => {
                 let _ = self.get_operand(mode).unwrap();
                 self.a.write_to_bus();
                 self.internal_ram.write();
             }
-            Instruction::BRK(mode, width, cycles, penalty) => {
+            Instruction::BRK(_, _, _, _) => {
                 self.halt();
             }
             instruction => panic!("{:?} not implemented", instruction),
