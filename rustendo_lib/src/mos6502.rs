@@ -774,8 +774,8 @@ impl Alu {
             self.data = (bcd & 0xFF) as u8;
         } else {
             let sum = (self.data as u16)
-                + (self.data_bus.borrow().read() as u16)
-                + (self.p.borrow().get_carry() as u16);
+                .wrapping_add(self.data_bus.borrow().read() as u16)
+                .wrapping_add(self.p.borrow().get_carry() as u16);
 
             self.p.borrow_mut().set_carry(sum & 0x100 == 0x100);
             self.p.borrow_mut().set_zero(self.data == 0);
@@ -819,13 +819,8 @@ impl Alu {
 
             self.data = bcd;
         } else {
-            let data = if self.data & 0x80 == 0x80 {
-                self.data as u16 | 0xFF00
-            } else {
-                self.data as u16
-            };
-            let sum = data
-                .wrapping_add(!(self.data_bus.borrow().read() as u16))
+            let sum = (self.data as u16)
+                .wrapping_add((!self.data_bus.borrow().read()) as u16)
                 .wrapping_add(self.p.borrow().get_carry() as u16);
 
             self.data = (sum & 0xFF) as u8;
