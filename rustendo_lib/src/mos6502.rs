@@ -520,7 +520,7 @@ impl InstructionRegister {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum AddressingMode {
     Accumulator,
     Immediate,
@@ -701,8 +701,6 @@ impl DataBus {
 
 pub struct InternalMemory {
     ram: [u8; 0x800],
-    abh: u8,
-    abl: u8,
     data_bus: Rc<RefCell<DataBus>>,
     address_bus: Rc<RefCell<AddressBus>>,
 }
@@ -715,8 +713,6 @@ impl InternalMemory {
     ) -> Self {
         let mut mem = InternalMemory {
             ram: [0; 0x800],
-            abh: 0,
-            abl: 0,
             data_bus,
             address_bus,
         };
@@ -726,19 +722,15 @@ impl InternalMemory {
         mem
     }
 
-    pub fn write_address(&mut self) {
-        let (high, low) = self.address_bus.borrow().read();
-        self.abh = high;
-        self.abl = low;
-    }
-
     pub fn read(&self) -> u8 {
-        let address = ((self.abh as u16) << 8) | (self.abl as u16);
+        let (high, low) = self.address_bus.borrow().read();
+        let address = ((high as u16) << 8) | (low as u16);
         self.ram[address as usize]
     }
 
     pub fn write(&mut self) {
-        let address = ((self.abh as u16) << 8) | (self.abl as u16);
+        let (high, low) = self.address_bus.borrow().read();
+        let address = ((high as u16) << 8) | (low as u16);
         self.ram[address as usize] = self.data_bus.borrow().read();
     }
 }
@@ -827,18 +819,13 @@ impl Mos6502 {
         self.halt = true;
     }
 
-    fn copy_address_bus_to_memory(&mut self) {
-        self.internal_ram.write_address();
-    }
-
     fn fetch_next_byte(&mut self) -> u8 {
         self.pc.borrow_mut().increment();
         self.address_bus.borrow_mut().write_from_program_counter();
-        self.internal_ram.write_address();
         self.internal_ram.read()
     }
 
-    fn absolute_indexed_addressing(&mut self, index: IndexRegister) -> u8 {
+    fn absolute_indexed_addressing(&mut self, index: IndexRegister) {
         let address_low = self.fetch_next_byte();
         let mut address_high = self.fetch_next_byte();
         let register: &mut u8 = match index {
@@ -856,11 +843,9 @@ impl Mos6502 {
         self.address_bus
             .borrow_mut()
             .write(address_high, address_low);
-        self.copy_address_bus_to_memory();
-        self.internal_ram.read()
     }
 
-    fn get_operand(&mut self, mode: AddressingMode) -> Option<u8> {
+    fn do_addressing_mode(&mut self, mode: AddressingMode) {
         match mode {
             AddressingMode::Absolute => {
                 let address_low = self.fetch_next_byte();
@@ -868,13 +853,16 @@ impl Mos6502 {
                 self.address_bus
                     .borrow_mut()
                     .write(address_high, address_low);
-                self.internal_ram.write_address();
-                Some(self.internal_ram.read())
             }
-            AddressingMode::AbsoluteX => Some(self.absolute_indexed_addressing(IndexRegister::X)),
-            AddressingMode::AbsoluteY => Some(self.absolute_indexed_addressing(IndexRegister::Y)),
-            AddressingMode::Accumulator => unimplemented!("{:?} unimplemented", mode),
-            AddressingMode::Immediate => Some(self.fetch_next_byte()),
+            AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
+            AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
+            AddressingMode::Accumulator => {
+                self.data_bus.borrow_mut().write(self.a.register);
+            }
+            AddressingMode::Immediate => {
+                let value = self.fetch_next_byte();
+                self.data_bus.borrow_mut().write(value);
+            }
             AddressingMode::Implied => unimplemented!("{:?} unimplemented", mode),
             AddressingMode::Indirect => unimplemented!("{:?} unimplemented", mode),
             AddressingMode::IndirectX => unimplemented!("{:?} unimplemented", mode),
@@ -883,29 +871,22 @@ impl Mos6502 {
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.address_bus.borrow_mut().write(0, zero_page_offset);
-                self.copy_address_bus_to_memory();
-                Some(self.internal_ram.read())
             }
             AddressingMode::ZeroPageX => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.x = self.x.wrapping_add(zero_page_offset);
                 self.address_bus.borrow_mut().write(0, self.x);
-                self.copy_address_bus_to_memory();
-                Some(self.internal_ram.read())
             }
             AddressingMode::ZeroPageY => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.y = self.y.wrapping_add(zero_page_offset);
                 self.address_bus.borrow_mut().write(0, self.y);
-                self.copy_address_bus_to_memory();
-                Some(self.internal_ram.read())
             }
         }
     }
 
     fn read_instruction(&mut self) {
         self.address_bus.borrow_mut().write_from_program_counter();
-        self.internal_ram.write_address();
         let next_instruction = self.internal_ram.read();
         self.data_bus.borrow_mut().write(next_instruction);
         self.instruction_register.write_from_bus();
@@ -914,31 +895,52 @@ impl Mos6502 {
     fn execute_instruction(&mut self) {
         let instruction = self.instruction_register.decode_instruction();
         match instruction {
-            Instruction::ADC(mode, _, _, _) => match self.get_operand(mode) {
-                Some(operand) => {
-                    let (sum, carry_carry) =
-                        self.a.register.overflowing_add(self.p.get_carry() as u8);
-                    self.data_bus.borrow_mut().write(sum);
-                    self.a.read_from_bus();
-                    let (sum, carry) = self.a.register.overflowing_add(operand);
-                    self.data_bus.borrow_mut().write(sum);
-                    self.a.read_from_bus();
-                    self.p.set_carry(carry_carry || carry);
+            Instruction::ADC(mode, _, _, _) => {
+                self.do_addressing_mode(mode);
+                let operand = self.data_bus.borrow().read();
+                let (sum, carry_carry) = self.a.register.overflowing_add(self.p.get_carry() as u8);
+                self.data_bus.borrow_mut().write(sum);
+                self.a.read_from_bus();
+                let (sum, carry) = self.a.register.overflowing_add(operand);
+                self.data_bus.borrow_mut().write(sum);
+                self.a.read_from_bus();
+                self.p.set_carry(carry_carry || carry);
+            }
+            Instruction::AND(mode, _, _, _) => {
+                self.do_addressing_mode(mode);
+                let operand = self.data_bus.borrow().read();
+                let result = self.a.register & operand;
+                self.data_bus.borrow_mut().write(result);
+                self.a.read_from_bus();
+                self.p.set_zero(result == 0);
+                self.p.set_negative(result & 0x80 == 0x80);
+            }
+            Instruction::ASL(mode, _, _, _) => {
+                self.do_addressing_mode(mode);
+                let operand = self.data_bus.borrow().read();
+                let result = operand << 1;
+                self.data_bus.borrow_mut().write(result);
+
+                // The instruction does mot affect the overflow bit, Sets N equal to the
+                // result bit 7 (bit 6 in the input), sets Z flag if the result is equal to
+                // 0, otherwise resets Z and stores the input bit 7 in the carry flag.
+
+                self.p.set_negative(result & 0x80 == 0x80);
+
+                if result == 0 {
+                    self.p.set_zero(true);
+                } else {
+                    self.p.set_carry(operand & 0x80 == 0x80);
                 }
-                None => panic!("no operand for {:?}", mode),
-            },
-            Instruction::AND(mode, _, _, _) => match self.get_operand(mode) {
-                Some(operand) => {
-                    let and_result = self.a.register & operand;
-                    self.data_bus.borrow_mut().write(and_result);
+
+                if mode == AddressingMode::Accumulator {
                     self.a.read_from_bus();
-                    self.p.set_zero(and_result == 0);
-                    self.p.set_negative(and_result & 0x80 == 0x80);
+                } else {
+                    self.internal_ram.write();
                 }
-                None => panic!("no operand for {:?}", mode),
-            },
+            }
             Instruction::STA(mode, _, _, _) => {
-                let _ = self.get_operand(mode).unwrap();
+                self.do_addressing_mode(mode);
                 self.a.write_to_bus();
                 self.internal_ram.write();
             }
@@ -949,5 +951,24 @@ impl Mos6502 {
         }
 
         self.pc.borrow_mut().increment();
+    }
+
+    /// Get memory at a particular address.
+    /// 
+    /// Useful for testing. Resets internal address bus register
+    /// to its old state.
+    /// 
+    /// ```
+    /// use rustendo_lib::mos6502::Mos6502;
+    /// let mut mos6502 = Mos6502::new(None);
+    /// let mem = mos6502.read_memory_at_address(0);
+    /// assert_eq!(mem, 0x0);
+    /// ```
+    pub fn read_memory_at_address(&mut self, address: u16) -> u8 {
+        let old_address = self.address_bus.borrow().read();
+        self.address_bus.borrow_mut().write_wide(address);
+        let mem = self.internal_ram.read();
+        self.address_bus.borrow_mut().write(old_address.0, old_address.1);
+        mem 
     }
 }
