@@ -64,7 +64,6 @@ mod tests {
         );
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
         mos6502.run();
-        mos6502.address_bus.borrow_mut().write_wide(0x8);
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0x00,

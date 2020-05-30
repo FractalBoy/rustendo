@@ -736,7 +736,7 @@ impl InternalMemory {
 }
 
 pub struct Mos6502 {
-    pub internal_ram: InternalMemory,
+    internal_ram: InternalMemory,
     /// Accumulator
     a: Accumulator,
     /// X index register
@@ -770,6 +770,20 @@ enum IndexRegister {
 }
 
 impl Mos6502 {
+    /// Initializes a new `Mos6502` processor emulator.
+    /// 
+    /// Optionally, provide a `&[u8]` as the starting memory.
+    /// The starting memory must be exactly 2,048 bytes long
+    /// because it uses `copy_from_slice` under the hood.
+    /// 
+    /// ```
+    /// use rustendo_lib::mos6502::Mos6502;
+    /// let mut mem = vec![0; 0x800];
+    /// // Loads $FF into the accumulator.
+    /// mem[0] = 0x69; // ADC
+    /// mem[1] = 0xFF; // $FF
+    /// let mos6502 = Mos6502::new(Some(&mem));
+    /// ```
     pub fn new(memory: Option<&[u8]>) -> Self {
         // Temporarily initializing some fields
         // Will be reinitialized later in the function to point to the correct references.
@@ -804,6 +818,16 @@ impl Mos6502 {
         }
     }
 
+    /// Runs the processor until the program exits.
+    /// 
+    /// If processor never reaches a BRK instruction (0x00),
+    /// it will never halt.
+    /// 
+    /// ```
+    /// use rustendo_lib::mos6502::Mos6502;
+    /// let mut mos6502 = Mos6502::new(None);
+    /// mos6502.run();
+    /// ```
     pub fn run(&mut self) {
         loop {
             self.read_instruction();
