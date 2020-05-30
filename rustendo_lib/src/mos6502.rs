@@ -789,6 +789,7 @@ pub struct Mos6502 {
     /// Program counter
     pc: Rc<RefCell<ProgramCounter>>,
     /// Stack register
+    #[allow(dead_code)]
     s: u8,
     /// Status register
     pub p: Rc<RefCell<StatusRegister>>,
@@ -796,14 +797,22 @@ pub struct Mos6502 {
     instruction_register: InstructionRegister,
     halt: bool,
     data_bus: Rc<RefCell<DataBus>>,
+    #[allow(dead_code)]
     output_clock1: bool,
+    #[allow(dead_code)]
     output_clock2: bool,
     address_bus: Rc<RefCell<AddressBus>>,
+    #[allow(dead_code)]
     ready: bool,
+    #[allow(dead_code)]
     not_irq: bool,
+    #[allow(dead_code)]
     not_nmi: bool,
+    #[allow(dead_code)]
     not_set_overflow: bool,
+    #[allow(dead_code)]
     sync: bool,
+    #[allow(dead_code)]
     not_reset: bool,
 }
 
