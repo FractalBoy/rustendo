@@ -52,15 +52,15 @@ impl ProgramCounter {
         self.address_bus.borrow_mut().write(self.pch, self.pcl);
     }
 
-    pub fn write_high(&mut self) {
+    pub fn read_high_from_bus(&mut self) {
         self.pch = self.data_bus.borrow().read();
     }
 
-    pub fn write_low(&mut self) {
+    pub fn read_low_from_bus(&mut self) {
         self.pcl = self.data_bus.borrow().read();
     }
 
-    pub fn write_wide(&mut self, value: u16) {
+    pub fn write(&mut self, value: u16) {
         let [high, low] = value.to_be_bytes();
         self.pch = high;
         self.pcl = low;
@@ -79,7 +79,7 @@ impl ProgramCounter {
     }
 
     pub fn increment(&mut self) {
-        self.write_wide(self.wide().wrapping_add(1));
+        self.write(self.wide().wrapping_add(1));
     }
 }
 
@@ -977,21 +977,23 @@ impl Mos6502 {
                 self.p.borrow_mut().set_carry(false);
                 let offset = self.fetch_next_byte();
 
+                // PCL + offset -> PCL
                 self.data_bus.borrow_mut().write(self.pc.borrow().low());
                 self.alu.read_from_bus();
                 self.data_bus.borrow_mut().write(offset);
                 self.alu.read_from_bus();
                 self.alu.add_with_carry();
                 self.alu.write_to_bus();
-                self.pc.borrow_mut().write_low();
+                self.pc.borrow_mut().read_low_from_bus();
 
-                let low = self.data_bus.borrow().read();
+                // PCH + 0 + carry -> PCH
+                self.data_bus.borrow().read();
                 self.data_bus.borrow_mut().write(0);
                 self.alu.read_from_bus();
                 self.data_bus.borrow_mut().write(self.pc.borrow().high());
                 self.alu.read_from_bus();
                 self.alu.add_with_carry();
-                self.pc.borrow_mut().write_high();
+                self.pc.borrow_mut().read_high_from_bus();
             }
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
