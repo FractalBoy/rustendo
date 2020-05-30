@@ -44,7 +44,7 @@ mod tests {
             0xFE,
             "0xFF + 0xFF = 0xFE"
         );
-        assert!(mos6502.p.get_carry(), "0xFF + 0xFF sets carry flag");
+        assert!(mos6502.p.borrow_mut().get_carry(), "0xFF + 0xFF sets carry flag");
     }
 
     #[test]
@@ -69,8 +69,8 @@ mod tests {
             0x00,
             "0xFF & 0xFF = 0x00"
         );
-        assert!(mos6502.p.get_zero(), "zero flag set");
-        assert!(!mos6502.p.get_negative(), "negative flag not set");
+        assert!(mos6502.p.borrow().get_zero(), "zero flag set");
+        assert!(!mos6502.p.borrow().get_negative(), "negative flag not set");
     }
 
     #[test]
@@ -95,8 +95,8 @@ mod tests {
             0x80,
             "0xFF & 0x80 = 0x80"
         );
-        assert!(!mos6502.p.get_zero(), "zero flag not set");
-        assert!(mos6502.p.get_negative(), "negative flag set");
+        assert!(!mos6502.p.borrow().get_zero(), "zero flag not set");
+        assert!(mos6502.p.borrow().get_negative(), "negative flag set");
     }
 }
 
