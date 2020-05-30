@@ -735,25 +735,36 @@ impl Alu {
         }
     }
 
+    fn convert_from_bcd(value: u8) -> u16 {
+        let lsd = (value & 0x0F) as u16;
+        let msd = ((value & 0xF0) >> 4) as u16;
+        msd * 10 + lsd
+    }
+
+    fn convert_to_bcd(value: u16) -> u16 {
+        let mut bcd = 0;
+        let mut value = value;
+        for exp in (0..3).rev() {
+            let divisor = (10 as u16).pow(exp);
+            let digit = value / divisor;
+            bcd += digit * (16 as u16).pow(exp);
+            value -= digit * divisor;
+        }
+        bcd
+    }
+
     pub fn add_with_carry(&mut self) {
         let was_negative = self.data & 0x80 == 0x80;
 
         if self.p.borrow().get_decimal_mode() {
             // Convert currently stored data from BCD to decimal
-            let lsd = (self.data & 0x0f) as u16;
-            let msd = (self.data & 0xf0) as u16;
-            let data = msd * 10 + lsd;
+            let data = Alu::convert_from_bcd(self.data);
 
             // Convert data on bus from BCD to decimal
-            let operand = self.data_bus.borrow().read();
-            let lsd = (operand & 0x0F) as u16;
-            let msd = (self.data & 0xF0) as u16;
-            let operand = msd * 10 + lsd;
+            let operand = Alu::convert_from_bcd(self.data_bus.borrow().read());
 
-            // Add in decimal
-            let sum = data + operand + (self.p.borrow().get_carry() as u16);
-            // Convert decimal back into BCD
-            let bcd = (sum / 10) * 16 + sum % 10;
+            // Add in decimal and convert back into BCD
+            let bcd = Alu::convert_to_bcd(data + operand + (self.p.borrow().get_carry() as u16));
 
             // Set flags
             self.p.borrow_mut().set_carry(bcd & 0x100 == 0x100);
@@ -783,15 +794,10 @@ impl Alu {
 
         if self.p.borrow().get_decimal_mode() {
             // Convert currently stored data from BCD to decimal
-            let lsd = (self.data & 0x0f) as u16;
-            let msd = (self.data & 0xf0) as u16;
-            let data = msd * 10 + lsd;
+            let data = Alu::convert_from_bcd(self.data);
 
             // Convert data on bus from BCD to decimal
-            let operand = self.data_bus.borrow().read();
-            let lsd = (operand & 0x0F) as u16;
-            let msd = (self.data & 0xF0) as u16;
-            let operand = msd * 10 + lsd;
+            let operand = Alu::convert_from_bcd(self.data_bus.borrow().read());
 
             // Subtract in decimal
             let sum = data
@@ -802,8 +808,8 @@ impl Alu {
             let sum = if sum > 99 { sum + 96 } else { sum };
             is_negative = sum & 0x100 == 0x100;
             // Convert decimal back into BCD (take lower byte)
-            let bcd = sum & 0xFF;
-            let bcd = ((bcd as u8) / 10) * 16 + (bcd as u8) % 10;
+            let bcd = Alu::convert_to_bcd(sum & 0xFF);
+            let bcd = bcd as u8;
 
             // Set flags
             // Carry = inverse of borrow
@@ -1202,12 +1208,28 @@ impl Mos6502 {
                     self.do_addressing_mode(mode);
                 }
             }
+            Instruction::CLC(_, _, cycles, _) => {
+                self.cycles = cycles;
+                self.p.borrow_mut().set_carry(false);
+            }
+            Instruction::CLD(_, _, cycles, _) => {
+                self.cycles = cycles;
+                self.p.borrow_mut().set_decimal_mode(false);
+            }
             Instruction::SBC(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.alu.subtract_with_carry();
                 self.alu.write_to_bus();
                 self.a.read_from_bus();
+            }
+            Instruction::SEC(_, _, cycles, _) => {
+                self.cycles = cycles;
+                self.p.borrow_mut().set_carry(true);
+            }
+            Instruction::SED(_, _, cycles, _) => {
+                self.cycles = cycles;
+                self.p.borrow_mut().set_decimal_mode(true);
             }
             Instruction::STA(mode, _, cycles, _) => {
                 self.cycles = cycles;

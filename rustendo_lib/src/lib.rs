@@ -39,6 +39,41 @@ mod tests {
     }
 
     #[test]
+    fn adc_bcd() {
+        let mem = create_memory_from_slice(&[
+            0xF8, // SED
+            0x69, 0x10, // ADC $10
+            0x69, 0x10, // ADC $10
+            0x8D, 0x8, 0x0, // STA $8
+        ]);
+        let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
+        for _ in 0..4 {
+            while mos6502.clock() {}
+        }
+        assert_eq!(
+            mos6502.read_memory_at_address(0x8),
+            0x20,
+            "0x10 + 0x10 = 0x20 in BCD"
+        );
+        let mem = create_memory_from_slice(&[
+            0xF8, // SED
+            0x69, 0x81, // ADC $10
+            0x69, 0x92, // ADC $10
+            0x8D, 0x8, 0x0, // STA $8
+        ]);
+        let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
+        for _ in 0..4 {
+            while mos6502.clock() {}
+        }
+        assert_eq!(
+            mos6502.read_memory_at_address(0x8),
+            0x73,
+            "0x81 + 0x92 = 0x73 in BCD"
+        );
+        assert!(mos6502.p.borrow().get_carry(), "0x81 + 0x92 sets carry flag");
+    }
+
+    #[test]
     fn and_eq_zero() {
         let mem = create_memory_from_slice(&[
             0x69, 0xFF, // ADC $FF
