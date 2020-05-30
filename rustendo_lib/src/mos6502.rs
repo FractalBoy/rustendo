@@ -4,17 +4,11 @@ use std::rc::Rc;
 pub struct AddressBus {
     adh: u8,
     adl: u8,
-    pc: Rc<RefCell<ProgramCounter>>,
 }
 
 impl AddressBus {
-    pub fn new(pc: Rc<RefCell<ProgramCounter>>) -> Self {
-        AddressBus { adl: 0, adh: 0, pc }
-    }
-
-    pub fn write_from_program_counter(&mut self) {
-        self.adh = self.pc.borrow().high();
-        self.adl = self.pc.borrow().low();
+    pub fn new() -> Self {
+        AddressBus { adl: 0, adh: 0 }
     }
 
     pub fn write_wide(&mut self, address: u16) {
@@ -41,15 +35,21 @@ pub struct ProgramCounter {
     pch: u8,
     pcl: u8,
     data_bus: Rc<RefCell<DataBus>>,
+    address_bus: Rc<RefCell<AddressBus>>
 }
 
 impl ProgramCounter {
-    pub fn new(data_bus: Rc<RefCell<DataBus>>) -> Self {
+    pub fn new(data_bus: Rc<RefCell<DataBus>>, address_bus: Rc<RefCell<AddressBus>>) -> Self {
         ProgramCounter {
             pch: 0,
             pcl: 0,
             data_bus,
+            address_bus
         }
+    }
+
+    pub fn write_to_address_bus(&self) {
+        self.address_bus.borrow_mut().write(self.pch, self.pcl);
     }
 
     pub fn write_high(&mut self) {
@@ -196,7 +196,7 @@ impl InstructionRegister {
         }
     }
 
-    pub fn write_from_bus(&mut self) {
+    pub fn read_from_bus(&mut self) {
         self.register = self.data_bus.borrow().read();
     }
 
@@ -831,8 +831,8 @@ impl Mos6502 {
         // Temporarily initializing some fields
         // Will be reinitialized later in the function to point to the correct references.
         let data_bus = Rc::new(RefCell::new(DataBus::new()));
-        let pc = Rc::new(RefCell::new(ProgramCounter::new(Rc::clone(&data_bus))));
-        let address_bus = Rc::new(RefCell::new(AddressBus::new(Rc::clone(&pc))));
+        let address_bus = Rc::new(RefCell::new(AddressBus::new()));
+        let pc = Rc::new(RefCell::new(ProgramCounter::new(Rc::clone(&data_bus), Rc::clone(&address_bus))));
         let p = Rc::new(RefCell::new(StatusRegister::new()));
 
         Mos6502 {
@@ -890,7 +890,7 @@ impl Mos6502 {
 
     fn fetch_next_byte(&mut self) -> u8 {
         self.pc.borrow_mut().increment();
-        self.address_bus.borrow_mut().write_from_program_counter();
+        self.pc.borrow().write_to_address_bus();
         self.internal_ram.read()
     }
 
@@ -1011,10 +1011,10 @@ impl Mos6502 {
     }
 
     fn read_instruction(&mut self) {
-        self.address_bus.borrow_mut().write_from_program_counter();
+        self.pc.borrow().write_to_address_bus();
         let next_instruction = self.internal_ram.read();
         self.data_bus.borrow_mut().write(next_instruction);
-        self.instruction_register.write_from_bus();
+        self.instruction_register.read_from_bus();
     }
 
     fn execute_instruction(&mut self) {
