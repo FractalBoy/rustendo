@@ -138,6 +138,18 @@ impl StatusRegister {
         self.overflow = overflow
     }
 
+    pub fn get_overflow(&self) -> bool {
+        self.overflow
+    }
+
+    pub fn set_decimal_mode(&mut self, decimal_mode: bool) {
+        self.decimal_mode = decimal_mode
+    }
+
+    pub fn get_decimal_mode(&self) -> bool {
+        self.decimal_mode
+    }
+
     pub fn set(&mut self, byte: u8) {
         self.carry = (byte & (1 << 0)) != 0;
         self.zero = (byte & (1 << 1)) != 0;
@@ -724,11 +736,45 @@ impl Alu {
     }
 
     pub fn add_with_carry(&mut self) {
-        let (data, carry1) = self.data.overflowing_add(self.p.borrow().get_carry() as u8);
-        let (data, carry2) = data.overflowing_add(self.data_bus.borrow().read());
-        self.data = data;
-        self.p.borrow_mut().set_carry(carry1 || carry2);
-        self.p.borrow_mut().set_overflow(self.data & 0x80 == 0x80);
+        let was_negative = self.data & 0x80 == 0x80;
+
+        if self.p.borrow().get_decimal_mode() {
+            // Convert currently stored data from BCD to decimal
+            let lsd = (self.data & 0x0f) as u16;
+            let msd = (self.data & 0xf0) as u16;
+            let data = msd * 10 + lsd;
+
+            // Convert data on bus from BCD to decimal
+            let operand = self.data_bus.borrow().read();
+            let lsd = (operand & 0x0F) as u16;
+            let msd = (self.data & 0xF0) as u16;
+            let operand = msd * 10 + lsd;
+
+            // Add in decimal
+            let sum = data + operand + (self.p.borrow().get_carry() as u16);
+            // Convert decimal back into BCD
+            let bcd = (sum / 10) * 16 + sum % 10;
+
+            // Set flags
+            self.p.borrow_mut().set_carry(bcd & 0x100 == 0x100);
+            // BCD sets zero flag even if the carry bit is set
+            self.p.borrow_mut().set_zero(bcd | 0x00 == 0x00);
+
+            self.data = (bcd & 0xFF) as u8;
+        } else {
+            let sum = (self.data as u16)
+                + (self.data_bus.borrow().read() as u16)
+                + (self.p.borrow().get_carry() as u16);
+
+            self.p.borrow_mut().set_carry(sum & 0x100 == 0x100);
+            self.p.borrow_mut().set_zero(self.data == 0);
+
+            self.data = (sum & 0xFF) as u8;
+        }
+
+        let is_negative = self.data & 0x80 == 0x80;
+        self.p.borrow_mut().set_negative(is_negative);
+        self.p.borrow_mut().set_overflow(was_negative ^ is_negative);
     }
 
     pub fn write_to_bus(&self) {
@@ -990,6 +1036,7 @@ impl Mos6502 {
             AddressingMode::Relative => {
                 self.p.borrow_mut().set_carry(false);
                 let offset = self.fetch_next_byte();
+                let offset_negative = offset & 0x80 == 0x80;
 
                 // PCL + offset -> PCL
                 self.data_bus.borrow_mut().write(self.pc.borrow().low());
@@ -999,6 +1046,22 @@ impl Mos6502 {
                 self.alu.add_with_carry();
                 self.alu.write_to_bus();
                 self.pc.borrow_mut().read_low_from_bus();
+
+                // If the offset was negative, we expect a carry
+                // when no page boundary is crossed
+                if offset_negative && self.p.borrow().get_carry() {
+                    return;
+                }
+
+                // If the offset was positive, we expect no carry
+                // when no page boundary is crossed.
+                if !offset_negative && !self.p.borrow().get_carry() {
+                    return;
+                }
+
+                // Page boundary crossed, additional cycle needed
+                // and we must calculate the new PCH.
+                self.cycles += 1;
 
                 // PCH + 0 + carry -> PCH
                 self.data_bus.borrow().read();
@@ -1078,12 +1141,21 @@ impl Mos6502 {
                     self.internal_ram.write();
                 }
             }
+            Instruction::BCC(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                if !self.p.borrow().get_carry() {
+                    // Branch taken, add an additional cycle.
+                    self.cycles += 1;
+                    self.do_addressing_mode(mode);
+                }
+            }
             Instruction::STA(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.a.write_to_bus();
                 self.internal_ram.write();
-            },
+            }
             Instruction::BRK(_, _, cycles, _) => {
                 // For now, just set cycles so that this instruction works for doctests
                 self.cycles = cycles;
