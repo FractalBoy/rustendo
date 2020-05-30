@@ -778,33 +778,55 @@ impl Alu {
     }
 
     pub fn subtract_with_carry(&mut self) {
-        // Subtracting actually only happens in the ALU,
-        // but we're overwriting the data bus with its 
-        // negative. Save the current value to restore it later.
-        let saved_data_bus = self.data_bus.borrow().read();
+        let was_negative = self.data & 0x80 == 0x80;
+        let is_negative;
 
         if self.p.borrow().get_decimal_mode() {
+            // Convert currently stored data from BCD to decimal
+            let lsd = (self.data & 0x0f) as u16;
+            let msd = (self.data & 0xf0) as u16;
+            let data = msd * 10 + lsd;
+
             // Convert data on bus from BCD to decimal
-            let lsd = (saved_data_bus & 0x0F) as u16;
+            let operand = self.data_bus.borrow().read();
+            let lsd = (operand & 0x0F) as u16;
             let msd = (self.data & 0xF0) as u16;
             let operand = msd * 10 + lsd;
-            let operand = if operand < 80 {
-                operand
-            } else {
-                operand - 100
-            };
 
-            let operand = (operand as u8) & 0xFF;
-            self.data_bus.borrow_mut().write(operand);
-            self.add_with_carry();
-        } else  {
-            // Two's complement (carry does the +1 if no carry)
-            let operand = !saved_data_bus;
-            self.data_bus.borrow_mut().write(operand);
-            self.add_with_carry();
+            // Subtract in decimal
+            let sum = data
+                .wrapping_sub(operand)
+                .wrapping_sub(self.p.borrow().get_carry() as u16);
+            // Got a result smaller than 0 (greater than 100)
+            // Add 96 to convert to BCD negative
+            let sum = if sum > 99 { sum + 96 } else { sum };
+            is_negative = sum & 0x100 == 0x100;
+            // Convert decimal back into BCD (take lower byte)
+            let bcd = sum & 0xFF;
+            let bcd = ((bcd as u8) / 10) * 16 + (bcd as u8) % 10;
+
+            // Set flags
+            // Carry = inverse of borrow
+            self.p.borrow_mut().set_carry(sum & 0xFF00 == 0xFF00);
+            // BCD sets zero flag even if the carry bit is set
+            self.p.borrow_mut().set_zero(bcd | 0x00 == 0x00);
+
+            self.data = bcd;
+        } else {
+            let sum = (self.data as u16)
+                .wrapping_sub(self.data_bus.borrow().read() as u16)
+                .wrapping_sub(self.p.borrow().get_carry() as u16);
+
+            self.data = (sum & 0xFF) as u8;
+            // Carry = inverse of borrow
+            self.p.borrow_mut().set_carry(sum & 0xFF00 == 0xFF00);
+            self.p.borrow_mut().set_zero(self.data == 0);
+
+            is_negative = self.data & 0x80 == 0x80;
         }
 
-        self.data_bus.borrow_mut().write(saved_data_bus);
+        self.p.borrow_mut().set_negative(is_negative);
+        self.p.borrow_mut().set_overflow(was_negative ^ is_negative);
     }
 
     pub fn write_to_bus(&self) {

@@ -4,17 +4,11 @@ mod tests {
 
     #[test]
     fn adc_no_carry() {
-        let mut mem: Vec<u8> = vec![0; 0x800];
-        mem.splice(
-            0..7,
-            [
-                0x69, 0x1, // ADC $1
-                0x69, 0x1, // ADC $1
-                0x8D, 0x8, 0x0, // STA $8
-            ]
-            .iter()
-            .cloned(),
-        );
+        let mem = create_memory_from_slice(&[
+            0x69, 0x1, // ADC $1
+            0x69, 0x1, // ADC $1
+            0x8D, 0x8, 0x0, // STA $8
+        ]);
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
         for _ in 0..3 {
             while mos6502.clock() {}
@@ -24,17 +18,11 @@ mod tests {
 
     #[test]
     fn adc_with_carry() {
-        let mut mem: Vec<u8> = vec![0; 0x800];
-        mem.splice(
-            0..7,
-            [
-                0x69, 0xFF, // ADC $FF
-                0x69, 0xFF, // ADC $FF
-                0x8D, 0x8, 0x0, // STA $8
-            ]
-            .iter()
-            .cloned(),
-        );
+        let mem = create_memory_from_slice(&[
+            0x69, 0xFF, // ADC $FF
+            0x69, 0xFF, // ADC $FF
+            0x8D, 0x8, 0x0, // STA $8
+        ]);
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
         for _ in 0..3 {
             while mos6502.clock() {}
@@ -52,17 +40,11 @@ mod tests {
 
     #[test]
     fn and_eq_zero() {
-        let mut mem: Vec<u8> = vec![0; 0x800];
-        mem.splice(
-            0..7,
-            [
-                0x69, 0xFF, // ADC $FF
-                0x29, 0x00, // AND $00
-                0x8D, 0x8, 0x0, // STA $8
-            ]
-            .iter()
-            .cloned(),
-        );
+        let mem = create_memory_from_slice(&[
+            0x69, 0xFF, // ADC $FF
+            0x29, 0x00, // AND $00
+            0x8D, 0x8, 0x0, // STA $8
+        ]);
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
         for _ in 0..3 {
             while mos6502.clock() {}
@@ -78,17 +60,11 @@ mod tests {
 
     #[test]
     fn and_eq_negative() {
-        let mut mem: Vec<u8> = vec![0; 0x800];
-        mem.splice(
-            0..7,
-            [
-                0x69, 0xFF, // ADC $FF
-                0x29, 0x80, // AND $80
-                0x8D, 0x8, 0x0, // STA $8
-            ]
-            .iter()
-            .cloned(),
-        );
+        let mem = create_memory_from_slice(&[
+            0x69, 0xFF, // ADC $FF
+            0x29, 0x80, // AND $80
+            0x8D, 0x8, 0x0, // STA $8
+        ]);
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
         for _ in 0..3 {
             while mos6502.clock() {}
@@ -100,6 +76,12 @@ mod tests {
         );
         assert!(!mos6502.p.borrow().get_zero(), "zero flag not set");
         assert!(mos6502.p.borrow().get_negative(), "negative flag set");
+    }
+
+    fn create_memory_from_slice(slice: &[u8]) -> Vec<u8> {
+        let mut program = vec![0; 0x800];
+        program.splice(0..slice.len(), slice.iter().cloned());
+        program
     }
 }
 
