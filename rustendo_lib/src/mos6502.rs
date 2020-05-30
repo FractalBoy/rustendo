@@ -84,7 +84,7 @@ impl ProgramCounter {
 }
 
 pub struct StatusRegister {
-    pub carry: bool,
+    carry: bool,
     zero: bool,
     irq_disable: bool,
     decimal_mode: bool,
@@ -795,16 +795,16 @@ pub struct Mos6502 {
     /// Instruction register
     instruction_register: InstructionRegister,
     halt: bool,
-    pub data_bus: Rc<RefCell<DataBus>>,
-    pub output_clock1: bool,
-    pub output_clock2: bool,
-    pub address_bus: Rc<RefCell<AddressBus>>,
-    pub ready: bool,
-    pub not_irq: bool,
-    pub not_nmi: bool,
-    pub not_set_overflow: bool,
-    pub sync: bool,
-    pub not_reset: bool,
+    data_bus: Rc<RefCell<DataBus>>,
+    output_clock1: bool,
+    output_clock2: bool,
+    address_bus: Rc<RefCell<AddressBus>>,
+    ready: bool,
+    not_irq: bool,
+    not_nmi: bool,
+    not_set_overflow: bool,
+    sync: bool,
+    not_reset: bool,
 }
 
 enum IndexRegister {
