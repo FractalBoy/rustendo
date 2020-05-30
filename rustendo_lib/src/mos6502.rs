@@ -777,6 +777,36 @@ impl Alu {
         self.p.borrow_mut().set_overflow(was_negative ^ is_negative);
     }
 
+    pub fn subtract_with_carry(&mut self) {
+        // Subtracting actually only happens in the ALU,
+        // but we're overwriting the data bus with its 
+        // negative. Save the current value to restore it later.
+        let saved_data_bus = self.data_bus.borrow().read();
+
+        if self.p.borrow().get_decimal_mode() {
+            // Convert data on bus from BCD to decimal
+            let lsd = (saved_data_bus & 0x0F) as u16;
+            let msd = (self.data & 0xF0) as u16;
+            let operand = msd * 10 + lsd;
+            let operand = if operand < 80 {
+                operand
+            } else {
+                operand - 100
+            };
+
+            let operand = (operand as u8) & 0xFF;
+            self.data_bus.borrow_mut().write(operand);
+            self.add_with_carry();
+        } else  {
+            // Two's complement
+            let operand = !saved_data_bus + 1;
+            self.data_bus.borrow_mut().write(operand);
+            self.add_with_carry();
+        }
+
+        self.data_bus.borrow_mut().write(saved_data_bus);
+    }
+
     pub fn write_to_bus(&self) {
         self.data_bus.borrow_mut().write(self.data);
     }
@@ -1149,6 +1179,13 @@ impl Mos6502 {
                     self.cycles += 1;
                     self.do_addressing_mode(mode);
                 }
+            }
+            Instruction::SBC(mode, _, cycles, _) => {
+                self.cycles = cycles;
+                self.do_addressing_mode(mode);
+                self.alu.subtract_with_carry();
+                self.alu.write_to_bus();
+                self.a.read_from_bus();
             }
             Instruction::STA(mode, _, cycles, _) => {
                 self.cycles = cycles;
