@@ -798,8 +798,8 @@ impl Alu {
             self.data_bus.borrow_mut().write(operand);
             self.add_with_carry();
         } else  {
-            // Two's complement
-            let operand = !saved_data_bus + 1;
+            // Two's complement (carry does the +1 if no carry)
+            let operand = !saved_data_bus;
             self.data_bus.borrow_mut().write(operand);
             self.add_with_carry();
         }
