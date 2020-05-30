@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::mos6502;
+    use super::mos6502::Mos6502;
 
     #[test]
     fn adc_no_carry() {
@@ -9,7 +9,7 @@ mod tests {
             0x69, 0x1, // ADC $1
             0x8D, 0x8, 0x0, // STA $8
         ]);
-        let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
+        let mut mos6502 = Mos6502::new(Some(&mem));
         for _ in 0..3 {
             while mos6502.clock() {}
         }
@@ -23,7 +23,7 @@ mod tests {
             0x69, 0xFF, // ADC $FF
             0x8D, 0x8, 0x0, // STA $8
         ]);
-        let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
+        let mut mos6502 = Mos6502::new(Some(&mem));
         for _ in 0..3 {
             while mos6502.clock() {}
         }
@@ -46,7 +46,7 @@ mod tests {
             0x69, 0x10, // ADC $10
             0x8D, 0x8, 0x0, // STA $8
         ]);
-        let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
+        let mut mos6502 = Mos6502::new(Some(&mem));
         for _ in 0..4 {
             while mos6502.clock() {}
         }
@@ -61,7 +61,7 @@ mod tests {
             0x69, 0x92, // ADC $10
             0x8D, 0x8, 0x0, // STA $8
         ]);
-        let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
+        let mut mos6502 = Mos6502::new(Some(&mem));
         for _ in 0..4 {
             while mos6502.clock() {}
         }
@@ -70,7 +70,10 @@ mod tests {
             0x73,
             "0x81 + 0x92 = 0x73 in BCD"
         );
-        assert!(mos6502.p.borrow().get_carry(), "0x81 + 0x92 sets carry flag");
+        assert!(
+            mos6502.p.borrow().get_carry(),
+            "0x81 + 0x92 sets carry flag"
+        );
     }
 
     #[test]
@@ -80,7 +83,7 @@ mod tests {
             0x29, 0x00, // AND $00
             0x8D, 0x8, 0x0, // STA $8
         ]);
-        let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
+        let mut mos6502 = Mos6502::new(Some(&mem));
         for _ in 0..3 {
             while mos6502.clock() {}
         }
@@ -100,7 +103,7 @@ mod tests {
             0x29, 0x80, // AND $80
             0x8D, 0x8, 0x0, // STA $8
         ]);
-        let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
+        let mut mos6502 = Mos6502::new(Some(&mem));
         for _ in 0..3 {
             while mos6502.clock() {}
         }
@@ -111,6 +114,25 @@ mod tests {
         );
         assert!(!mos6502.p.borrow().get_zero(), "zero flag not set");
         assert!(mos6502.p.borrow().get_negative(), "negative flag set");
+    }
+
+    #[test]
+    fn sbc_without_borrow() {
+        let mem = create_memory_from_slice(&[
+            0x69, 0x0A, // ADC $0A
+            0x38, // SEC (disable borrow)
+            0xE9, 0x05, // SBC $5
+            0x8D, 0x8, 0x0, // STA $8
+        ]);
+        let mut mos6502 = Mos6502::new(Some(&mem));
+        for _ in 0..4 {
+            while mos6502.clock() {}
+        }
+        assert_eq!(
+            mos6502.read_memory_at_address(0x08),
+            0x05,
+            "0x0A - 0x05 = 0x05"
+        );
     }
 
     fn create_memory_from_slice(slice: &[u8]) -> Vec<u8> {

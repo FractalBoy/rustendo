@@ -788,7 +788,7 @@ impl Alu {
         self.p.borrow_mut().set_overflow(was_negative ^ is_negative);
     }
 
-    pub fn subtract_with_carry(&mut self) {
+    pub fn subtract_with_borrow(&mut self) {
         let was_negative = self.data & 0x80 == 0x80;
         let is_negative;
 
@@ -820,8 +820,8 @@ impl Alu {
             self.data = bcd;
         } else {
             let sum = (self.data as u16)
-                .wrapping_sub(self.data_bus.borrow().read() as u16)
-                .wrapping_sub(self.p.borrow().get_carry() as u16);
+                .wrapping_add(!(self.data_bus.borrow().read() as u16))
+                .wrapping_add(self.p.borrow().get_carry() as u16);
 
             self.data = (sum & 0xFF) as u8;
             // Carry = inverse of borrow
@@ -1219,7 +1219,7 @@ impl Mos6502 {
             Instruction::SBC(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                self.alu.subtract_with_carry();
+                self.alu.subtract_with_borrow();
                 self.alu.write_to_bus();
                 self.a.read_from_bus();
             }
