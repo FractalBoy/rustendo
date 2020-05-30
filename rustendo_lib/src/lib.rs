@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn sbc_without_borrow() {
         let mem = create_memory_from_slice(&[
-            0x69, 0x0A, // ADC $0A
+            0x69, 0xF6, // ADC $F6
             0x38, // SEC (disable borrow)
             0xE9, 0x05, // SBC $5
             0x8D, 0x8, 0x0, // STA $8
@@ -130,9 +130,11 @@ mod tests {
         }
         assert_eq!(
             mos6502.read_memory_at_address(0x08),
-            0x05,
-            "0x0A - 0x05 = 0x05"
+            0xF1,
+            "0xF6 - 0x05 = 0x0F"
         );
+        assert_eq!(mos6502.p.borrow().get_carry(), true, "no borrow");
+        assert_eq!(mos6502.p.borrow().get_negative(), true, "answer is negative");
     }
 
     fn create_memory_from_slice(slice: &[u8]) -> Vec<u8> {

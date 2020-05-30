@@ -813,19 +813,24 @@ impl Alu {
 
             // Set flags
             // Carry = inverse of borrow
-            self.p.borrow_mut().set_carry(sum & 0xFF00 == 0xFF00);
+            self.p.borrow_mut().set_carry(sum & 0x100 == 0x100);
             // BCD sets zero flag even if the carry bit is set
             self.p.borrow_mut().set_zero(bcd | 0x00 == 0x00);
 
             self.data = bcd;
         } else {
-            let sum = (self.data as u16)
+            let data = if self.data & 0x80 == 0x80 {
+                self.data as u16 | 0xFF00
+            } else {
+                self.data as u16
+            };
+            let sum = data
                 .wrapping_add(!(self.data_bus.borrow().read() as u16))
                 .wrapping_add(self.p.borrow().get_carry() as u16);
 
             self.data = (sum & 0xFF) as u8;
             // Carry = inverse of borrow
-            self.p.borrow_mut().set_carry(sum & 0xFF00 == 0xFF00);
+            self.p.borrow_mut().set_carry(sum & 0x100 == 0x100);
             self.p.borrow_mut().set_zero(self.data == 0);
 
             is_negative = self.data & 0x80 == 0x80;
