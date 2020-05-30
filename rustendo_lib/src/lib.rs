@@ -6,19 +6,19 @@ mod tests {
     fn adc_no_carry() {
         let mut mem: Vec<u8> = vec![0; 0x800];
         mem.splice(
-            0..8,
+            0..7,
             [
-                // ADC $1
                 0x69, 0x1, // ADC $1
-                0x69, 0x1, // STA $8
-                0x8D, 0x8, 0x0, // BRK
-                0x0,
+                0x69, 0x1, // ADC $1
+                0x8D, 0x8, 0x0, // STA $8
             ]
             .iter()
             .cloned(),
         );
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
-        mos6502.run();
+        for _ in 0..3 {
+            while mos6502.clock() {}
+        }
         assert_eq!(mos6502.read_memory_at_address(0x8), 2, "0x1 + 0x1 = 0x2");
     }
 
@@ -26,44 +26,47 @@ mod tests {
     fn adc_with_carry() {
         let mut mem: Vec<u8> = vec![0; 0x800];
         mem.splice(
-            0..8,
+            0..7,
             [
-                // ADC $FF
                 0x69, 0xFF, // ADC $FF
-                0x69, 0xFF, // STA $8
-                0x8D, 0x8, 0x0, // BRK
-                0x0,
+                0x69, 0xFF, // ADC $FF
+                0x8D, 0x8, 0x0, // STA $8
             ]
             .iter()
             .cloned(),
         );
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
-        mos6502.run();
+        for _ in 0..3 {
+            while mos6502.clock() {}
+        }
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0xFE,
             "0xFF + 0xFF = 0xFE"
         );
-        assert!(mos6502.p.borrow_mut().get_carry(), "0xFF + 0xFF sets carry flag");
+        assert!(
+            mos6502.p.borrow_mut().get_carry(),
+            "0xFF + 0xFF sets carry flag"
+        );
     }
 
     #[test]
     fn and_eq_zero() {
         let mut mem: Vec<u8> = vec![0; 0x800];
         mem.splice(
-            0..8,
+            0..7,
             [
-                // ADC $FF
-                0x69, 0xFF, // AND $00
-                0x29, 0x00, // STA $8
-                0x8D, 0x8, 0x0, // BRK
-                0x0,
+                0x69, 0xFF, // ADC $FF
+                0x29, 0x00, // AND $00
+                0x8D, 0x8, 0x0, // STA $8
             ]
             .iter()
             .cloned(),
         );
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
-        mos6502.run();
+        for _ in 0..3 {
+            while mos6502.clock() {}
+        }
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0x00,
@@ -77,19 +80,19 @@ mod tests {
     fn and_eq_negative() {
         let mut mem: Vec<u8> = vec![0; 0x800];
         mem.splice(
-            0..8,
+            0..7,
             [
-                // ADC $FF
-                0x69, 0xFF, // AND $80
-                0x29, 0x80, // STA $8
-                0x8D, 0x8, 0x0, // BRK
-                0x0,
+                0x69, 0xFF, // ADC $FF
+                0x29, 0x80, // AND $80
+                0x8D, 0x8, 0x0, // STA $8
             ]
             .iter()
             .cloned(),
         );
         let mut mos6502 = mos6502::Mos6502::new(Some(&mem));
-        mos6502.run();
+        for _ in 0..3 {
+            while mos6502.clock() {}
+        }
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0x80,

@@ -35,7 +35,7 @@ pub struct ProgramCounter {
     pch: u8,
     pcl: u8,
     data_bus: Rc<RefCell<DataBus>>,
-    address_bus: Rc<RefCell<AddressBus>>
+    address_bus: Rc<RefCell<AddressBus>>,
 }
 
 impl ProgramCounter {
@@ -44,7 +44,7 @@ impl ProgramCounter {
             pch: 0,
             pcl: 0,
             data_bus,
-            address_bus
+            address_bus,
         }
     }
 
@@ -795,8 +795,9 @@ pub struct Mos6502 {
     pub p: Rc<RefCell<StatusRegister>>,
     /// Instruction register
     instruction_register: InstructionRegister,
-    halt: bool,
     data_bus: Rc<RefCell<DataBus>>,
+    /// Number of cycles remaining in current instruction
+    cycles: u32,
     #[allow(dead_code)]
     output_clock1: bool,
     #[allow(dead_code)]
@@ -841,7 +842,10 @@ impl Mos6502 {
         // Will be reinitialized later in the function to point to the correct references.
         let data_bus = Rc::new(RefCell::new(DataBus::new()));
         let address_bus = Rc::new(RefCell::new(AddressBus::new()));
-        let pc = Rc::new(RefCell::new(ProgramCounter::new(Rc::clone(&data_bus), Rc::clone(&address_bus))));
+        let pc = Rc::new(RefCell::new(ProgramCounter::new(
+            Rc::clone(&data_bus),
+            Rc::clone(&address_bus),
+        )));
         let p = Rc::new(RefCell::new(StatusRegister::new()));
 
         Mos6502 {
@@ -860,6 +864,7 @@ impl Mos6502 {
             s: 0xFD,
             p,
             data_bus: Rc::clone(&data_bus),
+            cycles: 0,
             output_clock1: false,
             output_clock2: false,
             ready: false,
@@ -868,33 +873,31 @@ impl Mos6502 {
             not_reset: true,
             not_set_overflow: true,
             sync: false,
-            halt: false,
         }
     }
 
-    /// Runs the processor until the program exits.
+    /// Runs the processor for a single clock cycle
     ///
-    /// If processor never reaches a BRK instruction (0x00),
-    /// it will never halt.
+    /// Really, it does everything in one go on the
+    /// first clock cycle and then spends the rest of
+    /// the time doing nothing.
+    ///
+    /// Returns true if the instruction is complete.
     ///
     /// ```
     /// use rustendo_lib::mos6502::Mos6502;
     /// let mut mos6502 = Mos6502::new(None);
-    /// mos6502.run();
+    /// // Runs a single instruction to completion.
+    /// while mos6502.clock() { }
     /// ```
-    pub fn run(&mut self) {
-        loop {
+    pub fn clock(&mut self) -> bool {
+        if self.cycles == 0 {
             self.read_instruction();
             self.execute_instruction();
-
-            if self.halt {
-                break;
-            }
         }
-    }
 
-    fn halt(&mut self) {
-        self.halt = true;
+        self.cycles -= 1;
+        self.cycles == 0
     }
 
     fn fetch_next_byte(&mut self) -> u8 {
@@ -916,6 +919,7 @@ impl Mos6502 {
             // a carry occurred (page boundary crossed), need to add one
             // to high byte of address and use additional cycle
             address_high += 1;
+            self.cycles += 1;
         }
         self.address_bus
             .borrow_mut()
@@ -977,6 +981,7 @@ impl Mos6502 {
                     // a carry occurred (page boundary crossed), need to add one
                     // to high byte of address and use additional cycle
                     address_high += 1;
+                    self.cycles += 1;
                 }
                 self.address_bus
                     .borrow_mut()
@@ -1031,13 +1036,15 @@ impl Mos6502 {
     fn execute_instruction(&mut self) {
         let instruction = self.instruction_register.decode_instruction();
         match instruction {
-            Instruction::ADC(mode, _, _, _) => {
+            Instruction::ADC(mode, _, cycles, _) => {
+                self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.alu.add_with_carry();
                 self.alu.write_to_bus();
                 self.a.read_from_bus();
             }
-            Instruction::AND(mode, _, _, _) => {
+            Instruction::AND(mode, _, cycles, _) => {
+                self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 let operand = self.data_bus.borrow().read();
                 let result = self.a.register & operand;
@@ -1046,7 +1053,8 @@ impl Mos6502 {
                 self.p.borrow_mut().set_zero(result == 0);
                 self.p.borrow_mut().set_negative(result & 0x80 == 0x80);
             }
-            Instruction::ASL(mode, _, _, _) => {
+            Instruction::ASL(mode, _, cycles, _) => {
+                self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 let operand = self.data_bus.borrow().read();
                 let result = operand << 1;
@@ -1070,13 +1078,15 @@ impl Mos6502 {
                     self.internal_ram.write();
                 }
             }
-            Instruction::STA(mode, _, _, _) => {
+            Instruction::STA(mode, _, cycles, _) => {
+                self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.a.write_to_bus();
                 self.internal_ram.write();
-            }
-            Instruction::BRK(_, _, _, _) => {
-                self.halt();
+            },
+            Instruction::BRK(_, _, cycles, _) => {
+                // For now, just set cycles so that this instruction works for doctests
+                self.cycles = cycles;
             }
             instruction => unimplemented!("{:?} instruction is unimplemented", instruction),
         }
