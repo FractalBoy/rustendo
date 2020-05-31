@@ -45,8 +45,8 @@ mod tests {
         );
         let mut mos6502 = run_program(&[
             vec![0xF8],       // SED
-            vec![0x69, 0x81], // ADC $10
-            vec![0x69, 0x92], // ADC $10
+            vec![0x69, 0x81], // ADC 81
+            vec![0x69, 0x92], // ADC 92
             vec![0x85, 0x8],  // STA $8
         ]);
         assert_eq!(
