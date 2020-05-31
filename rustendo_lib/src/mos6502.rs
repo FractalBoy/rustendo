@@ -755,8 +755,9 @@ impl Alu {
 
     pub fn add_with_carry(&mut self) {
         let was_negative = self.data & 0x80 == 0x80;
+        let mut p = self.p.borrow_mut();
 
-        if self.p.borrow().get_decimal_mode() {
+        if p.get_decimal_mode() {
             // Convert currently stored data from BCD to decimal
             let data = Alu::convert_from_bcd(self.data);
 
@@ -764,35 +765,36 @@ impl Alu {
             let operand = Alu::convert_from_bcd(self.data_bus.borrow().read());
 
             // Add in decimal and convert back into BCD
-            let bcd = Alu::convert_to_bcd(data + operand + (self.p.borrow().get_carry() as u16));
+            let bcd = Alu::convert_to_bcd(data + operand + (p.get_carry() as u16));
 
             // Set flags
-            self.p.borrow_mut().set_carry(bcd & 0x100 == 0x100);
+            p.set_carry(bcd & 0x100 == 0x100);
             // BCD sets zero flag even if the carry bit is set
-            self.p.borrow_mut().set_zero(bcd | 0x00 == 0x00);
+            p.set_zero(bcd | 0x00 == 0x00);
 
             self.data = (bcd & 0xFF) as u8;
         } else {
             let sum = (self.data as u16)
                 .wrapping_add(self.data_bus.borrow().read() as u16)
-                .wrapping_add(self.p.borrow().get_carry() as u16);
+                .wrapping_add(p.get_carry() as u16);
 
-            self.p.borrow_mut().set_carry(sum & 0x100 == 0x100);
-            self.p.borrow_mut().set_zero(self.data == 0);
+            p.set_carry(sum & 0x100 == 0x100);
+            p.set_zero(self.data == 0);
 
             self.data = (sum & 0xFF) as u8;
         }
 
         let is_negative = self.data & 0x80 == 0x80;
-        self.p.borrow_mut().set_negative(is_negative);
-        self.p.borrow_mut().set_overflow(was_negative ^ is_negative);
+        p.set_negative(is_negative);
+        p.set_overflow(was_negative ^ is_negative);
     }
 
     pub fn subtract_with_borrow(&mut self) {
         let was_negative = self.data & 0x80 == 0x80;
         let is_negative;
+        let mut p = self.p.borrow_mut();
 
-        if self.p.borrow().get_decimal_mode() {
+        if p.get_decimal_mode() {
             // Convert currently stored data from BCD to decimal
             let data = Alu::convert_from_bcd(self.data);
 
@@ -800,7 +802,7 @@ impl Alu {
             let operand = Alu::convert_from_bcd(self.data_bus.borrow().read());
 
             // Subtract in decimal
-            let sum = (data as i16) - (operand as i16) - ((!self.p.borrow().get_carry()) as i16);
+            let sum = (data as i16) - (operand as i16) - ((!p.get_carry()) as i16);
             let sum = if sum < 0 { sum + 100 } else { sum };
             let sum = sum as u16;
             is_negative = sum & 0x100 == 0x100;
@@ -810,26 +812,26 @@ impl Alu {
 
             // Set flags
             // Carry = inverse of borrow
-            self.p.borrow_mut().set_carry(sum & 0x100 == 0x100);
+            p.set_carry(sum & 0x100 == 0x100);
             // BCD sets zero flag even if the carry bit is set
-            self.p.borrow_mut().set_zero(bcd | 0x00 == 0x00);
+            p.set_zero(bcd | 0x00 == 0x00);
 
             self.data = bcd;
         } else {
             let sum = (self.data as u16)
                 .wrapping_add((!self.data_bus.borrow().read()) as u16)
-                .wrapping_add(self.p.borrow().get_carry() as u16);
+                .wrapping_add(p.get_carry() as u16);
 
             self.data = (sum & 0xFF) as u8;
             // Carry = inverse of borrow
-            self.p.borrow_mut().set_carry(sum & 0x100 == 0x100);
-            self.p.borrow_mut().set_zero(self.data == 0);
+            p.set_carry(sum & 0x100 == 0x100);
+            p.set_zero(self.data == 0);
 
             is_negative = self.data & 0x80 == 0x80;
         }
 
-        self.p.borrow_mut().set_negative(is_negative);
-        self.p.borrow_mut().set_overflow(was_negative ^ is_negative);
+        p.set_negative(is_negative);
+        p.set_overflow(was_negative ^ is_negative);
     }
 
     pub fn write_to_bus(&self) {
@@ -1002,26 +1004,29 @@ impl Mos6502 {
     }
 
     fn fetch_next_byte(&mut self) -> u8 {
-        self.pc.borrow_mut().increment();
-        self.pc.borrow().write_to_address_bus();
+        let mut pc = self.pc.borrow_mut();
+        pc.increment();
+        pc.write_to_address_bus();
         self.internal_ram.read()
     }
 
     fn absolute_indexed_addressing(&mut self, index: IndexRegister) {
         let address_low = self.fetch_next_byte();
-        let mut address_high = self.fetch_next_byte();
+        let address_high = self.fetch_next_byte();
         let register: &mut u8 = match index {
             IndexRegister::X => &mut self.x,
             IndexRegister::Y => &mut self.y,
         };
         let (new_index, carry) = register.overflowing_add(address_low);
         *register = new_index;
-        if carry {
+        let address_high = if carry {
             // a carry occurred (page boundary crossed), need to add one
             // to high byte of address and use additional cycle
-            address_high += 1;
             self.cycles += 1;
-        }
+            address_high + 1
+        } else {
+            address_high
+        };
         self.address_bus
             .borrow_mut()
             .write(address_high, address_low);
@@ -1048,59 +1053,60 @@ impl Mos6502 {
             AddressingMode::Implied => unimplemented!("{:?} unimplemented", mode),
             AddressingMode::Indirect => {
                 let zero_page_offset = self.fetch_next_byte();
-                self.address_bus.borrow_mut().write(0, zero_page_offset);
+                let mut address_bus = self.address_bus.borrow_mut();
+                address_bus.write(0, zero_page_offset);
                 let address_low = self.internal_ram.read();
-                self.address_bus.borrow_mut().write(0, zero_page_offset + 1);
+                address_bus.write(0, zero_page_offset + 1);
                 let address_high = self.internal_ram.read();
-                self.address_bus
-                    .borrow_mut()
-                    .write(address_high, address_low);
+                address_bus.write(address_high, address_low);
             }
             AddressingMode::IndirectX => {
                 // Indexed indirect addressing with register X
                 let zero_page_offset = self.fetch_next_byte();
+                let mut address_bus = self.address_bus.borrow_mut();
                 let zero_page_offset = zero_page_offset.wrapping_add(self.x);
-                self.address_bus.borrow_mut().write(0, zero_page_offset);
+                address_bus.write(0, zero_page_offset);
                 let address_low = self.internal_ram.read();
                 let zero_page_offset = zero_page_offset.wrapping_add(1);
-                self.address_bus.borrow_mut().write(0, zero_page_offset);
+                address_bus.write(0, zero_page_offset);
                 let address_high = self.internal_ram.read();
-                self.address_bus
-                    .borrow_mut()
-                    .write(address_high, address_low);
+                address_bus.write(address_high, address_low);
             }
             AddressingMode::IndirectY => {
                 // Indirect indexed addressing with register Y
                 let zero_page_offset = self.fetch_next_byte();
-                self.address_bus.borrow_mut().write(0, zero_page_offset);
+                let mut address_bus = self.address_bus.borrow_mut();
+                address_bus.write(0, zero_page_offset);
                 let address_low = self.internal_ram.read();
                 let zero_page_offset = zero_page_offset.wrapping_add(1);
-                self.address_bus.borrow_mut().write(0, zero_page_offset);
-                let mut address_high = self.internal_ram.read();
+                address_bus.write(0, zero_page_offset);
+                let address_high = self.internal_ram.read();
                 let (address_low, carry) = address_low.overflowing_add(self.y);
-                if carry {
+                let address_high = if carry {
                     // a carry occurred (page boundary crossed), need to add one
                     // to high byte of address and use additional cycle
-                    address_high += 1;
                     self.cycles += 1;
-                }
-                self.address_bus
-                    .borrow_mut()
-                    .write(address_high, address_low);
+                    address_high + 1
+                } else {
+                    address_high
+                };
+                address_bus.write(address_high, address_low);
             }
             AddressingMode::Relative => {
                 self.p.borrow_mut().set_carry(false);
                 let offset = self.fetch_next_byte();
                 let offset_negative = offset & 0x80 == 0x80;
 
+                let mut pc = self.pc.borrow_mut();
+
                 // PCL + offset -> PCL
-                self.data_bus.borrow_mut().write(self.pc.borrow().low());
+                self.data_bus.borrow_mut().write(pc.low());
                 self.alu.read_from_bus();
                 self.data_bus.borrow_mut().write(offset);
                 self.alu.read_from_bus();
                 self.alu.add_with_carry();
                 self.alu.write_to_bus();
-                self.pc.borrow_mut().read_low_from_bus();
+                pc.read_low_from_bus();
 
                 // If the offset was negative, we expect a carry
                 // when no page boundary is crossed
@@ -1119,13 +1125,16 @@ impl Mos6502 {
                 self.cycles += 1;
 
                 // PCH + 0 + carry -> PCH
-                self.data_bus.borrow().read();
-                self.data_bus.borrow_mut().write(0);
+                {
+                    let mut data_bus = self.data_bus.borrow_mut();
+                    data_bus.read();
+                    data_bus.write(0);
+                }
                 self.alu.read_from_bus();
-                self.data_bus.borrow_mut().write(self.pc.borrow().high());
+                self.data_bus.borrow_mut().write(pc.high());
                 self.alu.read_from_bus();
                 self.alu.add_with_carry();
-                self.pc.borrow_mut().read_high_from_bus();
+                pc.read_high_from_bus();
             }
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
@@ -1164,12 +1173,17 @@ impl Mos6502 {
             Instruction::AND(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                let operand = self.data_bus.borrow().read();
-                let result = self.a.register & operand;
-                self.data_bus.borrow_mut().write(result);
+                let result;
+                {
+                    let mut data_bus = self.data_bus.borrow_mut();
+                    let operand = data_bus.read();
+                    result = self.a.register & operand;
+                    data_bus.write(result);
+                }
                 self.a.read_from_bus();
-                self.p.borrow_mut().set_zero(result == 0);
-                self.p.borrow_mut().set_negative(result & 0x80 == 0x80);
+                let mut p = self.p.borrow_mut();
+                p.set_zero(result == 0);
+                p.set_negative(result & 0x80 == 0x80);
             }
             Instruction::ASL(mode, _, cycles, _) => {
                 self.cycles = cycles;
@@ -1178,16 +1192,19 @@ impl Mos6502 {
                 let result = operand << 1;
                 self.data_bus.borrow_mut().write(result);
 
-                // The instruction does mot affect the overflow bit, Sets N equal to the
+                // The instruction does not affect the overflow bit, Sets N equal to the
                 // result bit 7 (bit 6 in the input), sets Z flag if the result is equal to
                 // 0, otherwise resets Z and stores the input bit 7 in the carry flag.
 
-                self.p.borrow_mut().set_negative(result & 0x80 == 0x80);
+                {
+                    let mut p = self.p.borrow_mut();
+                    p.set_negative(result & 0x80 == 0x80);
 
-                if result == 0 {
-                    self.p.borrow_mut().set_zero(true);
-                } else {
-                    self.p.borrow_mut().set_carry(operand & 0x80 == 0x80);
+                    if result == 0 {
+                        p.set_zero(true);
+                    } else {
+                        p.set_carry(operand & 0x80 == 0x80);
+                    }
                 }
 
                 if mode == AddressingMode::Accumulator {
@@ -1204,6 +1221,33 @@ impl Mos6502 {
                     self.cycles += 1;
                     self.do_addressing_mode(mode);
                 }
+            }
+            Instruction::BCS(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                if !self.p.borrow().get_carry() {
+                    // Branch taken, add an additional cycle.
+                    self.cycles += 1;
+                    self.do_addressing_mode(mode);
+                }
+            }
+            Instruction::BEQ(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                if self.p.borrow().get_zero() {
+                    // Branch taken, add an additional cycle.
+                    self.cycles += 1;
+                    self.do_addressing_mode(mode);
+                }
+            }
+            Instruction::BIT(mode, _, cycles, _) => {
+                self.cycles = cycles;
+                self.do_addressing_mode(mode);
+                let operand = self.data_bus.borrow().read();
+                let mut p = self.p.borrow_mut();
+                p.set_negative(operand & 0x80 == 0x80);
+                p.set_overflow(operand * 0x40 == 0x40);
+                p.set_zero(operand & self.a.register == 0);
             }
             Instruction::CLC(_, _, cycles, _) => {
                 self.cycles = cycles;
