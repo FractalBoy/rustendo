@@ -39,12 +39,12 @@ pub struct ProgramCounter {
 }
 
 impl ProgramCounter {
-    pub fn new(data_bus: Rc<RefCell<DataBus>>, address_bus: Rc<RefCell<AddressBus>>) -> Self {
+    pub fn new(data_bus: &Rc<RefCell<DataBus>>, address_bus: &Rc<RefCell<AddressBus>>) -> Self {
         ProgramCounter {
             pch: 0,
             pcl: 0,
-            data_bus,
-            address_bus,
+            data_bus: Rc::clone(data_bus),
+            address_bus: Rc::clone(address_bus),
         }
     }
 
@@ -179,10 +179,10 @@ pub struct Accumulator {
 }
 
 impl Accumulator {
-    pub fn new(data_bus: Rc<RefCell<DataBus>>) -> Self {
+    pub fn new(data_bus: &Rc<RefCell<DataBus>>) -> Self {
         Accumulator {
             register: 0,
-            data_bus,
+            data_bus: Rc::clone(data_bus),
         }
     }
 
@@ -201,10 +201,10 @@ pub struct InstructionRegister {
 }
 
 impl InstructionRegister {
-    pub fn new(data_bus: Rc<RefCell<DataBus>>) -> Self {
+    pub fn new(data_bus: &Rc<RefCell<DataBus>>) -> Self {
         InstructionRegister {
             register: 0,
-            data_bus,
+            data_bus: Rc::clone(data_bus),
         }
     }
 
@@ -727,11 +727,11 @@ pub struct Alu {
 }
 
 impl Alu {
-    pub fn new(data_bus: Rc<RefCell<DataBus>>, p: Rc<RefCell<StatusRegister>>) -> Self {
+    pub fn new(data_bus: &Rc<RefCell<DataBus>>, p: &Rc<RefCell<StatusRegister>>) -> Self {
         Alu {
             data: 0,
-            data_bus,
-            p,
+            data_bus: Rc::clone(data_bus),
+            p: Rc::clone(p),
         }
     }
 
@@ -851,14 +851,14 @@ pub struct InternalMemory {
 
 impl InternalMemory {
     pub fn new(
-        data_bus: Rc<RefCell<DataBus>>,
-        address_bus: Rc<RefCell<AddressBus>>,
+        data_bus: &Rc<RefCell<DataBus>>,
+        address_bus: &Rc<RefCell<AddressBus>>,
         memory: Option<&[u8]>,
     ) -> Self {
         let mut mem = InternalMemory {
             ram: [0; 0x800],
-            data_bus,
-            address_bus,
+            data_bus: Rc::clone(data_bus),
+            address_bus: Rc::clone(address_bus),
         };
         if let Some(memory) = memory {
             mem.ram.copy_from_slice(memory);
@@ -941,32 +941,37 @@ impl Mos6502 {
     /// let mos6502 = Mos6502::new(Some(&mem));
     /// ```
     pub fn new(memory: Option<&[u8]>) -> Self {
-        // Temporarily initializing some fields
-        // Will be reinitialized later in the function to point to the correct references.
-        let data_bus = Rc::new(RefCell::new(DataBus::new()));
-        let address_bus = Rc::new(RefCell::new(AddressBus::new()));
-        let pc = Rc::new(RefCell::new(ProgramCounter::new(
-            Rc::clone(&data_bus),
-            Rc::clone(&address_bus),
-        )));
-        let p = Rc::new(RefCell::new(StatusRegister::new()));
+        let data_bus = DataBus::new();
+        let data_bus = Rc::new(RefCell::new(data_bus));
+
+        let address_bus = AddressBus::new();
+        let address_bus = Rc::new(RefCell::new(address_bus));
+
+        let pc = ProgramCounter::new(&data_bus, &address_bus);
+        let pc = Rc::new(RefCell::new(pc));
+
+        let p = StatusRegister::new();
+        let p = Rc::new(RefCell::new(p));
+
+        let internal_ram = InternalMemory::new(&data_bus, &address_bus, memory);
+        let a = Accumulator::new(&data_bus);
+        let alu = Alu::new(&data_bus, &p);
+        let instruction_register = InstructionRegister::new(&data_bus);
+
+        let data_bus = Rc::clone(&data_bus);
 
         Mos6502 {
-            internal_ram: InternalMemory::new(
-                Rc::clone(&data_bus),
-                Rc::clone(&address_bus),
-                memory,
-            ),
-            a: Accumulator::new(Rc::clone(&data_bus)),
-            alu: Alu::new(Rc::clone(&data_bus), Rc::clone(&p)),
-            instruction_register: InstructionRegister::new(Rc::clone(&data_bus)),
+            internal_ram,
+            a,
+            alu,
+            instruction_register,
             address_bus,
             x: 0,
             y: 0,
             pc,
             s: 0xFD,
             p,
-            data_bus: Rc::clone(&data_bus),
+            data_bus,
             cycles: 0,
             output_clock1: false,
             output_clock2: false,
