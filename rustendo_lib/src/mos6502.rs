@@ -936,10 +936,8 @@ impl Mos6502 {
     ///
     /// ```
     /// use rustendo_lib::mos6502::Mos6502;
-    /// let mut mem = vec![0; 0x800];
     /// // Loads $FF into the accumulator.
-    /// mem[0] = 0x69; // ADC
-    /// mem[1] = 0xFF; // $FF
+    /// let mut mem = vec![0x69, 0xFF]; // ADC $FF
     /// let mos6502 = Mos6502::new(Some(&mem));
     /// ```
     pub fn new(memory: Option<&[u8]>) -> Self {
@@ -986,7 +984,7 @@ impl Mos6502 {
         }
     }
 
-    /// Runs the processor for a single clock cycle
+    /// Runs the processor for a single clock cycle.
     ///
     /// Really, it does everything in one go on the
     /// first clock cycle and then spends the rest of
