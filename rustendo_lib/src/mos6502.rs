@@ -860,9 +860,13 @@ impl InternalMemory {
             data_bus: Rc::clone(data_bus),
             address_bus: Rc::clone(address_bus),
         };
+
         if let Some(memory) = memory {
-            mem.ram.copy_from_slice(memory);
+            let mut ram = vec![0; 0x800];
+            ram.splice(0..memory.len(), memory.iter().cloned());
+            mem.ram.copy_from_slice(&ram);
         }
+
         mem
     }
 
@@ -929,8 +933,6 @@ impl Mos6502 {
     /// Initializes a new `Mos6502` processor emulator.
     ///
     /// Optionally, provide a `&[u8]` as the starting memory.
-    /// The starting memory must be exactly 2,048 bytes long
-    /// because it uses `copy_from_slice` under the hood.
     ///
     /// ```
     /// use rustendo_lib::mos6502::Mos6502;

@@ -153,18 +153,11 @@ mod tests {
         assert!(!mos6502.p.borrow().get_negative(), "not negative");
     }
 
-    fn create_memory_from_slice(slice: &[u8]) -> Vec<u8> {
-        let mut program = vec![0; 0x800];
-        program.splice(0..slice.len(), slice.iter().cloned());
-        program
-    }
-
     fn run_program(program: &[Vec<u8>]) -> Mos6502 {
         let mut mem: Vec<u8> = Vec::new();
         for instruction in program.iter().cloned() {
             mem.extend_from_slice(&instruction);
         }
-        let mem = create_memory_from_slice(&mem);
         let mut mos6502 = Mos6502::new(Some(&mem));
         for _ in 0..program.len() {
             while mos6502.clock() {}
