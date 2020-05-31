@@ -800,15 +800,12 @@ impl Alu {
             let operand = Alu::convert_from_bcd(self.data_bus.borrow().read());
 
             // Subtract in decimal
-            let sum = data
-                .wrapping_sub(operand)
-                .wrapping_sub(self.p.borrow().get_carry() as u16);
-            // Got a result smaller than 0 (greater than 100)
-            // Add 96 to convert to BCD negative
-            let sum = if sum > 99 { sum + 96 } else { sum };
+            let sum = (data as i16) - (operand as i16) - ((!self.p.borrow().get_carry()) as i16);
+            let sum = if sum < 0 { sum + 100 } else { sum };
+            let sum = sum as u16;
             is_negative = sum & 0x100 == 0x100;
             // Convert decimal back into BCD (take lower byte)
-            let bcd = Alu::convert_to_bcd(sum & 0xFF);
+            let bcd = Alu::convert_to_bcd((sum & 0xFF) as u16);
             let bcd = bcd as u8;
 
             // Set flags

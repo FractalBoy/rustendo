@@ -4,29 +4,21 @@ mod tests {
 
     #[test]
     fn adc_no_carry() {
-        let mem = create_memory_from_slice(&[
-            0x69, 0x1, // ADC $1
-            0x69, 0x1, // ADC $1
-            0x8D, 0x8, 0x0, // STA $8
+        let mut mos6502 = run_program(&[
+            vec![0x69, 0x1],      // ADC $1
+            vec![0x69, 0x1],      // ADC $1
+            vec![0x85, 0x8, 0x0], // STA $8
         ]);
-        let mut mos6502 = Mos6502::new(Some(&mem));
-        for _ in 0..3 {
-            while mos6502.clock() {}
-        }
         assert_eq!(mos6502.read_memory_at_address(0x8), 2, "0x1 + 0x1 = 0x2");
     }
 
     #[test]
     fn adc_with_carry() {
-        let mem = create_memory_from_slice(&[
-            0x69, 0xFF, // ADC $FF
-            0x69, 0xFF, // ADC $FF
-            0x8D, 0x8, 0x0, // STA $8
+        let mut mos6502 = run_program(&[
+            vec![0x69, 0xFF],     // ADC $FF
+            vec![0x69, 0xFF],     // ADC $FF
+            vec![0x85, 0x8, 0x0], // STA $8
         ]);
-        let mut mos6502 = Mos6502::new(Some(&mem));
-        for _ in 0..3 {
-            while mos6502.clock() {}
-        }
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0xFE,
@@ -40,31 +32,23 @@ mod tests {
 
     #[test]
     fn adc_bcd() {
-        let mem = create_memory_from_slice(&[
-            0xF8, // SED
-            0x69, 0x10, // ADC $10
-            0x69, 0x10, // ADC $10
-            0x8D, 0x8, 0x0, // STA $8
+        let mut mos6502 = run_program(&[
+            vec![0xF8],       // SED
+            vec![0x69, 0x10], // ADC 10
+            vec![0x69, 0x10], // ADC 10
+            vec![0x85, 0x8],  // STA $8
         ]);
-        let mut mos6502 = Mos6502::new(Some(&mem));
-        for _ in 0..4 {
-            while mos6502.clock() {}
-        }
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0x20,
             "0x10 + 0x10 = 0x20 in BCD"
         );
-        let mem = create_memory_from_slice(&[
-            0xF8, // SED
-            0x69, 0x81, // ADC $10
-            0x69, 0x92, // ADC $10
-            0x8D, 0x8, 0x0, // STA $8
+        let mut mos6502 = run_program(&[
+            vec![0xF8],       // SED
+            vec![0x69, 0x81], // ADC $10
+            vec![0x69, 0x92], // ADC $10
+            vec![0x85, 0x8],  // STA $8
         ]);
-        let mut mos6502 = Mos6502::new(Some(&mem));
-        for _ in 0..4 {
-            while mos6502.clock() {}
-        }
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0x73,
@@ -78,15 +62,11 @@ mod tests {
 
     #[test]
     fn and_eq_zero() {
-        let mem = create_memory_from_slice(&[
-            0x69, 0xFF, // ADC $FF
-            0x29, 0x00, // AND $00
-            0x8D, 0x8, 0x0, // STA $8
+        let mut mos6502 = run_program(&[
+            vec![0x69, 0xFF], // ADC $FF
+            vec![0x29, 0x00], // AND $00
+            vec![0x85, 0x8],  // STA $8
         ]);
-        let mut mos6502 = Mos6502::new(Some(&mem));
-        for _ in 0..3 {
-            while mos6502.clock() {}
-        }
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0x00,
@@ -98,15 +78,11 @@ mod tests {
 
     #[test]
     fn and_eq_negative() {
-        let mem = create_memory_from_slice(&[
-            0x69, 0xFF, // ADC $FF
-            0x29, 0x80, // AND $80
-            0x8D, 0x8, 0x0, // STA $8
+        let mut mos6502 = run_program(&[
+            vec![0x69, 0xFF], // ADC $FF
+            vec![0x29, 0x80], // AND $80
+            vec![0x85, 0x8],  // STA $8
         ]);
-        let mut mos6502 = Mos6502::new(Some(&mem));
-        for _ in 0..3 {
-            while mos6502.clock() {}
-        }
         assert_eq!(
             mos6502.read_memory_at_address(0x8),
             0x80,
@@ -118,29 +94,82 @@ mod tests {
 
     #[test]
     fn sbc_without_borrow() {
-        let mem = create_memory_from_slice(&[
-            0x69, 0xF6, // ADC $F6
-            0x38, // SEC (disable borrow)
-            0xE9, 0x05, // SBC $5
-            0x8D, 0x8, 0x0, // STA $8
+        let mut mos6502 = run_program(&[
+            vec![0x69, 0xF6], // ADC $F6
+            vec![0x38],       // SEC (disable borrow)
+            vec![0xE9, 0x05], // SBC $5
+            vec![0x85, 0x8],  // STA $8
         ]);
-        let mut mos6502 = Mos6502::new(Some(&mem));
-        for _ in 0..4 {
-            while mos6502.clock() {}
-        }
         assert_eq!(
             mos6502.read_memory_at_address(0x08),
             0xF1,
             "0xF6 - 0x05 = 0x0F"
         );
-        assert_eq!(mos6502.p.borrow().get_carry(), true, "no borrow");
-        assert_eq!(mos6502.p.borrow().get_negative(), true, "answer is negative");
+        assert!(mos6502.p.borrow().get_carry(), "no borrow");
+        assert!(mos6502.p.borrow().get_negative(), "answer is negative");
+    }
+
+    #[test]
+    fn sbc_with_borrow() {
+        let mut mos6502 = run_program(&[
+            vec![0x69, 0x5], // ADC $5
+            vec![0x38],      // SEC (disable borrow)
+            vec![0xE9, 0xA], // SBC $A
+            vec![0x85, 0x8], // STA $8
+        ]);
+        assert_eq!(
+            mos6502.read_memory_at_address(0x08),
+            0xFB,
+            "0x5 - 0xA = -0x5 (0xFB)"
+        );
+        assert!(!mos6502.p.borrow().get_carry(), "borrow");
+        assert!(mos6502.p.borrow().get_negative(), "answer is positive");
+    }
+
+    #[test]
+    fn sbc_bcd() {
+        let mut mos6502 = run_program(&[
+            vec![0xF8],       // SED
+            vec![0x69, 0x92], // ADC 92
+            vec![0x38],       // SEC (disable borrow)
+            vec![0xE9, 0x25], // SBC 25
+            vec![0x85, 0x8],  // STA $9
+        ]);
+
+        assert_eq!(mos6502.read_memory_at_address(0x8), 0x67);
+        assert!(!mos6502.p.borrow().get_carry(), "no borrow set");
+        assert!(!mos6502.p.borrow().get_negative(), "not negative");
+
+        let mut mos6502 = run_program(&[
+            vec![0xF8],       // SED
+            vec![0x69, 0x25], // ADC 25 
+            vec![0x38],       // SEC (disable borrow)
+            vec![0xE9, 0x92], // SBC 92
+            vec![0x85, 0x8],  // STA $9
+        ]);
+
+        assert_eq!(mos6502.read_memory_at_address(0x8), 0x33);
+        assert!(!mos6502.p.borrow().get_carry(), "borrow set");
+        assert!(!mos6502.p.borrow().get_negative(), "not negative");
     }
 
     fn create_memory_from_slice(slice: &[u8]) -> Vec<u8> {
         let mut program = vec![0; 0x800];
         program.splice(0..slice.len(), slice.iter().cloned());
         program
+    }
+
+    fn run_program(program: &[Vec<u8>]) -> Mos6502 {
+        let mut mem: Vec<u8> = Vec::new();
+        for instruction in program.iter().cloned() {
+            mem.extend_from_slice(&instruction);
+        }
+        let mem = create_memory_from_slice(&mem);
+        let mut mos6502 = Mos6502::new(Some(&mem));
+        for _ in 0..program.len() {
+            while mos6502.clock() {}
+        }
+        mos6502
     }
 }
 
