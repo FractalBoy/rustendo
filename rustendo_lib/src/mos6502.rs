@@ -28,6 +28,11 @@ impl DataBus {
         self.bus.borrow_mut().write();
     }
 
+    pub fn write_directly_to_bus(&mut self, data: u8) {
+        self.write(data);
+        self.write_to_bus();
+    }
+
     pub fn read_from_bus(&mut self) {
         self.data = self.bus.borrow_mut().read();
     }
@@ -88,7 +93,9 @@ impl ProgramCounter {
     }
 
     pub fn write_to_address_bus(&self) {
-        self.address_bus.borrow_mut().write_directly_to_bus(self.pch, self.pcl);
+        self.address_bus
+            .borrow_mut()
+            .write_directly_to_bus(self.pch, self.pcl);
     }
 
     pub fn read_high_from_data_bus(&mut self) {
@@ -141,7 +148,7 @@ impl StatusRegister {
             irq_disable: false,
             decimal_mode: false,
             brk_command: false,
-            always_one: false,
+            always_one: true,
             overflow: false,
             negative: false,
         };
@@ -186,7 +193,7 @@ impl StatusRegister {
     }
 
     pub fn set(&mut self, byte: u8) {
-        self.carry = (byte & (1 << 0)) != 0;
+        self.carry = (byte & 1) != 0;
         self.zero = (byte & (1 << 1)) != 0;
         self.irq_disable = (byte & (1 << 2)) != 0;
         self.decimal_mode = (byte & (1 << 3)) != 0;
@@ -194,6 +201,17 @@ impl StatusRegister {
         // always_one cannot be changed
         self.overflow = (byte & (1 << 6)) != 0;
         self.negative = (byte & (1 << 7)) != 0;
+    }
+
+    pub fn get(&self) -> u8 {
+        ((self.negative as u8) << 7)
+            | ((self.overflow as u8) << 6)
+            | ((self.always_one as u8) << 5)
+            | ((self.brk_command as u8) << 4)
+            | ((self.decimal_mode as u8) << 3)
+            | ((self.irq_disable as u8) << 2)
+            | ((self.zero as u8) << 1)
+            | (self.carry as u8)
     }
 }
 
@@ -220,7 +238,9 @@ impl InstructionRegister {
 
         match low_nibble {
             0x0 => match high_nibble {
-                0x0 => Instruction::BRK(AddressingMode::Implied, 1, 7, Penalty::None),
+                // BRK is a 2 byte instruction, despite 6502 documentation.
+                // That is, the next instruction is at PC + 2
+                0x0 => Instruction::BRK(AddressingMode::Implied, 2, 7, Penalty::None),
                 0x1 => Instruction::BPL(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
                 0x2 => Instruction::JSR(AddressingMode::Absolute, 3, 6, Penalty::None),
                 0x3 => Instruction::BMI(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
@@ -736,10 +756,7 @@ struct Alu {
 }
 
 impl Alu {
-    pub fn new(
-        data_bus: &Rc<RefCell<DataBus>>,
-        accumulator: &Rc<RefCell<Accumulator>>,
-    ) -> Self {
+    pub fn new(data_bus: &Rc<RefCell<DataBus>>, accumulator: &Rc<RefCell<Accumulator>>) -> Self {
         Alu {
             data_bus: Rc::clone(data_bus),
             accumulator: Rc::clone(accumulator),
@@ -997,7 +1014,9 @@ impl Mos6502 {
             AddressingMode::Absolute => {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
-                self.address_bus.borrow_mut().write_directly_to_bus(address_high, address_low);
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(address_high, address_low);
             }
             AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
             AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
@@ -1108,6 +1127,19 @@ impl Mos6502 {
         }
     }
 
+    fn branch(&mut self, branch: bool, mode: AddressingMode, cycles: u32) {
+        self.cycles = cycles;
+
+        if branch {
+            // Branch taken, add an additional cycle.
+            self.cycles += 1;
+            self.do_addressing_mode(mode);
+        } else {
+            // Branch not taken, retrieve parameter and discard
+            self.fetch_next_byte();
+        }
+    }
+
     fn read_instruction(&mut self) {
         self.pc.borrow().write_to_address_bus();
         self.data_bus.borrow_mut().read_from_bus();
@@ -1163,42 +1195,9 @@ impl Mos6502 {
                     self.data_bus.borrow().write_to_bus();
                 }
             }
-            Instruction::BCC(mode, _, cycles, _) => {
-                self.cycles = cycles;
-
-                if !self.p.get_carry() {
-                    // Branch taken, add an additional cycle.
-                    self.cycles += 1;
-                    self.do_addressing_mode(mode);
-                } else {
-                    // Branch not taken, retrieve parameter and discard
-                    self.fetch_next_byte();
-                }
-            }
-            Instruction::BCS(mode, _, cycles, _) => {
-                self.cycles = cycles;
-
-                if !self.p.get_carry() {
-                    // Branch taken, add an additional cycle.
-                    self.cycles += 1;
-                    self.do_addressing_mode(mode);
-                } else {
-                    // Branch not taken, retrieve parameter and discard
-                    self.fetch_next_byte();
-                }
-            }
-            Instruction::BEQ(mode, _, cycles, _) => {
-                self.cycles = cycles;
-
-                if self.p.get_zero() {
-                    // Branch taken, add an additional cycle.
-                    self.cycles += 1;
-                    self.do_addressing_mode(mode);
-                } else {
-                    // Branch not taken, retrieve parameter and discard
-                    self.fetch_next_byte();
-                }
-            }
+            Instruction::BCC(mode, _, cycles, _) => self.branch(!self.p.get_carry(), mode, cycles),
+            Instruction::BCS(mode, _, cycles, _) => self.branch(self.p.get_carry(), mode, cycles),
+            Instruction::BEQ(mode, _, cycles, _) => self.branch(self.p.get_zero(), mode, cycles),
             Instruction::BIT(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
@@ -1208,28 +1207,32 @@ impl Mos6502 {
                 self.p.set_zero(operand & self.a.borrow().read() == 0);
             }
             Instruction::BMI(mode, _, cycles, _) => {
-                self.cycles = cycles;
-
-                if self.p.get_negative() {
-                    // Branch taken, add an additional cycle.
-                    self.cycles += 1;
-                    self.do_addressing_mode(mode);
-                } else {
-                    // Branch not taken, retrieve parameter and discard
-                    self.fetch_next_byte();
-                }
+                self.branch(self.p.get_negative(), mode, cycles)
             }
+            Instruction::BNE(mode, _, cycles, _) => self.branch(!self.p.get_zero(), mode, cycles),
             Instruction::BPL(mode, _, cycles, _) => {
+                self.branch(!self.p.get_negative(), mode, cycles)
+            }
+            Instruction::BRK(_, _, cycles, _) => {
                 self.cycles = cycles;
 
-                if !self.p.get_negative() {
-                    // Branch taken, add an additional cycle.
-                    self.cycles += 1;
-                    self.do_addressing_mode(mode);
-                } else {
-                    // Branch not taken, retrieve parameter and discard
-                    self.fetch_next_byte();
-                }
+                // Padding byte, ignored.
+                self.fetch_next_byte();
+
+                let mut address_bus = self.address_bus.borrow_mut();
+                let pc = self.pc.borrow();
+                address_bus.write_directly_to_bus(0, self.s);
+                self.data_bus.borrow_mut().write_directly_to_bus(pc.read_high());
+                address_bus.write_directly_to_bus(0, self.s - 1);
+                self.data_bus.borrow_mut().write_directly_to_bus(pc.read_low());
+                address_bus.write_directly_to_bus(0, self.s - 2);
+                self.data_bus.borrow_mut().write_directly_to_bus(self.p.get());
+
+                // Data unused, just putting this here for reference
+                address_bus.write_directly_to_bus(0xFF, 0xFE);
+                self.data_bus.borrow_mut().read_directly_from_bus();
+                address_bus.write_directly_to_bus(0xFF, 0xFF);
+                self.data_bus.borrow_mut().read_directly_from_bus();
             }
             Instruction::CLC(_, _, cycles, _) => {
                 self.cycles = cycles;
@@ -1258,10 +1261,6 @@ impl Mos6502 {
                 self.do_addressing_mode(mode);
                 self.a.borrow().write_to_bus();
                 self.data_bus.borrow().write_to_bus();
-            }
-            Instruction::BRK(_, _, cycles, _) => {
-                // For now, just set cycles so that this instruction works for doctests
-                self.cycles = cycles;
             }
             instruction => unimplemented!("{:?} instruction is unimplemented", instruction),
         }
