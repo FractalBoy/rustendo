@@ -129,15 +129,14 @@ impl ProgramCounter {
 }
 
 struct StatusRegister {
-    carry: bool,
-    zero: bool,
-    irq_disable: bool,
-    decimal_mode: bool,
-    brk_command: bool,
-    overflow: bool,
-    #[allow(dead_code)]
+    pub carry: bool,
+    pub zero: bool,
+    pub irq_disable: bool,
+    pub decimal_mode: bool,
+    pub brk_command: bool,
+    pub overflow: bool,
     always_one: bool,
-    negative: bool,
+    pub negative: bool,
 }
 
 impl StatusRegister {
@@ -154,42 +153,6 @@ impl StatusRegister {
         };
         p.set(0x34);
         p
-    }
-
-    pub fn set_carry(&mut self, carry: bool) {
-        self.carry = carry;
-    }
-
-    pub fn get_carry(&self) -> bool {
-        self.carry
-    }
-
-    pub fn set_zero(&mut self, zero: bool) {
-        self.zero = zero;
-    }
-
-    pub fn get_zero(&self) -> bool {
-        self.zero
-    }
-
-    pub fn set_negative(&mut self, negative: bool) {
-        self.negative = negative;
-    }
-
-    pub fn get_negative(&self) -> bool {
-        self.negative
-    }
-
-    pub fn set_overflow(&mut self, overflow: bool) {
-        self.overflow = overflow
-    }
-
-    pub fn set_decimal_mode(&mut self, decimal_mode: bool) {
-        self.decimal_mode = decimal_mode
-    }
-
-    pub fn get_decimal_mode(&self) -> bool {
-        self.decimal_mode
     }
 
     pub fn set(&mut self, byte: u8) {
@@ -788,7 +751,7 @@ impl Alu {
         let was_negative = accumulator_data & 0x80 == 0x80;
         let sum;
 
-        if p.get_decimal_mode() {
+        if p.decimal_mode {
             // Convert currently stored data from BCD to decimal
             let data = Alu::convert_from_bcd(accumulator_data);
 
@@ -796,28 +759,27 @@ impl Alu {
             let operand = Alu::convert_from_bcd(bus_data);
 
             // Add in decimal and convert back into BCD
-            let bcd = Alu::convert_to_bcd(data + operand + (p.get_carry() as u16));
+            let bcd = Alu::convert_to_bcd(data + operand + (p.carry as u16));
 
             // Set flags
-            p.set_carry(bcd & 0x100 == 0x100);
+            p.carry = bcd & 0x100 == 0x100;
             // BCD sets zero flag even if the carry bit is set
-            p.set_zero(bcd | 0x00 == 0x00);
+            p.zero = bcd | 0x00 == 0x00;
             sum = (bcd & 0xFF) as u8;
         } else {
             let bin = (accumulator_data as u16)
                 .wrapping_add(bus_data as u16)
-                .wrapping_add(p.get_carry() as u16);
+                .wrapping_add(p.carry as u16);
 
-            p.set_carry(bin & 0x100 == 0x100);
+            p.carry = bin & 0x100 == 0x100;
 
             sum = (bin & 0xFF) as u8;
-            p.set_zero(sum == 0);
+            p.zero = sum == 0;
         }
 
         self.accumulator.borrow_mut().write(sum);
-        let is_negative = sum & 0x80 == 0x80;
-        p.set_negative(is_negative);
-        p.set_overflow(was_negative ^ is_negative);
+        p.negative = sum & 0x80 == 0x80;
+        p.overflow = was_negative ^ p.negative;
     }
 
     pub fn subtract_with_borrow(&mut self, p: &mut StatusRegister) {
@@ -828,7 +790,7 @@ impl Alu {
         let is_negative;
         let sum;
 
-        if p.get_decimal_mode() {
+        if p.decimal_mode {
             // Convert currently stored data from BCD to decimal
             let data = Alu::convert_from_bcd(accumulator_data);
 
@@ -836,7 +798,7 @@ impl Alu {
             let operand = Alu::convert_from_bcd(bus_data);
 
             // Subtract in decimal
-            let dec = (data as i16) - (operand as i16) - ((!p.get_carry()) as i16);
+            let dec = (data as i16) - (operand as i16) - (!p.carry as i16);
             let dec = if dec < 0 { dec + 100 } else { dec };
             let dec = dec as u16;
             is_negative = dec & 0x100 == 0x100;
@@ -846,28 +808,27 @@ impl Alu {
 
             // Set flags
             // Carry = inverse of borrow
-            p.set_carry(dec & 0x100 == 0x100);
+            p.carry = dec & 0x100 == 0x100;
             // BCD sets zero flag even if the carry bit is set
-            p.set_zero(bcd | 0x00 == 0x00);
+            p.zero = bcd | 0x00 == 0x00;
 
             sum = (bcd & 0xFF) as u8;
         } else {
             let bin = (accumulator_data as u16)
                 .wrapping_add((!bus_data) as u16)
-                .wrapping_add(p.get_carry() as u16);
+                .wrapping_add(p.carry as u16);
 
             // Carry = inverse of borrow
-            p.set_carry(bin & 0x100 == 0x100);
+            p.carry = bin & 0x100 == 0x100;
 
             sum = (bin & 0xFF) as u8;
-            p.set_zero(sum == 0);
-
+            p.zero = sum == 0;
             is_negative = sum & 0x80 == 0x80;
         }
 
         self.accumulator.borrow_mut().write(sum);
-        p.set_negative(is_negative);
-        p.set_overflow(was_negative ^ is_negative);
+        p.negative = is_negative;
+        p.overflow = was_negative ^ is_negative;
     }
 }
 
@@ -1165,8 +1126,8 @@ impl Mos6502 {
                     data_bus.write(result);
                 }
                 self.a.borrow_mut().read_from_bus();
-                self.p.set_zero(result == 0);
-                self.p.set_negative(result & 0x80 == 0x80);
+                self.p.zero = result == 0;
+                self.p.negative = result & 0x80 == 0x80;
             }
             Instruction::ASL(mode, _, cycles, _) => {
                 self.cycles = cycles;
@@ -1180,12 +1141,12 @@ impl Mos6502 {
                 // 0, otherwise resets Z and stores the input bit 7 in the carry flag.
 
                 {
-                    self.p.set_negative(result & 0x80 == 0x80);
+                    self.p.negative = result & 0x80 == 0x80;
 
                     if result == 0 {
-                        self.p.set_zero(true);
+                        self.p.zero = true;
                     } else {
-                        self.p.set_carry(operand & 0x80 == 0x80);
+                        self.p.carry = operand & 0x80 == 0x80;
                     }
                 }
 
@@ -1195,24 +1156,20 @@ impl Mos6502 {
                     self.data_bus.borrow().write_to_bus();
                 }
             }
-            Instruction::BCC(mode, _, cycles, _) => self.branch(!self.p.get_carry(), mode, cycles),
-            Instruction::BCS(mode, _, cycles, _) => self.branch(self.p.get_carry(), mode, cycles),
-            Instruction::BEQ(mode, _, cycles, _) => self.branch(self.p.get_zero(), mode, cycles),
+            Instruction::BCC(mode, _, cycles, _) => self.branch(!self.p.carry, mode, cycles),
+            Instruction::BCS(mode, _, cycles, _) => self.branch(self.p.carry, mode, cycles),
+            Instruction::BEQ(mode, _, cycles, _) => self.branch(self.p.zero, mode, cycles),
             Instruction::BIT(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 let operand = self.data_bus.borrow().read();
-                self.p.set_negative(operand & 0x80 == 0x80);
-                self.p.set_overflow(operand * 0x40 == 0x40);
-                self.p.set_zero(operand & self.a.borrow().read() == 0);
+                self.p.negative = operand & 0x80 == 0x80;
+                self.p.overflow = operand * 0x40 == 0x40;
+                self.p.zero = operand & self.a.borrow().read() == 0;
             }
-            Instruction::BMI(mode, _, cycles, _) => {
-                self.branch(self.p.get_negative(), mode, cycles)
-            }
-            Instruction::BNE(mode, _, cycles, _) => self.branch(!self.p.get_zero(), mode, cycles),
-            Instruction::BPL(mode, _, cycles, _) => {
-                self.branch(!self.p.get_negative(), mode, cycles)
-            }
+            Instruction::BMI(mode, _, cycles, _) => self.branch(self.p.negative, mode, cycles),
+            Instruction::BNE(mode, _, cycles, _) => self.branch(!self.p.zero, mode, cycles),
+            Instruction::BPL(mode, _, cycles, _) => self.branch(!self.p.negative, mode, cycles),
             Instruction::BRK(_, _, cycles, _) => {
                 self.cycles = cycles;
 
@@ -1222,11 +1179,17 @@ impl Mos6502 {
                 let mut address_bus = self.address_bus.borrow_mut();
                 let pc = self.pc.borrow();
                 address_bus.write_directly_to_bus(0, self.s);
-                self.data_bus.borrow_mut().write_directly_to_bus(pc.read_high());
+                self.data_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(pc.read_high());
                 address_bus.write_directly_to_bus(0, self.s - 1);
-                self.data_bus.borrow_mut().write_directly_to_bus(pc.read_low());
+                self.data_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(pc.read_low());
                 address_bus.write_directly_to_bus(0, self.s - 2);
-                self.data_bus.borrow_mut().write_directly_to_bus(self.p.get());
+                self.data_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(self.p.get());
 
                 // Data unused, just putting this here for reference
                 address_bus.write_directly_to_bus(0xFF, 0xFE);
@@ -1234,13 +1197,14 @@ impl Mos6502 {
                 address_bus.write_directly_to_bus(0xFF, 0xFF);
                 self.data_bus.borrow_mut().read_directly_from_bus();
             }
+            Instruction::BVC(mode, _, cycles, _) => self.branch(!self.p.overflow, mode, cycles),
             Instruction::CLC(_, _, cycles, _) => {
                 self.cycles = cycles;
-                self.p.set_carry(false);
+                self.p.carry = false;
             }
             Instruction::CLD(_, _, cycles, _) => {
                 self.cycles = cycles;
-                self.p.set_decimal_mode(false);
+                self.p.decimal_mode = false;
             }
             Instruction::NOP(_, _, cycles, _) => self.cycles = cycles,
             Instruction::SBC(mode, _, cycles, _) => {
@@ -1250,11 +1214,11 @@ impl Mos6502 {
             }
             Instruction::SEC(_, _, cycles, _) => {
                 self.cycles = cycles;
-                self.p.set_carry(true);
+                self.p.carry = true;
             }
             Instruction::SED(_, _, cycles, _) => {
                 self.cycles = cycles;
-                self.p.set_decimal_mode(true);
+                
             }
             Instruction::STA(mode, _, cycles, _) => {
                 self.cycles = cycles;
