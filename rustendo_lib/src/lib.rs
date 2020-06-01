@@ -42,11 +42,11 @@ mod tests {
     fn adc_bcd() {
         let mut rp2a03 = run_program(&[
             vec![0xF8],       // SED
-            vec![0x69, 0x10], // ADC 10
-            vec![0x69, 0x10], // ADC 10
+            vec![0xA9, 0x10], // LDA #$10
+            vec![0x69, 0x10], // ADC #$10
             vec![0x85, 0xD],  // STA $D
-            vec![0x29, 0x00], // AND $00 (clear accumulator)
-            vec![0x69, 0x0],  // ADC $0
+            vec![0xA9, 0x00], // LDA #$0
+            vec![0x69, 0x0],  // ADC #$0
             vec![0x85, 0xE],  // STA $E
         ]);
         assert_eq!(
@@ -57,11 +57,11 @@ mod tests {
         assert_eq!(rp2a03.read_memory_at_address(0xE), 0x0, "carry bit cleared");
         let mut rp2a03 = run_program(&[
             vec![0xF8],       // SED
-            vec![0x69, 0x81], // ADC 81
-            vec![0x69, 0x92], // ADC 92
+            vec![0xA9, 0x81], // LDA #$81
+            vec![0x69, 0x92], // ADC #$92
             vec![0x85, 0xD],  // STA $D
-            vec![0x29, 0x00], // AND $00 (clear accumulator)
-            vec![0x69, 0x0],  // ADC $0
+            vec![0xA9, 0x0],  // LDA #$0
+            vec![0x69, 0x0],  // ADC #$0
             vec![0x85, 0xE],  // STA $E
         ]);
         assert_eq!(

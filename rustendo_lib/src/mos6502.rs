@@ -1198,6 +1198,7 @@ impl Mos6502 {
                 self.data_bus.borrow_mut().read_directly_from_bus();
             }
             Instruction::BVC(mode, _, cycles, _) => self.branch(!self.p.overflow, mode, cycles),
+            Instruction::BVS(mode, _, cycles, _) => self.branch(self.p.overflow, mode, cycles),
             Instruction::CLC(_, _, cycles, _) => {
                 self.cycles = cycles;
                 self.p.carry = false;
@@ -1205,6 +1206,32 @@ impl Mos6502 {
             Instruction::CLD(_, _, cycles, _) => {
                 self.cycles = cycles;
                 self.p.decimal_mode = false;
+            }
+            Instruction::CLI(_, _, cycles, _) => {
+                self.cycles = cycles;
+                self.p.irq_disable = false;
+            }
+            Instruction::CLV(_, _, cycles, _) => {
+                self.cycles = cycles;
+                self.p.overflow = false;
+            }
+            Instruction::CMP(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.do_addressing_mode(mode);
+                let operand = self.fetch_next_byte();
+                let accumulator = self.a.borrow().read();
+                let result = self.a.borrow().read().wrapping_sub(operand);
+
+                self.p.zero = result == 0;
+                self.p.negative = result & 0x80 == 0x80;
+                self.p.carry = accumulator >= operand;
+            }
+            Instruction::LDA(mode, _, cycles, _) => { 
+                self.cycles = cycles;
+
+                self.do_addressing_mode(mode);
+                self.a.borrow_mut().read_from_bus();
             }
             Instruction::NOP(_, _, cycles, _) => self.cycles = cycles,
             Instruction::SBC(mode, _, cycles, _) => {
@@ -1218,7 +1245,7 @@ impl Mos6502 {
             }
             Instruction::SED(_, _, cycles, _) => {
                 self.cycles = cycles;
-                
+                self.p.decimal_mode = true;
             }
             Instruction::STA(mode, _, cycles, _) => {
                 self.cycles = cycles;
