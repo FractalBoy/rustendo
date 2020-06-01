@@ -1191,11 +1191,12 @@ impl Mos6502 {
                     .borrow_mut()
                     .write_directly_to_bus(self.p.get());
 
-                // Data unused, just putting this here for reference
                 address_bus.write_directly_to_bus(0xFF, 0xFE);
-                self.data_bus.borrow_mut().read_directly_from_bus();
+                self.data_bus.borrow_mut().read_from_bus();
+                self.pc.borrow_mut().read_low_from_data_bus();
                 address_bus.write_directly_to_bus(0xFF, 0xFF);
-                self.data_bus.borrow_mut().read_directly_from_bus();
+                self.data_bus.borrow_mut().read_from_bus();
+                self.pc.borrow_mut().read_high_from_data_bus();
             }
             Instruction::BVC(mode, _, cycles, _) => self.branch(!self.p.overflow, mode, cycles),
             Instruction::BVS(mode, _, cycles, _) => self.branch(self.p.overflow, mode, cycles),
