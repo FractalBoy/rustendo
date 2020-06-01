@@ -2,7 +2,7 @@ use crate::bus::Bus;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub struct DataBus {
+struct DataBus {
     data: u8,
     bus: Rc<RefCell<Bus>>,
 }
@@ -38,7 +38,7 @@ impl DataBus {
     }
 }
 
-pub struct AddressBus {
+struct AddressBus {
     address_high: u8,
     address_low: u8,
     bus: Rc<RefCell<Bus>>,
@@ -70,7 +70,7 @@ impl AddressBus {
     }
 }
 
-pub struct ProgramCounter {
+struct ProgramCounter {
     pch: u8,
     pcl: u8,
     data_bus: Rc<RefCell<DataBus>>,
@@ -121,7 +121,7 @@ impl ProgramCounter {
     }
 }
 
-pub struct StatusRegister {
+struct StatusRegister {
     carry: bool,
     zero: bool,
     irq_disable: bool,
@@ -197,7 +197,7 @@ impl StatusRegister {
     }
 }
 
-pub struct InstructionRegister {
+struct InstructionRegister {
     data: u8,
     data_bus: Rc<RefCell<DataBus>>,
 }
@@ -700,7 +700,7 @@ pub enum Instruction {
     KIL,
 }
 
-pub struct Accumulator {
+struct Accumulator {
     data: u8,
     data_bus: Rc<RefCell<DataBus>>,
 }
@@ -730,7 +730,7 @@ impl Accumulator {
     }
 }
 
-pub struct Alu {
+struct Alu {
     data_bus: Rc<RefCell<DataBus>>,
     accumulator: Rc<RefCell<Accumulator>>,
 }
@@ -869,7 +869,7 @@ pub struct Mos6502 {
     #[allow(dead_code)]
     s: u8,
     /// Status register
-    pub p: StatusRegister,
+    p: StatusRegister,
     /// Instruction register
     instruction_register: InstructionRegister,
     /// Internal data bus buffer
