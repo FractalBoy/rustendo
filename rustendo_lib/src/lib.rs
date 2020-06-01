@@ -1,169 +1,209 @@
 #[cfg(test)]
 mod tests {
-    use super::mos6502::Mos6502;
+    use super::rp2a03::Rp2a03;
 
     #[test]
     fn adc_no_carry() {
-        let mut mos6502 = run_program(&[
-            vec![0x69, 0x1],      // ADC $1
-            vec![0x69, 0x1],      // ADC $1
-            vec![0x85, 0x8, 0x0], // STA $8
+        let mut rp2a03 = run_program(&[
+            vec![0x69, 0x1],  // ADC $1
+            vec![0x69, 0x1],  // ADC $1
+            vec![0x85, 0xD],  // STA $D
+            vec![0x29, 0x00], // AND $00 (clear accumulator)
+            vec![0x69, 0x0],  // ADC $0
+            vec![0x85, 0xE],  // STA $E
         ]);
-        assert_eq!(mos6502.read_memory_at_address(0x8), 2, "0x1 + 0x1 = 0x2");
+        assert_eq!(rp2a03.read_memory_at_address(0xD), 2, "0x1 + 0x1 = 0x2");
+        assert_eq!(rp2a03.read_memory_at_address(0xE), 0, "carry bit cleared");
     }
 
     #[test]
     fn adc_with_carry() {
-        let mut mos6502 = run_program(&[
-            vec![0x69, 0xFF],     // ADC $FF
-            vec![0x69, 0xFF],     // ADC $FF
-            vec![0x85, 0x8, 0x0], // STA $8
+        let mut rp2a03 = run_program(&[
+            vec![0x69, 0xFF], // ADC $FF
+            vec![0x69, 0xFF], // ADC $FF
+            vec![0x85, 0xD],  // STA $D
+            vec![0x29, 0x00], // AND $00 (clear accumulator)
+            vec![0x69, 0x0],  // ADC $0
+            vec![0x85, 0xE],  // STA $E
         ]);
         assert_eq!(
-            mos6502.read_memory_at_address(0x8),
+            rp2a03.read_memory_at_address(0xD),
             0xFE,
             "0xFF + 0xFF = 0xFE"
         );
-        assert!(
-            mos6502.p.borrow_mut().get_carry(),
+        assert_eq!(
+            rp2a03.read_memory_at_address(0xE),
+            0x1,
             "0xFF + 0xFF sets carry flag"
         );
     }
 
     #[test]
     fn adc_bcd() {
-        let mut mos6502 = run_program(&[
+        let mut rp2a03 = run_program(&[
             vec![0xF8],       // SED
             vec![0x69, 0x10], // ADC 10
             vec![0x69, 0x10], // ADC 10
-            vec![0x85, 0x8],  // STA $8
+            vec![0x85, 0xD],  // STA $D
+            vec![0x29, 0x00], // AND $00 (clear accumulator)
+            vec![0x69, 0x0],  // ADC $0
+            vec![0x85, 0xE],  // STA $E
         ]);
         assert_eq!(
-            mos6502.read_memory_at_address(0x8),
+            rp2a03.read_memory_at_address(0xD),
             0x20,
             "0x10 + 0x10 = 0x20 in BCD"
         );
-        let mut mos6502 = run_program(&[
+        assert_eq!(rp2a03.read_memory_at_address(0xE), 0x0, "carry bit cleared");
+        let mut rp2a03 = run_program(&[
             vec![0xF8],       // SED
             vec![0x69, 0x81], // ADC 81
             vec![0x69, 0x92], // ADC 92
-            vec![0x85, 0x8],  // STA $8
+            vec![0x85, 0xD],  // STA $D
+            vec![0x29, 0x00], // AND $00 (clear accumulator)
+            vec![0x69, 0x0],  // ADC $0
+            vec![0x85, 0xE],  // STA $E
         ]);
         assert_eq!(
-            mos6502.read_memory_at_address(0x8),
+            rp2a03.read_memory_at_address(0xD),
             0x73,
             "0x81 + 0x92 = 0x73 in BCD"
         );
-        assert!(
-            mos6502.p.borrow().get_carry(),
+        assert_eq!(
+            rp2a03.read_memory_at_address(0xE),
+            0x1,
             "0x81 + 0x92 sets carry flag"
         );
     }
 
     #[test]
     fn and_eq_zero() {
-        let mut mos6502 = run_program(&[
+        let mut rp2a03 = run_program(&[
             vec![0x69, 0xFF], // ADC $FF
             vec![0x29, 0x00], // AND $00
-            vec![0x85, 0x8],  // STA $8
+            vec![0x30, 0x2],  // BMI $2
+            vec![0xF0, 0x2],  // BEQ $2
+            vec![0x69, 0x2],  // ADC $2 (should never happen)
+            vec![0x69, 0x1],  // ADC $1 (should branch here from BEQ)
+            vec![0x85, 0xD],  // STA $D
         ]);
         assert_eq!(
-            mos6502.read_memory_at_address(0x8),
-            0x00,
-            "0xFF & 0xFF = 0x00"
+            rp2a03.read_memory_at_address(0xD),
+            0x1,
+            "((0xFF & 0xFF) + 0x01)= 0x01"
         );
-        assert!(mos6502.p.borrow().get_zero(), "zero flag set");
-        assert!(!mos6502.p.borrow().get_negative(), "negative flag not set");
     }
 
     #[test]
     fn and_eq_negative() {
-        let mut mos6502 = run_program(&[
+        let mut rp2a03 = run_program(&[
             vec![0x69, 0xFF], // ADC $FF
             vec![0x29, 0x80], // AND $80
-            vec![0x85, 0x8],  // STA $8
+            vec![0xF0, 0x2],  // BEQ $2
+            vec![0x30, 0x2],  // BMI $2
+            vec![0x69, 0x2],  // ADC $2 (should never happen)
+            vec![0x69, 0x1],  // ADC $1 (should branch here from BMI)
+            vec![0x85, 0xD],  // STA $D
         ]);
         assert_eq!(
-            mos6502.read_memory_at_address(0x8),
-            0x80,
-            "0xFF & 0x80 = 0x80"
+            rp2a03.read_memory_at_address(0xD),
+            0x81,
+            "(0xFF & 0x80) + 0x01 = 0x81"
         );
-        assert!(!mos6502.p.borrow().get_zero(), "zero flag not set");
-        assert!(mos6502.p.borrow().get_negative(), "negative flag set");
     }
 
     #[test]
     fn sbc_without_borrow() {
-        let mut mos6502 = run_program(&[
-            vec![0x69, 0xF6], // ADC $F6
+        let mut rp2a03 = run_program(&[
+            vec![0x69, 0x76], // ADC $76
             vec![0x38],       // SEC (disable borrow)
             vec![0xE9, 0x05], // SBC $5
-            vec![0x85, 0x8],  // STA $8
+            vec![0x30, 0x8],  // BMI $8 (should not be taken)
+            vec![0x85, 0xF],  // STA $F
+            vec![0x29, 0x00], // AND $00 (clear accumulator)
+            vec![0x69, 0x0],  // ADC $0
+            vec![0x85, 0x10], // STA $10
         ]);
         assert_eq!(
-            mos6502.read_memory_at_address(0x08),
-            0xF1,
-            "0xF6 - 0x05 = 0x0F"
+            rp2a03.read_memory_at_address(0xF),
+            0x71,
+            "0x76 - 0x05 = 0x71, BMI branch not taken"
         );
-        assert!(mos6502.p.borrow().get_carry(), "no borrow");
-        assert!(mos6502.p.borrow().get_negative(), "answer is negative");
+        assert_eq!(
+            rp2a03.read_memory_at_address(0x10),
+            0x1,
+            "no borrow (carry set)"
+        );
     }
 
     #[test]
     fn sbc_with_borrow() {
-        let mut mos6502 = run_program(&[
-            vec![0x69, 0x5], // ADC $5
-            vec![0x38],      // SEC (disable borrow)
-            vec![0xE9, 0xA], // SBC $A
-            vec![0x85, 0x8], // STA $8
+        let mut rp2a03 = run_program(&[
+            vec![0x69, 0x5],  // ADC $5
+            vec![0x38],       // SEC (disable borrow)
+            vec![0xE9, 0xA],  // SBC $A
+            vec![0x10, 0x8],  // BPL $9 (should not be taken)
+            vec![0x85, 0xF],  // STA $F
+            vec![0x29, 0x00], // AND $00 (clear accumulator)
+            vec![0x69, 0x0],  // ADC $0
+            vec![0x85, 0x10], // STA $10
         ]);
         assert_eq!(
-            mos6502.read_memory_at_address(0x08),
+            rp2a03.read_memory_at_address(0xF),
             0xFB,
-            "0x5 - 0xA = -0x5 (0xFB)"
+            "0x5 - 0xA = -0x5 (0xFB), BPL branch not taken"
         );
-        assert!(!mos6502.p.borrow().get_carry(), "borrow");
-        assert!(mos6502.p.borrow().get_negative(), "answer is positive");
+        assert_eq!(
+            rp2a03.read_memory_at_address(0x10),
+            0x0,
+            "borrow (carry not set)"
+        );
     }
 
     #[test]
     fn sbc_bcd() {
-        let mut mos6502 = run_program(&[
+        let mut rp2a03 = run_program(&[
             vec![0xF8],       // SED
             vec![0x69, 0x92], // ADC 92
             vec![0x38],       // SEC (disable borrow)
             vec![0xE9, 0x25], // SBC 25
-            vec![0x85, 0x8],  // STA $9
+            vec![0x30, 0x8],  // BMI $4 (should not be taken)
+            vec![0x85, 0x10], // STA $10
+            vec![0x29, 0x00], // AND $00 (clear accumulator)
+            vec![0x69, 0x0],  // ADC $0
+            vec![0x85, 0x11], // STA $11
         ]);
 
-        assert_eq!(mos6502.read_memory_at_address(0x8), 0x67);
-        assert!(!mos6502.p.borrow().get_carry(), "no borrow set");
-        assert!(!mos6502.p.borrow().get_negative(), "not negative");
+        assert_eq!(rp2a03.read_memory_at_address(0x10), 0x67);
+        assert_eq!(rp2a03.read_memory_at_address(0x11), 0x0);
 
-        let mut mos6502 = run_program(&[
-            vec![0xF8],       // SED
-            vec![0x69, 0x25], // ADC 25 
-            vec![0x38],       // SEC (disable borrow)
-            vec![0xE9, 0x92], // SBC 92
-            vec![0x85, 0x8],  // STA $9
-        ]);
+        //let mut rp2a03 = run_program(&[
+        //    vec![0xF8],       // SED
+        //    vec![0x69, 0x25], // ADC 25
+        //    vec![0x38],       // SEC (disable borrow)
+        //    vec![0xE9, 0x92], // SBC 92
+        //    vec![0x85, 0x8],  // STA $9
+        //]);
 
-        assert_eq!(mos6502.read_memory_at_address(0x8), 0x33);
-        assert!(!mos6502.p.borrow().get_carry(), "borrow set");
-        assert!(!mos6502.p.borrow().get_negative(), "not negative");
+        //assert_eq!(rp2a03.read_memory_at_address(0x8), 0x33);
+        //assert!(!rp2a03.p.borrow().get_carry(), "borrow set");
+        //assert!(!rp2a03.p.borrow().get_negative(), "not negative");
     }
 
-    fn run_program(program: &[Vec<u8>]) -> Mos6502 {
+    fn run_program(program: &[Vec<u8>]) -> Rp2a03 {
         let mut mem: Vec<u8> = Vec::new();
         for instruction in program.iter().cloned() {
             mem.extend_from_slice(&instruction);
         }
-        let mut mos6502 = Mos6502::new(Some(&mem));
-        for _ in 0..program.len() {
-            while mos6502.clock() {}
+        let mut rp2a03 = Rp2a03::new(Some(&mem));
+        for _ in 0..program.len() + 1 {
+            while rp2a03.clock() {}
         }
-        mos6502
+        rp2a03
     }
 }
 
-pub mod mos6502;
+mod bus;
+mod mos6502;
+mod ram;
+pub mod rp2a03;

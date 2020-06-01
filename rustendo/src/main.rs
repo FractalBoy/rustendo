@@ -1,6 +1,6 @@
-use rustendo_lib::mos6502::Mos6502;
+use rustendo_lib::rp2a03::Rp2a03;
 
 fn main() {
-    let mut mos6502 = Mos6502::new(None);
-    while mos6502.clock() {}
+    let mut rp2a03 = Rp2a03::new(None);
+    rp2a03.clock();
 }

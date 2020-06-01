@@ -1,33 +1,72 @@
+use crate::bus::Bus;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+pub struct DataBus {
+    data: u8,
+    bus: Rc<RefCell<Bus>>,
+}
+
+impl DataBus {
+    pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
+        DataBus {
+            data: 0,
+            bus: Rc::clone(bus),
+        }
+    }
+
+    pub fn read(&self) -> u8 {
+        self.data
+    }
+
+    pub fn write(&mut self, data: u8) {
+        self.data = data
+    }
+
+    pub fn write_to_bus(&self) {
+        self.bus.borrow_mut().write_data(self.data);
+        self.bus.borrow_mut().write();
+    }
+
+    pub fn read_from_bus(&mut self) {
+        self.data = self.bus.borrow_mut().read();
+    }
+
+    pub fn read_directly_from_bus(&mut self) -> u8 {
+        self.read_from_bus();
+        self.read()
+    }
+}
+
 pub struct AddressBus {
-    adh: u8,
-    adl: u8,
+    address_high: u8,
+    address_low: u8,
+    bus: Rc<RefCell<Bus>>,
 }
 
 impl AddressBus {
-    pub fn new() -> Self {
-        AddressBus { adl: 0, adh: 0 }
+    pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
+        AddressBus {
+            address_high: 0,
+            address_low: 0,
+            bus: Rc::clone(bus),
+        }
     }
 
-    pub fn write_wide(&mut self, address: u16) {
-        let [high, low] = address.to_be_bytes();
-        self.adh = high;
-        self.adl = low;
+    pub fn write(&mut self, address_high: u8, address_low: u8) {
+        self.address_high = address_high;
+        self.address_low = address_low;
     }
 
-    pub fn write(&mut self, high: u8, low: u8) {
-        self.adh = high;
-        self.adl = low;
+    pub fn write_directly_to_bus(&mut self, address_high: u8, address_low: u8) {
+        self.write(address_high, address_low);
+        self.write_to_bus();
     }
 
-    pub fn read(&self) -> (u8, u8) {
-        (self.adh, self.adl)
-    }
-
-    pub fn read_wide(&self) -> u16 {
-        (self.adh as u16) << 8 | self.adl as u16
+    pub fn write_to_bus(&self) {
+        self.bus
+            .borrow_mut()
+            .write_address(self.address_high, self.address_low);
     }
 }
 
@@ -49,32 +88,31 @@ impl ProgramCounter {
     }
 
     pub fn write_to_address_bus(&self) {
-        self.address_bus.borrow_mut().write(self.pch, self.pcl);
+        self.address_bus.borrow_mut().write_directly_to_bus(self.pch, self.pcl);
     }
 
-    pub fn read_high_from_bus(&mut self) {
+    pub fn read_high_from_data_bus(&mut self) {
         self.pch = self.data_bus.borrow().read();
     }
 
-    pub fn read_low_from_bus(&mut self) {
+    pub fn read_low_from_data_bus(&mut self) {
         self.pcl = self.data_bus.borrow().read();
     }
 
-    pub fn write(&mut self, value: u16) {
-        let [high, low] = value.to_be_bytes();
-        self.pch = high;
-        self.pcl = low;
-    }
-
-    pub fn high(&self) -> u8 {
-        self.pch
-    }
-
-    pub fn low(&self) -> u8 {
+    pub fn read_low(&self) -> u8 {
         self.pcl
     }
 
-    pub fn wide(&self) -> u16 {
+    pub fn read_high(&self) -> u8 {
+        self.pch
+    }
+
+    fn write(&mut self, value: u16) {
+        self.pch = ((value & 0xFF00) >> 8) as u8;
+        self.pcl = (value & 0x00FF) as u8;
+    }
+
+    fn wide(&self) -> u16 {
         (self.pch as u16) << 8 | self.pcl as u16
     }
 
@@ -90,6 +128,7 @@ pub struct StatusRegister {
     decimal_mode: bool,
     brk_command: bool,
     overflow: bool,
+    #[allow(dead_code)]
     always_one: bool,
     negative: bool,
 }
@@ -138,10 +177,6 @@ impl StatusRegister {
         self.overflow = overflow
     }
 
-    pub fn get_overflow(&self) -> bool {
-        self.overflow
-    }
-
     pub fn set_decimal_mode(&mut self, decimal_mode: bool) {
         self.decimal_mode = decimal_mode
     }
@@ -160,65 +195,28 @@ impl StatusRegister {
         self.overflow = (byte & (1 << 6)) != 0;
         self.negative = (byte & (1 << 7)) != 0;
     }
-
-    pub fn get(&self) -> u8 {
-        (self.carry as u8)
-            | ((self.zero as u8) << 1)
-            | ((self.irq_disable as u8) << 2)
-            | ((self.decimal_mode as u8) << 3)
-            | ((self.brk_command as u8) << 4)
-            | ((self.always_one as u8) << 5)
-            | ((self.overflow as u8) << 6)
-            | ((self.negative as u8) << 7)
-    }
-}
-
-pub struct Accumulator {
-    register: u8,
-    data_bus: Rc<RefCell<DataBus>>,
-}
-
-impl Accumulator {
-    pub fn new(data_bus: &Rc<RefCell<DataBus>>) -> Self {
-        Accumulator {
-            register: 0,
-            data_bus: Rc::clone(data_bus),
-        }
-    }
-
-    pub fn write_to_bus(&self) {
-        self.data_bus.borrow_mut().write(self.register);
-    }
-
-    pub fn read_from_bus(&mut self) {
-        self.register = self.data_bus.borrow().read();
-    }
 }
 
 pub struct InstructionRegister {
-    register: u8,
+    data: u8,
     data_bus: Rc<RefCell<DataBus>>,
 }
 
 impl InstructionRegister {
     pub fn new(data_bus: &Rc<RefCell<DataBus>>) -> Self {
         InstructionRegister {
-            register: 0,
+            data: 0,
             data_bus: Rc::clone(data_bus),
         }
     }
 
     pub fn read_from_bus(&mut self) {
-        self.register = self.data_bus.borrow().read();
-    }
-
-    pub fn set_value(&mut self, value: u8) {
-        self.register = value;
+        self.data = self.data_bus.borrow().read();
     }
 
     pub fn decode_instruction(&self) -> Instruction {
-        let low_nibble = self.register & 0x0F;
-        let high_nibble = (self.register & 0xF0) >> 4;
+        let low_nibble = self.data & 0x0F;
+        let high_nibble = (self.data & 0xF0) >> 4;
 
         match low_nibble {
             0x0 => match high_nibble {
@@ -340,9 +338,9 @@ impl InstructionRegister {
                 0x6 => Instruction::ROR(AddressingMode::ZeroPage, 2, 5, Penalty::None),
                 0x7 => Instruction::ROR(AddressingMode::ZeroPageX, 2, 6, Penalty::None),
                 0x8 => Instruction::STX(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x9 => Instruction::STX(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
+                0x9 => Instruction::STX(AddressingMode::ZeroPageY, 2, 4, Penalty::None),
                 0xA => Instruction::LDX(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0xB => Instruction::LDX(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
+                0xB => Instruction::LDX(AddressingMode::ZeroPageY, 2, 4, Penalty::None),
                 0xC => Instruction::DEC(AddressingMode::ZeroPage, 2, 5, Penalty::None),
                 0xD => Instruction::DEC(AddressingMode::ZeroPageX, 2, 6, Penalty::None),
                 0xE => Instruction::INC(AddressingMode::ZeroPage, 2, 5, Penalty::None),
@@ -702,36 +700,49 @@ pub enum Instruction {
     KIL,
 }
 
-pub struct DataBus {
-    bus: u8,
+pub struct Accumulator {
+    data: u8,
+    data_bus: Rc<RefCell<DataBus>>,
 }
 
-impl DataBus {
-    pub fn new() -> Self {
-        DataBus { bus: 0 }
+impl Accumulator {
+    pub fn new(data_bus: &Rc<RefCell<DataBus>>) -> Self {
+        Accumulator {
+            data: 0,
+            data_bus: Rc::clone(data_bus),
+        }
+    }
+
+    pub fn write_to_bus(&self) {
+        self.data_bus.borrow_mut().write(self.data);
+    }
+
+    pub fn read_from_bus(&mut self) {
+        self.data = self.data_bus.borrow().read();
+    }
+
+    pub fn write(&mut self, data: u8) {
+        self.data = data;
     }
 
     pub fn read(&self) -> u8 {
-        self.bus
-    }
-
-    pub fn write(&mut self, value: u8) {
-        self.bus = value;
+        self.data
     }
 }
 
 pub struct Alu {
-    data: u8,
     data_bus: Rc<RefCell<DataBus>>,
-    p: Rc<RefCell<StatusRegister>>,
+    accumulator: Rc<RefCell<Accumulator>>,
 }
 
 impl Alu {
-    pub fn new(data_bus: &Rc<RefCell<DataBus>>, p: &Rc<RefCell<StatusRegister>>) -> Self {
+    pub fn new(
+        data_bus: &Rc<RefCell<DataBus>>,
+        accumulator: &Rc<RefCell<Accumulator>>,
+    ) -> Self {
         Alu {
-            data: 0,
             data_bus: Rc::clone(data_bus),
-            p: Rc::clone(p),
+            accumulator: Rc::clone(accumulator),
         }
     }
 
@@ -753,16 +764,19 @@ impl Alu {
         bcd
     }
 
-    pub fn add_with_carry(&mut self) {
-        let was_negative = self.data & 0x80 == 0x80;
-        let mut p = self.p.borrow_mut();
+    pub fn add_with_carry(&mut self, p: &mut StatusRegister) {
+        let accumulator_data = self.accumulator.borrow().read();
+        let bus_data = self.data_bus.borrow().read();
+
+        let was_negative = accumulator_data & 0x80 == 0x80;
+        let sum;
 
         if p.get_decimal_mode() {
             // Convert currently stored data from BCD to decimal
-            let data = Alu::convert_from_bcd(self.data);
+            let data = Alu::convert_from_bcd(accumulator_data);
 
             // Convert data on bus from BCD to decimal
-            let operand = Alu::convert_from_bcd(self.data_bus.borrow().read());
+            let operand = Alu::convert_from_bcd(bus_data);
 
             // Add in decimal and convert back into BCD
             let bcd = Alu::convert_to_bcd(data + operand + (p.get_carry() as u16));
@@ -771,122 +785,78 @@ impl Alu {
             p.set_carry(bcd & 0x100 == 0x100);
             // BCD sets zero flag even if the carry bit is set
             p.set_zero(bcd | 0x00 == 0x00);
-
-            self.data = (bcd & 0xFF) as u8;
+            sum = (bcd & 0xFF) as u8;
         } else {
-            let sum = (self.data as u16)
-                .wrapping_add(self.data_bus.borrow().read() as u16)
+            let bin = (accumulator_data as u16)
+                .wrapping_add(bus_data as u16)
                 .wrapping_add(p.get_carry() as u16);
 
-            p.set_carry(sum & 0x100 == 0x100);
-            p.set_zero(self.data == 0);
+            p.set_carry(bin & 0x100 == 0x100);
 
-            self.data = (sum & 0xFF) as u8;
+            sum = (bin & 0xFF) as u8;
+            p.set_zero(sum == 0);
         }
 
-        let is_negative = self.data & 0x80 == 0x80;
+        self.accumulator.borrow_mut().write(sum);
+        let is_negative = sum & 0x80 == 0x80;
         p.set_negative(is_negative);
         p.set_overflow(was_negative ^ is_negative);
     }
 
-    pub fn subtract_with_borrow(&mut self) {
-        let was_negative = self.data & 0x80 == 0x80;
+    pub fn subtract_with_borrow(&mut self, p: &mut StatusRegister) {
+        let accumulator_data = self.accumulator.borrow().read();
+        let bus_data = self.data_bus.borrow().read();
+
+        let was_negative = accumulator_data & 0x80 == 0x80;
         let is_negative;
-        let mut p = self.p.borrow_mut();
+        let sum;
 
         if p.get_decimal_mode() {
             // Convert currently stored data from BCD to decimal
-            let data = Alu::convert_from_bcd(self.data);
+            let data = Alu::convert_from_bcd(accumulator_data);
 
             // Convert data on bus from BCD to decimal
-            let operand = Alu::convert_from_bcd(self.data_bus.borrow().read());
+            let operand = Alu::convert_from_bcd(bus_data);
 
             // Subtract in decimal
-            let sum = (data as i16) - (operand as i16) - ((!p.get_carry()) as i16);
-            let sum = if sum < 0 { sum + 100 } else { sum };
-            let sum = sum as u16;
-            is_negative = sum & 0x100 == 0x100;
+            let dec = (data as i16) - (operand as i16) - ((!p.get_carry()) as i16);
+            let dec = if dec < 0 { dec + 100 } else { dec };
+            let dec = dec as u16;
+            is_negative = dec & 0x100 == 0x100;
             // Convert decimal back into BCD (take lower byte)
-            let bcd = Alu::convert_to_bcd((sum & 0xFF) as u16);
+            let bcd = Alu::convert_to_bcd((dec & 0xFF) as u16);
             let bcd = bcd as u8;
 
             // Set flags
             // Carry = inverse of borrow
-            p.set_carry(sum & 0x100 == 0x100);
+            p.set_carry(dec & 0x100 == 0x100);
             // BCD sets zero flag even if the carry bit is set
             p.set_zero(bcd | 0x00 == 0x00);
 
-            self.data = bcd;
+            sum = (bcd & 0xFF) as u8;
         } else {
-            let sum = (self.data as u16)
-                .wrapping_add((!self.data_bus.borrow().read()) as u16)
+            let bin = (accumulator_data as u16)
+                .wrapping_add((!bus_data) as u16)
                 .wrapping_add(p.get_carry() as u16);
 
-            self.data = (sum & 0xFF) as u8;
             // Carry = inverse of borrow
-            p.set_carry(sum & 0x100 == 0x100);
-            p.set_zero(self.data == 0);
+            p.set_carry(bin & 0x100 == 0x100);
 
-            is_negative = self.data & 0x80 == 0x80;
+            sum = (bin & 0xFF) as u8;
+            p.set_zero(sum == 0);
+
+            is_negative = sum & 0x80 == 0x80;
         }
 
+        self.accumulator.borrow_mut().write(sum);
         p.set_negative(is_negative);
         p.set_overflow(was_negative ^ is_negative);
-    }
-
-    pub fn write_to_bus(&self) {
-        self.data_bus.borrow_mut().write(self.data);
-    }
-
-    pub fn read_from_bus(&mut self) {
-        self.data = self.data_bus.borrow().read();
-    }
-}
-
-pub struct InternalMemory {
-    ram: [u8; 0x800],
-    data_bus: Rc<RefCell<DataBus>>,
-    address_bus: Rc<RefCell<AddressBus>>,
-}
-
-impl InternalMemory {
-    pub fn new(
-        data_bus: &Rc<RefCell<DataBus>>,
-        address_bus: &Rc<RefCell<AddressBus>>,
-        memory: Option<&[u8]>,
-    ) -> Self {
-        let mut mem = InternalMemory {
-            ram: [0; 0x800],
-            data_bus: Rc::clone(data_bus),
-            address_bus: Rc::clone(address_bus),
-        };
-
-        if let Some(memory) = memory {
-            let mut ram = vec![0; 0x800];
-            ram.splice(0..memory.len(), memory.iter().cloned());
-            mem.ram.copy_from_slice(&ram);
-        }
-
-        mem
-    }
-
-    pub fn read(&self) -> u8 {
-        let (high, low) = self.address_bus.borrow().read();
-        let address = ((high as u16) << 8) | (low as u16);
-        self.ram[address as usize]
-    }
-
-    pub fn write(&mut self) {
-        let (high, low) = self.address_bus.borrow().read();
-        let address = ((high as u16) << 8) | (low as u16);
-        self.ram[address as usize] = self.data_bus.borrow().read();
     }
 }
 
 pub struct Mos6502 {
-    internal_ram: InternalMemory,
     /// Accumulator
-    a: Accumulator,
+    a: Rc<RefCell<Accumulator>>,
     /// ALU
     alu: Alu,
     /// X index register
@@ -899,17 +869,19 @@ pub struct Mos6502 {
     #[allow(dead_code)]
     s: u8,
     /// Status register
-    pub p: Rc<RefCell<StatusRegister>>,
+    pub p: StatusRegister,
     /// Instruction register
     instruction_register: InstructionRegister,
+    /// Internal data bus buffer
     data_bus: Rc<RefCell<DataBus>>,
+    /// Internal address bus
+    address_bus: Rc<RefCell<AddressBus>>,
     /// Number of cycles remaining in current instruction
     cycles: u32,
     #[allow(dead_code)]
     output_clock1: bool,
     #[allow(dead_code)]
     output_clock2: bool,
-    address_bus: Rc<RefCell<AddressBus>>,
     #[allow(dead_code)]
     ready: bool,
     #[allow(dead_code)]
@@ -931,47 +903,35 @@ enum IndexRegister {
 
 impl Mos6502 {
     /// Initializes a new `Mos6502` processor emulator.
-    ///
-    /// Optionally, provide a `&[u8]` as the starting memory.
-    ///
-    /// ```
-    /// use rustendo_lib::mos6502::Mos6502;
-    /// // Loads $FF into the accumulator.
-    /// let mut mem = vec![0x69, 0xFF]; // ADC $FF
-    /// let mos6502 = Mos6502::new(Some(&mem));
-    /// ```
-    pub fn new(memory: Option<&[u8]>) -> Self {
-        let data_bus = DataBus::new();
+    pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
+        let data_bus = DataBus::new(bus);
         let data_bus = Rc::new(RefCell::new(data_bus));
 
-        let address_bus = AddressBus::new();
+        let address_bus = AddressBus::new(bus);
         let address_bus = Rc::new(RefCell::new(address_bus));
+
+        let a = Accumulator::new(&data_bus);
+        let a = Rc::new(RefCell::new(a));
 
         let pc = ProgramCounter::new(&data_bus, &address_bus);
         let pc = Rc::new(RefCell::new(pc));
 
         let p = StatusRegister::new();
-        let p = Rc::new(RefCell::new(p));
 
-        let internal_ram = InternalMemory::new(&data_bus, &address_bus, memory);
-        let a = Accumulator::new(&data_bus);
-        let alu = Alu::new(&data_bus, &p);
+        let alu = Alu::new(&data_bus, &a);
         let instruction_register = InstructionRegister::new(&data_bus);
 
-        let data_bus = Rc::clone(&data_bus);
-
         Mos6502 {
-            internal_ram,
             a,
             alu,
             instruction_register,
-            address_bus,
             x: 0,
             y: 0,
             pc,
             s: 0xFD,
             p,
             data_bus,
+            address_bus,
             cycles: 0,
             output_clock1: false,
             output_clock2: false,
@@ -991,13 +951,6 @@ impl Mos6502 {
     /// the time doing nothing.
     ///
     /// Returns true if the instruction is complete.
-    ///
-    /// ```
-    /// use rustendo_lib::mos6502::Mos6502;
-    /// let mut mos6502 = Mos6502::new(None);
-    /// // Runs a single instruction to completion.
-    /// while mos6502.clock() { }
-    /// ```
     pub fn clock(&mut self) -> bool {
         if self.cycles == 0 {
             self.read_instruction();
@@ -1012,7 +965,8 @@ impl Mos6502 {
         let mut pc = self.pc.borrow_mut();
         pc.increment();
         pc.write_to_address_bus();
-        self.internal_ram.read()
+        self.address_bus.borrow().write_to_bus();
+        self.data_bus.borrow_mut().read_directly_from_bus()
     }
 
     fn absolute_indexed_addressing(&mut self, index: IndexRegister) {
@@ -1032,9 +986,10 @@ impl Mos6502 {
         } else {
             address_high
         };
+
         self.address_bus
             .borrow_mut()
-            .write(address_high, address_low);
+            .write_directly_to_bus(address_high, address_low);
     }
 
     fn do_addressing_mode(&mut self, mode: AddressingMode) {
@@ -1042,14 +997,12 @@ impl Mos6502 {
             AddressingMode::Absolute => {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
-                self.address_bus
-                    .borrow_mut()
-                    .write(address_high, address_low);
+                self.address_bus.borrow_mut().write_directly_to_bus(address_high, address_low);
             }
             AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
             AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
             AddressingMode::Accumulator => {
-                self.data_bus.borrow_mut().write(self.a.register);
+                self.data_bus.borrow_mut().write(self.a.borrow().read());
             }
             AddressingMode::Immediate => {
                 let value = self.fetch_next_byte();
@@ -1059,33 +1012,36 @@ impl Mos6502 {
             AddressingMode::Indirect => {
                 let zero_page_offset = self.fetch_next_byte();
                 let mut address_bus = self.address_bus.borrow_mut();
-                address_bus.write(0, zero_page_offset);
-                let address_low = self.internal_ram.read();
-                address_bus.write(0, zero_page_offset + 1);
-                let address_high = self.internal_ram.read();
-                address_bus.write(address_high, address_low);
+                let mut data_bus = self.data_bus.borrow_mut();
+                address_bus.write_directly_to_bus(0, zero_page_offset);
+                let address_low = data_bus.read_directly_from_bus();
+                address_bus.write_directly_to_bus(0, zero_page_offset + 1);
+                let address_high = data_bus.read_directly_from_bus();
+                address_bus.write_directly_to_bus(address_high, address_low);
             }
             AddressingMode::IndirectX => {
                 // Indexed indirect addressing with register X
                 let zero_page_offset = self.fetch_next_byte();
                 let mut address_bus = self.address_bus.borrow_mut();
+                let mut data_bus = self.data_bus.borrow_mut();
                 let zero_page_offset = zero_page_offset.wrapping_add(self.x);
-                address_bus.write(0, zero_page_offset);
-                let address_low = self.internal_ram.read();
+                address_bus.write_directly_to_bus(0, zero_page_offset);
+                let address_low = data_bus.read_directly_from_bus();
                 let zero_page_offset = zero_page_offset.wrapping_add(1);
-                address_bus.write(0, zero_page_offset);
-                let address_high = self.internal_ram.read();
+                address_bus.write_directly_to_bus(0, zero_page_offset);
+                let address_high = data_bus.read_directly_from_bus();
                 address_bus.write(address_high, address_low);
             }
             AddressingMode::IndirectY => {
                 // Indirect indexed addressing with register Y
                 let zero_page_offset = self.fetch_next_byte();
                 let mut address_bus = self.address_bus.borrow_mut();
-                address_bus.write(0, zero_page_offset);
-                let address_low = self.internal_ram.read();
+                let mut data_bus = self.data_bus.borrow_mut();
+                address_bus.write_directly_to_bus(0, zero_page_offset);
+                let address_low = data_bus.read_directly_from_bus();
                 let zero_page_offset = zero_page_offset.wrapping_add(1);
-                address_bus.write(0, zero_page_offset);
-                let address_high = self.internal_ram.read();
+                address_bus.write_directly_to_bus(0, zero_page_offset);
+                let address_high = data_bus.read_directly_from_bus();
                 let (address_low, carry) = address_low.overflowing_add(self.y);
                 let address_high = if carry {
                     // a carry occurred (page boundary crossed), need to add one
@@ -1098,30 +1054,25 @@ impl Mos6502 {
                 address_bus.write(address_high, address_low);
             }
             AddressingMode::Relative => {
-                self.p.borrow_mut().set_carry(false);
                 let offset = self.fetch_next_byte();
                 let offset_negative = offset & 0x80 == 0x80;
 
                 let mut pc = self.pc.borrow_mut();
 
                 // PCL + offset -> PCL
-                self.data_bus.borrow_mut().write(pc.low());
-                self.alu.read_from_bus();
-                self.data_bus.borrow_mut().write(offset);
-                self.alu.read_from_bus();
-                self.alu.add_with_carry();
-                self.alu.write_to_bus();
-                pc.read_low_from_bus();
+                let (pcl, carry) = pc.read_low().overflowing_add(offset);
+                self.data_bus.borrow_mut().write(pcl);
+                pc.read_low_from_data_bus();
 
                 // If the offset was negative, we expect a carry
                 // when no page boundary is crossed
-                if offset_negative && self.p.borrow().get_carry() {
+                if offset_negative && carry {
                     return;
                 }
 
                 // If the offset was positive, we expect no carry
                 // when no page boundary is crossed.
-                if !offset_negative && !self.p.borrow().get_carry() {
+                if !offset_negative && !carry {
                     return;
                 }
 
@@ -1130,38 +1081,36 @@ impl Mos6502 {
                 self.cycles += 1;
 
                 // PCH + 0 + carry -> PCH
-                {
-                    let mut data_bus = self.data_bus.borrow_mut();
-                    data_bus.read();
-                    data_bus.write(0);
-                }
-                self.alu.read_from_bus();
-                self.data_bus.borrow_mut().write(pc.high());
-                self.alu.read_from_bus();
-                self.alu.add_with_carry();
-                pc.read_high_from_bus();
+                let pch = pc.read_high().wrapping_add(1);
+                self.data_bus.borrow_mut().write(pch);
+                pc.read_high_from_data_bus();
             }
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
-                self.address_bus.borrow_mut().write(0, zero_page_offset);
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0, zero_page_offset);
             }
             AddressingMode::ZeroPageX => {
                 let zero_page_offset = self.fetch_next_byte();
                 let zero_page_offset = zero_page_offset.wrapping_add(self.x);
-                self.address_bus.borrow_mut().write(0, zero_page_offset);
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0, zero_page_offset);
             }
             AddressingMode::ZeroPageY => {
                 let zero_page_offset = self.fetch_next_byte();
                 let zero_page_offset = zero_page_offset.wrapping_add(self.y);
-                self.address_bus.borrow_mut().write(0, zero_page_offset);
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0, zero_page_offset);
             }
         }
     }
 
     fn read_instruction(&mut self) {
         self.pc.borrow().write_to_address_bus();
-        let next_instruction = self.internal_ram.read();
-        self.data_bus.borrow_mut().write(next_instruction);
+        self.data_bus.borrow_mut().read_from_bus();
         self.instruction_register.read_from_bus();
     }
 
@@ -1171,9 +1120,7 @@ impl Mos6502 {
             Instruction::ADC(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                self.alu.add_with_carry();
-                self.alu.write_to_bus();
-                self.a.read_from_bus();
+                self.alu.add_with_carry(&mut self.p);
             }
             Instruction::AND(mode, _, cycles, _) => {
                 self.cycles = cycles;
@@ -1182,13 +1129,12 @@ impl Mos6502 {
                 {
                     let mut data_bus = self.data_bus.borrow_mut();
                     let operand = data_bus.read();
-                    result = self.a.register & operand;
+                    result = self.a.borrow().read() & operand;
                     data_bus.write(result);
                 }
-                self.a.read_from_bus();
-                let mut p = self.p.borrow_mut();
-                p.set_zero(result == 0);
-                p.set_negative(result & 0x80 == 0x80);
+                self.a.borrow_mut().read_from_bus();
+                self.p.set_zero(result == 0);
+                self.p.set_negative(result & 0x80 == 0x80);
             }
             Instruction::ASL(mode, _, cycles, _) => {
                 self.cycles = cycles;
@@ -1202,86 +1148,116 @@ impl Mos6502 {
                 // 0, otherwise resets Z and stores the input bit 7 in the carry flag.
 
                 {
-                    let mut p = self.p.borrow_mut();
-                    p.set_negative(result & 0x80 == 0x80);
+                    self.p.set_negative(result & 0x80 == 0x80);
 
                     if result == 0 {
-                        p.set_zero(true);
+                        self.p.set_zero(true);
                     } else {
-                        p.set_carry(operand & 0x80 == 0x80);
+                        self.p.set_carry(operand & 0x80 == 0x80);
                     }
                 }
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.read_from_bus();
+                    self.a.borrow_mut().read_from_bus();
                 } else {
-                    self.internal_ram.write();
+                    self.data_bus.borrow().write_to_bus();
                 }
             }
             Instruction::BCC(mode, _, cycles, _) => {
                 self.cycles = cycles;
 
-                if !self.p.borrow().get_carry() {
+                if !self.p.get_carry() {
                     // Branch taken, add an additional cycle.
                     self.cycles += 1;
                     self.do_addressing_mode(mode);
+                } else {
+                    // Branch not taken, retrieve parameter and discard
+                    self.fetch_next_byte();
                 }
             }
             Instruction::BCS(mode, _, cycles, _) => {
                 self.cycles = cycles;
 
-                if !self.p.borrow().get_carry() {
+                if !self.p.get_carry() {
                     // Branch taken, add an additional cycle.
                     self.cycles += 1;
                     self.do_addressing_mode(mode);
+                } else {
+                    // Branch not taken, retrieve parameter and discard
+                    self.fetch_next_byte();
                 }
             }
             Instruction::BEQ(mode, _, cycles, _) => {
                 self.cycles = cycles;
 
-                if self.p.borrow().get_zero() {
+                if self.p.get_zero() {
                     // Branch taken, add an additional cycle.
                     self.cycles += 1;
                     self.do_addressing_mode(mode);
+                } else {
+                    // Branch not taken, retrieve parameter and discard
+                    self.fetch_next_byte();
                 }
             }
             Instruction::BIT(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 let operand = self.data_bus.borrow().read();
-                let mut p = self.p.borrow_mut();
-                p.set_negative(operand & 0x80 == 0x80);
-                p.set_overflow(operand * 0x40 == 0x40);
-                p.set_zero(operand & self.a.register == 0);
+                self.p.set_negative(operand & 0x80 == 0x80);
+                self.p.set_overflow(operand * 0x40 == 0x40);
+                self.p.set_zero(operand & self.a.borrow().read() == 0);
+            }
+            Instruction::BMI(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                if self.p.get_negative() {
+                    // Branch taken, add an additional cycle.
+                    self.cycles += 1;
+                    self.do_addressing_mode(mode);
+                } else {
+                    // Branch not taken, retrieve parameter and discard
+                    self.fetch_next_byte();
+                }
+            }
+            Instruction::BPL(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                if !self.p.get_negative() {
+                    // Branch taken, add an additional cycle.
+                    self.cycles += 1;
+                    self.do_addressing_mode(mode);
+                } else {
+                    // Branch not taken, retrieve parameter and discard
+                    self.fetch_next_byte();
+                }
             }
             Instruction::CLC(_, _, cycles, _) => {
                 self.cycles = cycles;
-                self.p.borrow_mut().set_carry(false);
+                self.p.set_carry(false);
             }
             Instruction::CLD(_, _, cycles, _) => {
                 self.cycles = cycles;
-                self.p.borrow_mut().set_decimal_mode(false);
+                self.p.set_decimal_mode(false);
             }
+            Instruction::NOP(_, _, cycles, _) => self.cycles = cycles,
             Instruction::SBC(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                self.alu.subtract_with_borrow();
-                self.alu.write_to_bus();
-                self.a.read_from_bus();
+                self.alu.subtract_with_borrow(&mut self.p);
             }
             Instruction::SEC(_, _, cycles, _) => {
                 self.cycles = cycles;
-                self.p.borrow_mut().set_carry(true);
+                self.p.set_carry(true);
             }
             Instruction::SED(_, _, cycles, _) => {
                 self.cycles = cycles;
-                self.p.borrow_mut().set_decimal_mode(true);
+                self.p.set_decimal_mode(true);
             }
             Instruction::STA(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                self.a.write_to_bus();
-                self.internal_ram.write();
+                self.a.borrow().write_to_bus();
+                self.data_bus.borrow().write_to_bus();
             }
             Instruction::BRK(_, _, cycles, _) => {
                 // For now, just set cycles so that this instruction works for doctests
@@ -1291,26 +1267,5 @@ impl Mos6502 {
         }
 
         self.pc.borrow_mut().increment();
-    }
-
-    /// Get memory at a particular address.
-    ///
-    /// Useful for testing. Resets internal address bus register
-    /// to its old state.
-    ///
-    /// ```
-    /// use rustendo_lib::mos6502::Mos6502;
-    /// let mut mos6502 = Mos6502::new(None);
-    /// let mem = mos6502.read_memory_at_address(0);
-    /// assert_eq!(mem, 0x0);
-    /// ```
-    pub fn read_memory_at_address(&mut self, address: u16) -> u8 {
-        let old_address = self.address_bus.borrow().read();
-        self.address_bus.borrow_mut().write_wide(address);
-        let mem = self.internal_ram.read();
-        self.address_bus
-            .borrow_mut()
-            .write(old_address.0, old_address.1);
-        mem
     }
 }
