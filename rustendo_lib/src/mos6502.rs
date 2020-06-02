@@ -1173,19 +1173,9 @@ impl Mos6502 {
                 let result = operand << 1;
                 self.data_bus.borrow_mut().write(result);
 
-                // The instruction does not affect the overflow bit, Sets N equal to the
-                // result bit 7 (bit 6 in the input), sets Z flag if the result is equal to
-                // 0, otherwise resets Z and stores the input bit 7 in the carry flag.
-
-                {
-                    self.p.negative = result & 0x80 == 0x80;
-
-                    if result == 0 {
-                        self.p.zero = true;
-                    } else {
-                        self.p.carry = operand & 0x80 == 0x80;
-                    }
-                }
+                self.p.zero = result == 0;
+                self.p.negative = result & 0x80 == 0x80;
+                self.p.carry = operand & 0x80 == 0x80;
 
                 if mode == AddressingMode::Accumulator {
                     self.a.borrow_mut().read_from_bus();
@@ -1395,7 +1385,9 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 self.s += 1;
-                self.address_bus.borrow_mut().write_directly_to_bus(0x01, self.s);
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
                 let value = self.data_bus.borrow_mut().read_directly_from_bus();
                 self.a.borrow_mut().write(value);
                 self.p.negative = value & 0x80 == 0x80;
@@ -1405,7 +1397,9 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 self.s += 1;
-                self.address_bus.borrow_mut().write_directly_to_bus(0x01, self.s);
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
                 let value = self.data_bus.borrow_mut().read_directly_from_bus();
                 self.p.set(value);
             }
