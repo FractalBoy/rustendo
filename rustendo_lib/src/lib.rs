@@ -6,23 +6,23 @@ mod tests {
 
     #[test]
     fn adc_no_carry() {
-        let program = assemble_program(
-            "LDA #$01
-            ADC #$01
-            STA $0D
-            LDA #$00
-            ADC #$00
-            STA $0E",
+        let mut cpu = run_program(
+            "
+        LDA #$01
+        ADC #$01
+        STA $0D
+        LDA #$00
+        ADC #$00
+        STA $0E
+        ",
         );
-
-        let mut rp2a03 = run_program(program.as_slice());
-        assert_eq!(rp2a03.read_memory_at_address(0xD), 2, "0x1 + 0x1 = 0x2");
-        assert_eq!(rp2a03.read_memory_at_address(0xE), 0, "carry bit cleared");
+        assert_eq!(cpu.read_memory_at_address(0xD), 2, "0x1 + 0x1 = 0x2");
+        assert_eq!(cpu.read_memory_at_address(0xE), 0, "carry bit cleared");
     }
 
     #[test]
     fn adc_with_carry() {
-        let program = assemble_program(
+        let mut cpu = run_program(
             "
             LDA #$FF
             ADC #$FF
@@ -32,14 +32,9 @@ mod tests {
             STA $0E
         ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
+        assert_eq!(cpu.read_memory_at_address(0xD), 0xFE, "0xFF + 0xFF = 0xFE");
         assert_eq!(
-            rp2a03.read_memory_at_address(0xD),
-            0xFE,
-            "0xFF + 0xFF = 0xFE"
-        );
-        assert_eq!(
-            rp2a03.read_memory_at_address(0xE),
+            cpu.read_memory_at_address(0xE),
             0x1,
             "0xFF + 0xFF sets carry flag"
         );
@@ -47,7 +42,7 @@ mod tests {
 
     #[test]
     fn adc_bcd() {
-        let program = assemble_program(
+        let mut cpu = run_program(
             "
             SED
             LDA #$10
@@ -58,14 +53,13 @@ mod tests {
             STA $0E
         ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
         assert_eq!(
-            rp2a03.read_memory_at_address(0xD),
+            cpu.read_memory_at_address(0xD),
             0x20,
             "0x10 + 0x10 = 0x20 in BCD"
         );
-        assert_eq!(rp2a03.read_memory_at_address(0xE), 0x0, "carry bit cleared");
-        let program = assemble_program(
+        assert_eq!(cpu.read_memory_at_address(0xE), 0x0, "carry bit cleared");
+        let mut cpu = run_program(
             "
             SED
             LDA #$81
@@ -76,14 +70,13 @@ mod tests {
             STA $0E
             ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
         assert_eq!(
-            rp2a03.read_memory_at_address(0xD),
+            cpu.read_memory_at_address(0xD),
             0x73,
             "0x81 + 0x92 = 0x73 in BCD"
         );
         assert_eq!(
-            rp2a03.read_memory_at_address(0xE),
+            cpu.read_memory_at_address(0xE),
             0x1,
             "0x81 + 0x92 sets carry flag"
         );
@@ -91,7 +84,7 @@ mod tests {
 
     #[test]
     fn and_eq_zero() {
-        let program = assemble_program(
+        let mut cpu = run_program(
             "
             ADC #$FF
             AND #$00
@@ -102,9 +95,8 @@ mod tests {
             STA $0D
         ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
         assert_eq!(
-            rp2a03.read_memory_at_address(0xD),
+            cpu.read_memory_at_address(0xD),
             0x1,
             "((0xFF & 0xFF) + 0x01)= 0x01"
         );
@@ -112,7 +104,7 @@ mod tests {
 
     #[test]
     fn and_eq_negative() {
-        let program = assemble_program(
+        let mut cpu = run_program(
             "
             LDA #$FF
             AND #$80
@@ -123,9 +115,8 @@ mod tests {
             STA $0D
         ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
         assert_eq!(
-            rp2a03.read_memory_at_address(0xD),
+            cpu.read_memory_at_address(0xD),
             0x81,
             "(0xFF & 0x80) + 0x01 = 0x81"
         );
@@ -133,7 +124,7 @@ mod tests {
 
     #[test]
     fn sbc_without_borrow() {
-        let program = assemble_program(
+        let mut cpu = run_program(
             "
             LDA #$76
             SEC
@@ -145,14 +136,13 @@ mod tests {
             STA $10
         ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
         assert_eq!(
-            rp2a03.read_memory_at_address(0xF),
+            cpu.read_memory_at_address(0xF),
             0x71,
             "0x76 - 0x05 = 0x71, BMI branch not taken"
         );
         assert_eq!(
-            rp2a03.read_memory_at_address(0x10),
+            cpu.read_memory_at_address(0x10),
             0x1,
             "no borrow (carry set)"
         );
@@ -160,7 +150,7 @@ mod tests {
 
     #[test]
     fn sbc_with_borrow() {
-        let program = assemble_program(
+        let mut cpu = run_program(
             "
             ADC #$05
             SEC
@@ -172,14 +162,13 @@ mod tests {
             STA $10
         ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
         assert_eq!(
-            rp2a03.read_memory_at_address(0xF),
+            cpu.read_memory_at_address(0xF),
             0xFB,
             "0x5 - 0xA = -0x5 (0xFB), BPL branch not taken"
         );
         assert_eq!(
-            rp2a03.read_memory_at_address(0x10),
+            cpu.read_memory_at_address(0x10),
             0x0,
             "borrow (carry not set)"
         );
@@ -187,7 +176,7 @@ mod tests {
 
     #[test]
     fn sbc_bcd() {
-        let program = assemble_program(
+        let mut cpu = run_program(
             "
             SED
             LDA #$92
@@ -200,11 +189,9 @@ mod tests {
             STA $11
         ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
-
-        assert_eq!(rp2a03.read_memory_at_address(0x10), 0x67);
-        assert_eq!(rp2a03.read_memory_at_address(0x11), 0x0);
-        let program = assemble_program(
+        assert_eq!(cpu.read_memory_at_address(0x10), 0x67);
+        assert_eq!(cpu.read_memory_at_address(0x11), 0x0);
+        let mut cpu = run_program(
             "
             SED
             LDA #$25
@@ -217,10 +204,9 @@ mod tests {
             STA $11
         ",
         );
-        let mut rp2a03 = run_program(program.as_slice());
-        assert_eq!(rp2a03.read_memory_at_address(0x10), 0x33);
+        assert_eq!(cpu.read_memory_at_address(0x10), 0x33);
         assert_eq!(
-            rp2a03.read_memory_at_address(0x11),
+            cpu.read_memory_at_address(0x11),
             0x0,
             "borrow set (carry unset)"
         );
@@ -394,7 +380,8 @@ mod tests {
         program
     }
 
-    fn run_program(program: &[Vec<u8>]) -> Rp2a03 {
+    fn run_program(program: &str) -> Rp2a03 {
+        let program = assemble_program(&program);
         let mut mem: Vec<u8> = Vec::new();
         for instruction in program.iter().cloned() {
             mem.extend_from_slice(&instruction);
