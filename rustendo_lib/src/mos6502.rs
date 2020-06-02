@@ -1127,6 +1127,19 @@ impl Mos6502 {
         result
     }
 
+    fn jump(&mut self, mode: AddressingMode, cycles: u32) {
+        self.cycles = cycles;
+
+        self.do_addressing_mode(mode);
+
+        self.data_bus.borrow_mut().read_from_bus();
+        self.pc.borrow_mut().read_low_from_data_bus();
+
+        self.fetch_next_byte();
+        self.data_bus.borrow_mut().read_from_bus();
+        self.pc.borrow_mut().read_high_from_data_bus();
+    }
+
     fn read_instruction(&mut self) {
         self.pc.borrow().write_to_address_bus();
         self.data_bus.borrow_mut().read_from_bus();
@@ -1144,14 +1157,10 @@ impl Mos6502 {
             Instruction::AND(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                let result;
-                {
-                    let mut data_bus = self.data_bus.borrow_mut();
-                    let operand = data_bus.read();
-                    result = self.a.borrow().read() & operand;
-                    data_bus.write(result);
-                }
-                self.a.borrow_mut().read_from_bus();
+
+                let operand = self.data_bus.borrow().read();
+                let result = operand & self.a.borrow().read();
+
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
             }
@@ -1203,26 +1212,28 @@ impl Mos6502 {
                 self.fetch_next_byte();
 
                 let mut address_bus = self.address_bus.borrow_mut();
-                let pc = self.pc.borrow();
+                let mut pc = self.pc.borrow_mut();
                 address_bus.write_directly_to_bus(0, self.s);
+                self.s -= 1;
                 self.data_bus
                     .borrow_mut()
                     .write_directly_to_bus(pc.read_high());
-                address_bus.write_directly_to_bus(0, self.s - 1);
+                address_bus.write_directly_to_bus(0, self.s);
+                self.s -= 1;
                 self.data_bus
                     .borrow_mut()
                     .write_directly_to_bus(pc.read_low());
-                address_bus.write_directly_to_bus(0, self.s - 2);
+                address_bus.write_directly_to_bus(0, self.s);
                 self.data_bus
                     .borrow_mut()
                     .write_directly_to_bus(self.p.get());
 
                 address_bus.write_directly_to_bus(0xFF, 0xFE);
                 self.data_bus.borrow_mut().read_from_bus();
-                self.pc.borrow_mut().read_low_from_data_bus();
+                pc.read_low_from_data_bus();
                 address_bus.write_directly_to_bus(0xFF, 0xFF);
                 self.data_bus.borrow_mut().read_from_bus();
-                self.pc.borrow_mut().read_high_from_data_bus();
+                pc.read_high_from_data_bus();
             }
             Instruction::BVC(mode, _, cycles, _) => self.branch(!self.p.overflow, mode, cycles),
             Instruction::BVS(mode, _, cycles, _) => self.branch(self.p.overflow, mode, cycles),
@@ -1282,13 +1293,120 @@ impl Mos6502 {
             }
             Instruction::INX(_, _, cycles, _) => self.x = self.increment(self.x, 1, cycles),
             Instruction::INY(_, _, cycles, _) => self.y = self.increment(self.y, 1, cycles),
+            Instruction::JMP(mode, _, cycles, _) => self.jump(mode, cycles),
+            Instruction::JSR(mode, bytes, cycles, _) => {
+                let address_low = self
+                    .pc
+                    .borrow()
+                    .read_high()
+                    .wrapping_add((bytes & 0xFF) as u8);
+                let address_high = self.pc.borrow().read_low();
+
+                // Save next instruction location to the stack.
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.s -= 1;
+                self.data_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(address_low);
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.s -= 1;
+                self.data_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(address_high);
+
+                self.jump(mode, cycles);
+            }
             Instruction::LDA(mode, _, cycles, _) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
                 self.a.borrow_mut().read_from_bus();
             }
+            Instruction::LDX(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.do_addressing_mode(mode);
+                self.x = self.data_bus.borrow().read();
+            }
+            Instruction::LDY(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.do_addressing_mode(mode);
+                self.y = self.data_bus.borrow().read();
+            }
+            Instruction::LSR(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.do_addressing_mode(mode);
+                let operand = self.data_bus.borrow().read();
+                self.p.carry = operand & 0x01 == 0x01;
+
+                let result = operand >> 1;
+                self.data_bus.borrow_mut().write(result);
+
+                if mode == AddressingMode::Accumulator {
+                    self.a.borrow_mut().read_from_bus();
+                } else {
+                    self.data_bus.borrow().write_to_bus();
+                }
+            }
             Instruction::NOP(_, _, cycles, _) => self.cycles = cycles,
+            Instruction::ORA(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.do_addressing_mode(mode);
+
+                let memory = self.data_bus.borrow_mut().read();
+                let result = self.a.borrow().read() | memory;
+
+                self.a.borrow_mut().write(result);
+                self.p.zero = result == 0;
+                self.p.negative = result & 0x80 == 0x80;
+            }
+            Instruction::PHA(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.data_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(self.a.borrow().read());
+                self.s -= 1;
+            }
+            Instruction::PHP(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.data_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(self.p.get());
+                self.s -= 1;
+            }
+            Instruction::PLA(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.s += 1;
+                self.address_bus.borrow_mut().write_directly_to_bus(0x01, self.s);
+                let value = self.data_bus.borrow_mut().read_directly_from_bus();
+                self.a.borrow_mut().write(value);
+                self.p.negative = value & 0x80 == 0x80;
+                self.p.zero = value == 0;
+            }
+            Instruction::PLP(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.s += 1;
+                self.address_bus.borrow_mut().write_directly_to_bus(0x01, self.s);
+                let value = self.data_bus.borrow_mut().read_directly_from_bus();
+                self.p.set(value);
+            }
             Instruction::SBC(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);

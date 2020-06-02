@@ -5,11 +5,11 @@ mod tests {
     #[test]
     fn adc_no_carry() {
         let mut rp2a03 = run_program(&[
-            vec![0x69, 0x1],  // ADC $1
-            vec![0x69, 0x1],  // ADC $1
+            vec![0xA9, 0x1],  // LDA #$1
+            vec![0x69, 0x1],  // ADC #$1
             vec![0x85, 0xD],  // STA $D
-            vec![0x29, 0x00], // AND $00 (clear accumulator)
-            vec![0x69, 0x0],  // ADC $0
+            vec![0xA9, 0x00], // LDA #$00
+            vec![0x69, 0x0],  // ADC #$0
             vec![0x85, 0xE],  // STA $E
         ]);
         assert_eq!(rp2a03.read_memory_at_address(0xD), 2, "0x1 + 0x1 = 0x2");
@@ -79,12 +79,12 @@ mod tests {
     #[test]
     fn and_eq_zero() {
         let mut rp2a03 = run_program(&[
-            vec![0x69, 0xFF], // ADC $FF
-            vec![0x29, 0x00], // AND $00
+            vec![0x69, 0xFF], // ADC #$FF
+            vec![0x29, 0x00], // AND #$00
             vec![0x30, 0x2],  // BMI $2
             vec![0xF0, 0x2],  // BEQ $2
-            vec![0x69, 0x2],  // ADC $2 (should never happen)
-            vec![0x69, 0x1],  // ADC $1 (should branch here from BEQ)
+            vec![0x69, 0x2],  // ADC #$2 (should never happen)
+            vec![0x69, 0x1],  // ADC #$1 (should branch here from BEQ)
             vec![0x85, 0xD],  // STA $D
         ]);
         assert_eq!(
