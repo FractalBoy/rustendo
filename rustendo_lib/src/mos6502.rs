@@ -1161,6 +1161,8 @@ impl Mos6502 {
                 let operand = self.data_bus.borrow().read();
                 let result = operand & self.a.borrow().read();
 
+                self.a.borrow_mut().write(result);
+
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
             }
