@@ -2,6 +2,8 @@ use crate::bus::Bus;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+const NEGATIVE_ONE: u8 = !1 + 1;
+
 struct DataBus {
     data: u8,
     bus: Rc<RefCell<Bus>>,
@@ -988,7 +990,7 @@ impl Mos6502 {
                 let value = self.fetch_next_byte();
                 self.data_bus.borrow_mut().write(value);
             }
-            AddressingMode::Implied => unimplemented!("{:?} unimplemented", mode),
+            AddressingMode::Implied => return,
             AddressingMode::Indirect => {
                 let zero_page_offset = self.fetch_next_byte();
                 let mut address_bus = self.address_bus.borrow_mut();
@@ -1099,6 +1101,30 @@ impl Mos6502 {
             // Branch not taken, retrieve parameter and discard
             self.fetch_next_byte();
         }
+    }
+
+    fn compare(&mut self, mode: AddressingMode, operand: u8, cycles: u32) {
+        self.cycles = cycles;
+
+        self.do_addressing_mode(mode);
+        let memory = self.data_bus.borrow().read();
+
+        let result = operand.wrapping_sub(memory);
+
+        self.p.zero = result == 0;
+        self.p.negative = result & 0x80 == 0x80;
+        self.p.carry = operand >= memory;
+    }
+
+    fn increment(&mut self, operand: u8, by: u8, cycles: u32) -> u8 {
+        self.cycles = cycles;
+
+        let result = operand.wrapping_add(by);
+
+        self.p.zero = result == 0;
+        self.p.negative = result & 0x80 == 0x80;
+
+        result
     }
 
     fn read_instruction(&mut self) {
@@ -1217,18 +1243,46 @@ impl Mos6502 {
                 self.p.overflow = false;
             }
             Instruction::CMP(mode, _, cycles, _) => {
+                let operand = self.a.borrow().read();
+                self.compare(mode, operand, cycles)
+            }
+            Instruction::CPX(mode, _, cycles, _) => self.compare(mode, self.x, cycles),
+            Instruction::CPY(mode, _, cycles, _) => self.compare(mode, self.y, cycles),
+            Instruction::DEC(mode, _, cycles, _) => {
+                self.do_addressing_mode(mode);
+                let memory = self.data_bus.borrow().read();
+                let result = self.increment(memory, NEGATIVE_ONE, cycles);
+
+                self.data_bus.borrow_mut().write_directly_to_bus(result);
+            }
+            Instruction::DEX(_, _, cycles, _) => {
+                self.x = self.increment(self.x, NEGATIVE_ONE, cycles)
+            }
+            Instruction::DEY(_, _, cycles, _) => {
+                self.y = self.increment(self.y, NEGATIVE_ONE, cycles)
+            }
+            Instruction::EOR(mode, _, cycles, _) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
-                let operand = self.fetch_next_byte();
-                let accumulator = self.a.borrow().read();
-                let result = self.a.borrow().read().wrapping_sub(operand);
+                let operand = self.data_bus.borrow().read();
+
+                let result = self.a.borrow().read() ^ operand;
+                self.a.borrow_mut().write(result);
 
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
-                self.p.carry = accumulator >= operand;
             }
-            Instruction::LDA(mode, _, cycles, _) => { 
+            Instruction::INC(mode, _, cycles, _) => {
+                self.do_addressing_mode(mode);
+                let operand = self.data_bus.borrow().read();
+
+                let result = self.increment(operand, 1, cycles);
+                self.data_bus.borrow_mut().write_directly_to_bus(result);
+            }
+            Instruction::INX(_, _, cycles, _) => self.x = self.increment(self.x, 1, cycles),
+            Instruction::INY(_, _, cycles, _) => self.y = self.increment(self.y, 1, cycles),
+            Instruction::LDA(mode, _, cycles, _) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
