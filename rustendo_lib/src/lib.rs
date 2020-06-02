@@ -103,6 +103,28 @@ mod tests {
     }
 
     #[test]
+    fn asl() {
+        let mut cpu = run_program("
+        LDA #$FF
+        ASL
+        STA $FF
+        BMI $04
+        LDA #$05
+        STA $FF
+        BNE $04
+        LDA #$06
+        STA $FE
+        LDA #$00
+        ADC #$00
+        STA $FD
+        ");
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFE, "asl result correct, negative branch taken");
+        assert_ne!(cpu.read_memory_at_address(0xFE), 0x06, "not zero branch taken");
+        assert_ne!(cpu.read_memory_at_address(0xFD), 0x01, "carry correct");
+    }
+
+    #[test]
     fn and_eq_negative() {
         let mut cpu = run_program(
             "
@@ -224,7 +246,6 @@ mod tests {
             if fields.len() == 0 {
                 continue;
             }
-            println!("{:?}", fields);
 
             if fields.len() == 1 {
                 let instruction = fields[0];
@@ -394,10 +415,6 @@ mod tests {
     }
 
     fn lookup_instruction(instruction: &str, addressing_mode: AddressingMode) -> Option<u8> {
-        println!(
-            "looking up instruction {} with addressing mode {:?}",
-            instruction, addressing_mode
-        );
         match instruction {
             "ADC" => match addressing_mode {
                 AddressingMode::Immediate => Some(0x69),
