@@ -16,7 +16,7 @@ mod tests {
         );
         assert_eq!(cpu.read_memory_at_address(0xFF), 2, "0x1 + 0x1 = 0x2");
         assert_eq!(
-            cpu.read_memory_at_address(0x01FF) & 0x01,
+            cpu.read_memory_at_address(0x01FD) & 0x01,
             0x00,
             "carry bit cleared"
         );
@@ -34,7 +34,7 @@ mod tests {
         );
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFE, "0xFF + 0xFF = 0xFE");
         assert_eq!(
-            cpu.read_memory_at_address(0x01FF) & 0x01,
+            cpu.read_memory_at_address(0x01FD) & 0x01,
             0x01,
             "carry bit set"
         );
@@ -57,7 +57,7 @@ mod tests {
             "0x10 + 0x10 = 0x20 in BCD"
         );
         assert_eq!(
-            cpu.read_memory_at_address(0x01FF) & 0x01,
+            cpu.read_memory_at_address(0x01FD) & 0x01,
             0x00,
             "carry bit cleared"
         );
@@ -77,7 +77,7 @@ mod tests {
             "0x81 + 0x92 = 0x73 in BCD"
         );
         assert_eq!(
-            cpu.read_memory_at_address(0x01FF) & 0x01,
+            cpu.read_memory_at_address(0x01FD) & 0x01,
             0x01,
             "0x81 + 0x92 sets carry flag"
         );
@@ -100,7 +100,7 @@ mod tests {
             0x00,
             "(0xAA & 0x55) = 0x00"
         );
-        let status = cpu.read_memory_at_address(0x01FF);
+        let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag cleared");
     }
@@ -115,7 +115,7 @@ mod tests {
         PHP
         ",
         );
-        let status = cpu.read_memory_at_address(0x01FF);
+        let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFE, "asl result correct");
         assert!(status & 0x80 == 0x80, "negative bit set");
         assert!(status & 0x02 == 0x00, "zero bit not set");
@@ -183,8 +183,8 @@ mod tests {
         ",
         );
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x80, "0xFF & 0x80 = 0x80");
-        assert_eq!(cpu.read_memory_at_address(0x01FF) & 0x80, 0x80, "negative bit set");
-        assert_eq!(cpu.read_memory_at_address(0x01FF) & 0x02, 0x00, "zero bit not set");
+        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x80, 0x80, "negative bit set");
+        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
@@ -203,7 +203,7 @@ mod tests {
             0x71,
             "0x76 - 0x05 = 0x71"
         );
-        let status = cpu.read_memory_at_address(0x01FF);
+        let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(status & 0x01, 0x01, "no borrow (carry set)");
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
@@ -225,7 +225,7 @@ mod tests {
             0xFB,
             "0x5 - 0xA = -0x5 (0xFB)"
         );
-        let status = cpu.read_memory_at_address(0x01FF);
+        let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(status & 0x01, 0x00, "borrow (carry not set)");
         assert_eq!(status & 0x80, 0x80, "negative bit set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
@@ -244,7 +244,7 @@ mod tests {
         ",
         );
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x67);
-        let status = cpu.read_memory_at_address(0x01FF);
+        let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
         assert_eq!(status & 0x01, 0x01, "carry bit set");
@@ -259,7 +259,7 @@ mod tests {
         ",
         );
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x33);
-        let status = cpu.read_memory_at_address(0x01FF);
+        let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
         assert_eq!(status & 0x01, 0x00, "carry bit not set");

@@ -914,7 +914,7 @@ impl Mos6502 {
             x: 0,
             y: 0,
             pc,
-            s: 0xFF,
+            s: 0xFD,
             p,
             data_bus,
             address_bus,
