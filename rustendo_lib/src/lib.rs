@@ -127,24 +127,26 @@ mod tests {
         let mut cpu = run_program(
             "
         LDA #$FE
-        ADC #$01
+        ADC #$03
         BCC $02
+        LDA #$FF
         STA $FF
         ",
         );
 
-        assert_ne!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch not taken");
 
         let mut cpu = run_program(
             "
         LDA #$FE
-        ADC #$03
+        ADC #$01
         BCC $02
+        LDA #$FA
         STA $FF
         ",
         );
 
-        assert_eq!(cpu.read_memory_at_address(0xFF), 0x01, "branch not taken");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
     }
 
     #[test]
@@ -152,24 +154,127 @@ mod tests {
         let mut cpu = run_program(
             "
         LDA #$FE
-        ADC #$02
+        ADC #$03
         BCS $02
+        LDA #$FF
         STA $FF
         ",
         );
 
-        assert_ne!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x01, "branch taken");
 
         let mut cpu = run_program(
             "
         LDA #$FE
         ADC #$01
         BCS $02
+        LDA #$FA
+        STA $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFA, "branch not taken");
+    }
+
+    #[test]
+    fn beq() {
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$FF
+        SBC #$FF
+        BEQ $02
+        LDA #$FF
+        STA $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "branch taken");
+
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$FF
+        SBC #$FE
+        BEQ $02
+        LDA #$FF
         STA $FF
         ",
         );
 
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch not taken");
+    }
+
+    #[test]
+    fn bne() {
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$FF
+        SBC #$FF
+        BNE $02
+        LDA #$FF
+        STA $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch not taken");
+
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$FF
+        SBC #$FE
+        BNE $02
+        LDA #$FF
+        STA $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x01, "branch taken");
+    }
+
+    #[test]
+    fn bit()
+    {
+        let mut cpu = run_program("
+        LDA #$AA
+        STA $FF
+        LDA #$55
+        BIT $FF
+        PHP
+        ");
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x80, 0x80, "negative flag set");
+        assert_eq!(status & 0x60, 0x60, "overflow flag unset");
+        assert_eq!(status & 0x20, 0x20, "zero flag set");
+    }
+
+    #[test]
+    fn bmi()
+    {
+        let mut cpu = run_program("
+        SEC
+        LDA #$00
+        SBC #$01
+        BMI $02
+        LDA #$00
+        STA $FF
+        ");
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
+
+        let mut cpu = run_program("
+        SEC
+        LDA #$01
+        SBC #$01
+        BMI $02
+        LDA #$00
+        STA $FF
+        ");
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "branch not taken");
     }
 
     #[test]

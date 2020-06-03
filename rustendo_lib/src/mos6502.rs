@@ -1197,7 +1197,7 @@ impl Mos6502 {
                 self.do_addressing_mode(mode);
                 let operand = self.data_bus.borrow().read();
                 self.p.negative = operand & 0x80 == 0x80;
-                self.p.overflow = operand * 0x40 == 0x40;
+                self.p.overflow = operand & 0x40 == 0x40;
                 self.p.zero = operand & self.a.borrow().read() == 0;
             }
             Instruction::BMI(mode, _, cycles, _) => self.branch(self.p.negative, mode, cycles),
