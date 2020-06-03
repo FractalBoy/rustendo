@@ -1,13 +1,13 @@
-use crate::mos6502::AddressingMode;
 use crate::rp2a03::Rp2a03;
-extern crate regex;
+use crate::mos6502::AddressingMode;
+use regex::Regex;
 
 fn assemble_program(program: &str) -> Vec<Vec<u8>> {
     let lines: Vec<&str> = program.split("\n").collect();
     let mut program: Vec<Vec<u8>> = vec![];
 
     for line in lines {
-        let whitespace_re = regex::Regex::new("^\\s+|\\s+$").unwrap();
+        let whitespace_re = Regex::new("^\\s+|\\s+$").unwrap();
         let line = whitespace_re.replace_all(line, "");
         let fields: Vec<&str> = line.split_whitespace().collect();
 
@@ -30,16 +30,16 @@ fn assemble_program(program: &str) -> Vec<Vec<u8>> {
             let instruction = fields[0];
             let parameter = fields[1];
 
-            let immediate_re = regex::Regex::new("#\\$([A-F\\d]{2})").unwrap();
-            let zero_page_re = regex::Regex::new("\\$([A-F\\d]{2})").unwrap();
-            let zero_page_x_re = regex::Regex::new("\\$([A-F\\d]{2})\\s*,\\s*[Xx]").unwrap();
-            let zero_page_y_re = regex::Regex::new("\\$([A-F\\d{2}])\\s*,\\s*[Yy]").unwrap();
-            let absolute_re = regex::Regex::new("\\$([A-F\\d]{4})").unwrap();
-            let absolute_x_re = regex::Regex::new("\\$([A-F\\d]{4})\\s*,\\s*[Xx]").unwrap();
-            let absolute_y_re = regex::Regex::new("\\$([A-F\\d]{4})\\s*,\\s*[Yy]").unwrap();
-            let indirect_re = regex::Regex::new("\\(\\$([A-F\\d]{4})\\)").unwrap();
-            let indirect_x_re = regex::Regex::new("\\(\\$([A-F\\d]{4})\\s*,\\s*[Xx]\\)").unwrap();
-            let indirect_y_re = regex::Regex::new("\\(\\$([A-F\\d]{4})\\)\\s*,\\s*[Yy]").unwrap();
+            let immediate_re = Regex::new("#\\$([A-F\\d]{2})").unwrap();
+            let zero_page_re = Regex::new("\\$([A-F\\d]{2})").unwrap();
+            let zero_page_x_re = Regex::new("\\$([A-F\\d]{2})\\s*,\\s*[Xx]").unwrap();
+            let zero_page_y_re = Regex::new("\\$([A-F\\d{2}])\\s*,\\s*[Yy]").unwrap();
+            let absolute_re = Regex::new("\\$([A-F\\d]{4})").unwrap();
+            let absolute_x_re = Regex::new("\\$([A-F\\d]{4})\\s*,\\s*[Xx]").unwrap();
+            let absolute_y_re = Regex::new("\\$([A-F\\d]{4})\\s*,\\s*[Yy]").unwrap();
+            let indirect_re = Regex::new("\\(\\$([A-F\\d]{4})\\)").unwrap();
+            let indirect_x_re = Regex::new("\\(\\$([A-F\\d]{4})\\s*,\\s*[Xx]\\)").unwrap();
+            let indirect_y_re = Regex::new("\\(\\$([A-F\\d]{4})\\)\\s*,\\s*[Yy]").unwrap();
 
             if let Some(captures) = immediate_re.captures(parameter) {
                 if let Some(value) = captures.get(1) {
