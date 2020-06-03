@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn and_eq_zero() {
+    fn and() {
         let mut cpu = run_program(
             "
             LDA #$FF
@@ -103,6 +103,18 @@ mod tests {
         let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag cleared");
+
+        let mut cpu = run_program(
+            "
+            LDA #$FF
+            AND #$80
+            STA $FF
+            PHP
+        ",
+        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x80, "0xFF & 0x80 = 0x80");
+        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x80, 0x80, "negative bit set");
+        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
@@ -275,21 +287,6 @@ mod tests {
         ");
 
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "branch not taken");
-    }
-
-    #[test]
-    fn and_eq_negative() {
-        let mut cpu = run_program(
-            "
-            LDA #$FF
-            AND #$80
-            STA $FF
-            PHP
-        ",
-        );
-        assert_eq!(cpu.read_memory_at_address(0xFF), 0x80, "0xFF & 0x80 = 0x80");
-        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x80, 0x80, "negative bit set");
-        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
