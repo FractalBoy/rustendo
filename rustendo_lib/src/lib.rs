@@ -10,14 +10,16 @@ mod tests {
             "
         LDA #$01
         ADC #$01
-        STA $0D
-        LDA #$00
-        ADC #$00
-        STA $0E
+        STA $FF
+        PHP
         ",
         );
-        assert_eq!(cpu.read_memory_at_address(0xD), 2, "0x1 + 0x1 = 0x2");
-        assert_eq!(cpu.read_memory_at_address(0xE), 0, "carry bit cleared");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 2, "0x1 + 0x1 = 0x2");
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FF) & 0x01,
+            0x00,
+            "carry bit cleared"
+        );
     }
 
     #[test]
@@ -26,17 +28,15 @@ mod tests {
             "
             LDA #$FF
             ADC #$FF
-            STA $0D
-            LDA #$00
-            ADC #$00
-            STA $0E
+            STA $FF
+            PHP
         ",
         );
-        assert_eq!(cpu.read_memory_at_address(0xD), 0xFE, "0xFF + 0xFF = 0xFE");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFE, "0xFF + 0xFF = 0xFE");
         assert_eq!(
-            cpu.read_memory_at_address(0xE),
-            0x1,
-            "0xFF + 0xFF sets carry flag"
+            cpu.read_memory_at_address(0x01FF) & 0x01,
+            0x01,
+            "carry bit set"
         );
     }
 
@@ -47,37 +47,38 @@ mod tests {
             SED
             LDA #$10
             ADC #$10
-            STA $0D
-            LDA #$00
-            ADC #$00
-            STA $0E
+            STA $FF
+            PHP
         ",
         );
         assert_eq!(
-            cpu.read_memory_at_address(0xD),
+            cpu.read_memory_at_address(0xFF),
             0x20,
             "0x10 + 0x10 = 0x20 in BCD"
         );
-        assert_eq!(cpu.read_memory_at_address(0xE), 0x0, "carry bit cleared");
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FF) & 0x01,
+            0x00,
+            "carry bit cleared"
+        );
+
         let mut cpu = run_program(
             "
             SED
             LDA #$81
             ADC #$92
-            STA $0D
-            LDA #$00
-            ADC #$00
-            STA $0E
+            STA $FF
+            PHP
             ",
         );
         assert_eq!(
-            cpu.read_memory_at_address(0xD),
+            cpu.read_memory_at_address(0xFF),
             0x73,
             "0x81 + 0x92 = 0x73 in BCD"
         );
         assert_eq!(
-            cpu.read_memory_at_address(0xE),
-            0x1,
+            cpu.read_memory_at_address(0x01FF) & 0x01,
+            0x01,
             "0x81 + 0x92 sets carry flag"
         );
     }
@@ -86,42 +87,89 @@ mod tests {
     fn and_eq_zero() {
         let mut cpu = run_program(
             "
-            ADC #$FF
-            AND #$00
-            BMI $02
-            BEQ $02
-            ADC #$02
-            ADC #$01
-            STA $0D
+            LDA #$FF
+            STA $FF
+            LDA #$AA
+            AND #$55
+            STA $FF
+            PHP
         ",
         );
         assert_eq!(
-            cpu.read_memory_at_address(0xD),
-            0x1,
-            "((0xFF & 0xFF) + 0x01)= 0x01"
+            cpu.read_memory_at_address(0xFF),
+            0x00,
+            "(0xAA & 0x55) = 0x00"
         );
+        let status = cpu.read_memory_at_address(0x01FF);
+        assert_eq!(status & 0x02, 0x02, "zero flag set");
+        assert_eq!(status & 0x80, 0x00, "negative flag cleared");
     }
 
     #[test]
     fn asl() {
-        let mut cpu = run_program("
+        let mut cpu = run_program(
+            "
         LDA #$FF
         ASL
         STA $FF
-        BMI $04
-        LDA #$05
-        STA $FF
-        BNE $04
-        LDA #$06
-        STA $FE
-        LDA #$00
-        ADC #$00
-        STA $FD
-        ");
+        PHP
+        ",
+        );
+        let status = cpu.read_memory_at_address(0x01FF);
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFE, "asl result correct");
+        assert!(status & 0x80 == 0x80, "negative bit set");
+        assert!(status & 0x02 == 0x00, "zero bit not set");
+        assert!(status & 0x01 == 0x01, "carry bit set");
+    }
 
-        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFE, "asl result correct, negative branch taken");
-        assert_ne!(cpu.read_memory_at_address(0xFE), 0x06, "not zero branch taken");
-        assert_ne!(cpu.read_memory_at_address(0xFD), 0x01, "carry correct");
+    #[test]
+    fn bcc() {
+        let mut cpu = run_program(
+            "
+        LDA #$FE
+        ADC #$01
+        BCC $02
+        STA $FF
+        ",
+        );
+
+        assert_ne!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
+
+        let mut cpu = run_program(
+            "
+        LDA #$FE
+        ADC #$03
+        BCC $02
+        STA $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x01, "branch not taken");
+    }
+
+    #[test]
+    fn bcs() {
+        let mut cpu = run_program(
+            "
+        LDA #$FE
+        ADC #$02
+        BCS $02
+        STA $FF
+        ",
+        );
+
+        assert_ne!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
+
+        let mut cpu = run_program(
+            "
+        LDA #$FE
+        ADC #$01
+        BCS $02
+        STA $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch not taken");
     }
 
     #[test]
@@ -130,18 +178,13 @@ mod tests {
             "
             LDA #$FF
             AND #$80
-            BEQ $02
-            BMI $02
-            ADC #$02
-            ADC #$01
-            STA $0D
+            STA $FF
+            PHP
         ",
         );
-        assert_eq!(
-            cpu.read_memory_at_address(0xD),
-            0x81,
-            "(0xFF & 0x80) + 0x01 = 0x81"
-        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x80, "0xFF & 0x80 = 0x80");
+        assert_eq!(cpu.read_memory_at_address(0x01FF) & 0x80, 0x80, "negative bit set");
+        assert_eq!(cpu.read_memory_at_address(0x01FF) & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
@@ -151,23 +194,19 @@ mod tests {
             LDA #$76
             SEC
             SBC #$05
-            BMI $08
-            STA $0F
-            LDA #$00
-            ADC #$00
-            STA $10
+            STA $FF
+            PHP
         ",
         );
         assert_eq!(
-            cpu.read_memory_at_address(0xF),
+            cpu.read_memory_at_address(0xFF),
             0x71,
-            "0x76 - 0x05 = 0x71, BMI branch not taken"
+            "0x76 - 0x05 = 0x71"
         );
-        assert_eq!(
-            cpu.read_memory_at_address(0x10),
-            0x1,
-            "no borrow (carry set)"
-        );
+        let status = cpu.read_memory_at_address(0x01FF);
+        assert_eq!(status & 0x01, 0x01, "no borrow (carry set)");
+        assert_eq!(status & 0x80, 0x00, "negative bit not set");
+        assert_eq!(status & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
@@ -177,23 +216,19 @@ mod tests {
             ADC #$05
             SEC
             SBC #$0A
-            BPL $09
-            STA $0F
-            LDA #$00
-            ADC #$00
-            STA $10
+            STA $FF
+            PHP
         ",
         );
         assert_eq!(
-            cpu.read_memory_at_address(0xF),
+            cpu.read_memory_at_address(0xFF),
             0xFB,
-            "0x5 - 0xA = -0x5 (0xFB), BPL branch not taken"
+            "0x5 - 0xA = -0x5 (0xFB)"
         );
-        assert_eq!(
-            cpu.read_memory_at_address(0x10),
-            0x0,
-            "borrow (carry not set)"
-        );
+        let status = cpu.read_memory_at_address(0x01FF);
+        assert_eq!(status & 0x01, 0x00, "borrow (carry not set)");
+        assert_eq!(status & 0x80, 0x80, "negative bit set");
+        assert_eq!(status & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
@@ -204,34 +239,30 @@ mod tests {
             LDA #$92
             SEC
             SBC #$25
-            BMI #$08
-            STA $10
-            LDA #$00
-            ADC #$00
-            STA $11
+            STA $FF
+            PHP
         ",
         );
-        assert_eq!(cpu.read_memory_at_address(0x10), 0x67);
-        assert_eq!(cpu.read_memory_at_address(0x11), 0x0);
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x67);
+        let status = cpu.read_memory_at_address(0x01FF);
+        assert_eq!(status & 0x80, 0x00, "negative bit not set");
+        assert_eq!(status & 0x02, 0x00, "zero bit not set");
+        assert_eq!(status & 0x01, 0x01, "carry bit set");
         let mut cpu = run_program(
             "
             SED
             LDA #$25
             SEC
             SBC #$92
-            BMI #$08
-            STA $10
-            LDA #$00
-            ADC #$00
-            STA $11
+            STA $FF
+            PHP
         ",
         );
-        assert_eq!(cpu.read_memory_at_address(0x10), 0x33);
-        assert_eq!(
-            cpu.read_memory_at_address(0x11),
-            0x0,
-            "borrow set (carry unset)"
-        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x33);
+        let status = cpu.read_memory_at_address(0x01FF);
+        assert_eq!(status & 0x80, 0x00, "negative bit not set");
+        assert_eq!(status & 0x02, 0x00, "zero bit not set");
+        assert_eq!(status & 0x01, 0x00, "carry bit not set");
     }
 
     fn assemble_program(program: &str) -> Vec<Vec<u8>> {
@@ -408,8 +439,8 @@ mod tests {
             mem.extend_from_slice(&instruction);
         }
         let mut rp2a03 = Rp2a03::new(Some(&mem));
-        for _ in 0..program.len() + 1 {
-            while rp2a03.clock() {}
+        for _ in 0..program.len() {
+            while !rp2a03.clock() {}
         }
         rp2a03
     }

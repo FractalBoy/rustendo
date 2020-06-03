@@ -728,24 +728,6 @@ impl Alu {
         }
     }
 
-    fn convert_from_bcd(value: u8) -> u16 {
-        let lsd = (value & 0x0F) as u16;
-        let msd = ((value & 0xF0) >> 4) as u16;
-        msd * 10 + lsd
-    }
-
-    fn convert_to_bcd(value: u16) -> u16 {
-        let mut bcd = 0;
-        let mut value = value;
-        for exp in (0..3).rev() {
-            let divisor = (10 as u16).pow(exp);
-            let digit = value / divisor;
-            bcd += digit * (16 as u16).pow(exp);
-            value -= digit * divisor;
-        }
-        bcd
-    }
-
     pub fn add_with_carry(&mut self, p: &mut StatusRegister) {
         let accumulator_data = self.accumulator.borrow().read();
         let bus_data = self.data_bus.borrow().read();
@@ -754,20 +736,31 @@ impl Alu {
         let sum;
 
         if p.decimal_mode {
-            // Convert currently stored data from BCD to decimal
-            let data = Alu::convert_from_bcd(accumulator_data);
+            // Add the one's digit and the borrow.
+            let mut low = (accumulator_data & 0x0F)
+                .wrapping_add(bus_data & 0x0F)
+                .wrapping_add(p.carry as u8);
+            // Add the ten's digit (shift to one's place and mask)
+            let mut high = ((accumulator_data >> 4) & 0x0F).wrapping_add((bus_data >> 4) & 0x0F);
+            p.carry = false;
 
-            // Convert data on bus from BCD to decimal
-            let operand = Alu::convert_from_bcd(bus_data);
+            // If the one's digit is greater than nine, it's not valid decimal.
+            // Adding 6 and taking the low nibble will fix this, since it causes
+            // A -> F to wrap around back to the range 0 -> 5.
+            if low > 9 {
+                let diff = low - 10;
+                low = low - diff;
+                high = high + diff;
+            }
+            if high > 9 {
+                p.carry = true;
+                high -= 10;
+            }
 
-            // Add in decimal and convert back into BCD
-            let bcd = Alu::convert_to_bcd(data + operand + (p.carry as u16));
+            // Rebuild the result
+            sum = (high << 4) | low;
 
-            // Set flags
-            p.carry = bcd & 0x100 == 0x100;
-            // BCD sets zero flag even if the carry bit is set
-            p.zero = bcd | 0x00 == 0x00;
-            sum = (bcd & 0xFF) as u8;
+            p.zero = sum == 0;
         } else {
             let bin = (accumulator_data as u16)
                 .wrapping_add(bus_data as u16)
@@ -793,28 +786,41 @@ impl Alu {
         let sum;
 
         if p.decimal_mode {
-            // Convert currently stored data from BCD to decimal
-            let data = Alu::convert_from_bcd(accumulator_data);
+            // Subtract the one's digit and the borrow.
+            let mut low = (accumulator_data & 0x0F)
+                .wrapping_sub(bus_data & 0x0F)
+                .wrapping_sub(!p.carry as u8);
+            // Subtract the ten's digit (shift to one's place and mask)
+            let mut high = ((accumulator_data >> 4) & 0x0F).wrapping_sub((bus_data >> 4) & 0x0F);
+            p.carry = true;
 
-            // Convert data on bus from BCD to decimal
-            let operand = Alu::convert_from_bcd(bus_data);
+            // If the one's digit is negative, we need to borrow.
+            if low & 0x80 == 0x80 {
+                low = low.wrapping_add(10);
+                high = high.wrapping_sub(1);
+            }
+            // If the one's digit is greater than nine, it's not valid decimal.
+            // Adding 6 and taking the low nibble will fix this, since it causes
+            // A -> F to wrap around back to the range 0 -> 5.
+            else if low > 9 {
+                low = low.wrapping_add(6) & 0x0F;
+            }
 
-            // Subtract in decimal
-            let dec = (data as i16) - (operand as i16) - (!p.carry as i16);
-            let dec = if dec < 0 { dec + 100 } else { dec };
-            let dec = dec as u16;
-            is_negative = dec & 0x100 == 0x100;
-            // Convert decimal back into BCD (take lower byte)
-            let bcd = Alu::convert_to_bcd((dec & 0xFF) as u16);
-            let bcd = bcd as u8;
+            // If the ten's digit is negative, we need to borrow from the carry bit.
+            if high & 0x80 == 0x80 {
+                high = high.wrapping_add(10);
+                p.carry = false;
+            }
+            // Wrap high digit as well, same as low
+            else if high > 9 {
+                low = low.wrapping_add(6) & 0x0F;
+            }
 
-            // Set flags
-            // Carry = inverse of borrow
-            p.carry = dec & 0x100 == 0x100;
-            // BCD sets zero flag even if the carry bit is set
-            p.zero = bcd | 0x00 == 0x00;
+            // Rebuild the result
+            sum = (high << 4) | low;
 
-            sum = (bcd & 0xFF) as u8;
+            p.zero = sum == 0;
+            is_negative = sum & 0x80 == 0x80;
         } else {
             let bin = (accumulator_data as u16)
                 .wrapping_add((!bus_data) as u16)
@@ -908,7 +914,7 @@ impl Mos6502 {
             x: 0,
             y: 0,
             pc,
-            s: 0xFD,
+            s: 0xFF,
             p,
             data_bus,
             address_bus,
