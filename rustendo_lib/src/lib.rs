@@ -1,6 +1,29 @@
 #[cfg(test)]
 mod tests {
-    use super::assembler::run_program;
+    use super::assembler::{self, AssemblerError};
+    use super::rp2a03::Rp2a03;
+
+    fn run_program(program: &str) -> Rp2a03 {
+        match assembler::run_program(program) {
+            Ok(cpu) => return cpu,
+            Err(error) => {
+                match error {
+                    AssemblerError::InvalidAddress(line) => {
+                        panic!("Invalid address at line {}", line)
+                    }
+                    AssemblerError::InvalidAddressingMode(line) => {
+                        panic!("Invalid addressing mode at line {}", line)
+                    }
+                    AssemblerError::InvalidInstruction(line) => {
+                        panic!("Invalid instruction at line {}", line)
+                    }
+                    AssemblerError::InvalidValue(line) => {
+                        panic!("Invalid immediate value at line {}", line)
+                    }
+                };
+            }
+        }
+    }
 
     #[test]
     fn adc() {
@@ -108,8 +131,16 @@ mod tests {
         ",
         );
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x80, "0xFF & 0x80 = 0x80");
-        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x80, 0x80, "negative bit set");
-        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x02, 0x00, "zero bit not set");
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD) & 0x80,
+            0x80,
+            "negative bit set"
+        );
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD) & 0x02,
+            0x00,
+            "zero bit not set"
+        );
     }
 
     #[test]
@@ -242,15 +273,16 @@ mod tests {
     }
 
     #[test]
-    fn bit()
-    {
-        let mut cpu = run_program("
+    fn bit() {
+        let mut cpu = run_program(
+            "
         LDA #$AA
         STA $FF
         LDA #$55
         BIT $FF
         PHP
-        ");
+        ",
+        );
 
         let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
@@ -259,27 +291,30 @@ mod tests {
     }
 
     #[test]
-    fn bmi()
-    {
-        let mut cpu = run_program("
+    fn bmi() {
+        let mut cpu = run_program(
+            "
         SEC
         LDA #$00
         SBC #$01 // Result is 0xFF, negative bit set
         BMI $02  // Branch should be taken to STA $FF
         LDA #$01
         STA $FF  // 0xFF stored to $FF 
-        ");
+        ",
+        );
 
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
 
-        let mut cpu = run_program("
+        let mut cpu = run_program(
+            "
         SEC
         LDA #$01
         SBC #$01 // Result is 0x00, negative bit not set
         BMI $02  // Branch should not be taken, next line executes
         LDA #$02
         STA $FF  // 0x02 stored to $FF
-        ");
+        ",
+        );
 
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x02, "branch not taken");
     }
@@ -295,11 +330,7 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(
-            cpu.read_memory_at_address(0xFF),
-            0x71,
-            "0x76 - 0x05 = 0x71"
-        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x71, "0x76 - 0x05 = 0x71");
         let status = cpu.read_memory_at_address(0x01FD);
         assert_eq!(status & 0x01, 0x01, "no borrow (carry set)");
         assert_eq!(status & 0x80, 0x00, "negative bit not set");

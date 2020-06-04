@@ -1,20 +1,40 @@
-use crate::rp2a03::Rp2a03;
 use crate::mos6502::AddressingMode;
+use crate::rp2a03::Rp2a03;
 use regex::Regex;
 use std::borrow::Cow;
 
-fn assemble_program(program: &str) -> Vec<Vec<u8>> {
+pub enum AssemblerError {
+    InvalidInstruction(u32),
+    InvalidAddressingMode(u32),
+    InvalidValue(u32),
+    InvalidAddress(u32),
+}
+
+fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
+    let immediate_re: Regex = Regex::new("#\\$([A-F\\d]{2})$").unwrap();
+    let zero_page_re: Regex = Regex::new("\\$([A-F\\d]{2})$").unwrap();
+    let zero_page_x_re: Regex = Regex::new("\\$([A-F\\d]{2})\\s*,\\s*[Xx]$").unwrap();
+    let zero_page_y_re: Regex = Regex::new("\\$([A-F\\d{2}])\\s*,\\s*[Yy]$").unwrap();
+    let absolute_re: Regex = Regex::new("\\$([A-F\\d]{4})$").unwrap();
+    let absolute_x_re: Regex = Regex::new("\\$([A-F\\d]{4})\\s*,\\s*[Xx]$").unwrap();
+    let absolute_y_re: Regex = Regex::new("\\$([A-F\\d]{4})\\s*,\\s*[Yy]$").unwrap();
+    let indirect_re: Regex = Regex::new("\\(\\$([A-F\\d]{4})\\)$").unwrap();
+    let indirect_x_re: Regex = Regex::new("\\(\\$([A-F\\d]{4})\\s*,\\s*[Xx]\\)$").unwrap();
+    let indirect_y_re: Regex = Regex::new("\\(\\$([A-F\\d]{4})\\)\\s*,\\s*[Yy]$").unwrap();
+    let whitespace_re: Regex = Regex::new("^\\s+|\\s+$").unwrap();
+    let comment_re: Regex = Regex::new("\\s*//.*$").unwrap();
+
     let lines: Vec<&str> = program.split("\n").collect();
     let mut program: Vec<Vec<u8>> = vec![];
 
+    let mut line_number = 0;
     for line in lines {
-        let whitespace_re = Regex::new("^\\s+|\\s+$").unwrap();
+        line_number += 1;
         let line = match whitespace_re.replace_all(line, "") {
             Cow::Owned(line) => line,
-            Cow::Borrowed(line) => line.to_string()
+            Cow::Borrowed(line) => line.to_string(),
         };
         // Remove comments
-        let comment_re = Regex::new("\\s*//.*$").unwrap();
         let line = comment_re.replace_all(line.as_str(), "");
         let fields: Vec<&str> = line.split_whitespace().collect();
 
@@ -25,137 +45,197 @@ fn assemble_program(program: &str) -> Vec<Vec<u8>> {
         if fields.len() == 1 {
             let instruction = fields[0];
 
-            if let Some(byte) = lookup_instruction(instruction, AddressingMode::Implied) {
-                program.push(vec![byte]);
-                continue;
-            } else if let Some(byte) = lookup_instruction(instruction, AddressingMode::Accumulator)
-            {
-                program.push(vec![byte]);
-                continue;
+            match lookup_instruction(instruction, AddressingMode::Implied) {
+                Some(byte) => {
+                    program.push(vec![byte]);
+                    continue;
+                }
+                None => match lookup_instruction(instruction, AddressingMode::Accumulator) {
+                    Some(byte) => {
+                        program.push(vec![byte]);
+                        continue;
+                    }
+                    None => return Err(AssemblerError::InvalidInstruction(line_number)),
+                },
             }
         } else {
             let instruction = fields[0];
             let parameter = fields[1];
 
-            let immediate_re = Regex::new("#\\$([A-F\\d]{2})").unwrap();
-            let zero_page_re = Regex::new("\\$([A-F\\d]{2})").unwrap();
-            let zero_page_x_re = Regex::new("\\$([A-F\\d]{2})\\s*,\\s*[Xx]").unwrap();
-            let zero_page_y_re = Regex::new("\\$([A-F\\d{2}])\\s*,\\s*[Yy]").unwrap();
-            let absolute_re = Regex::new("\\$([A-F\\d]{4})").unwrap();
-            let absolute_x_re = Regex::new("\\$([A-F\\d]{4})\\s*,\\s*[Xx]").unwrap();
-            let absolute_y_re = Regex::new("\\$([A-F\\d]{4})\\s*,\\s*[Yy]").unwrap();
-            let indirect_re = Regex::new("\\(\\$([A-F\\d]{4})\\)").unwrap();
-            let indirect_x_re = Regex::new("\\(\\$([A-F\\d]{4})\\s*,\\s*[Xx]\\)").unwrap();
-            let indirect_y_re = Regex::new("\\(\\$([A-F\\d]{4})\\)\\s*,\\s*[Yy]").unwrap();
-
             if let Some(captures) = immediate_re.captures(parameter) {
                 if let Some(value) = captures.get(1) {
                     let value = value.as_str();
-                    let value = u8::from_str_radix(&value, 16).unwrap();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::Immediate) {
-                        program.push(vec![byte, value]);
-                        continue;
+                    let value = match u8::from_str_radix(&value, 16) {
+                        Ok(value) => value,
+                        Err(_) => return Err(AssemblerError::InvalidValue(line_number)),
+                    };
+                    match lookup_instruction(instruction, AddressingMode::Immediate) {
+                        Some(byte) => {
+                            program.push(vec![byte, value]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
             } else if let Some(captures) = zero_page_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u8::from_str_radix(&address, 16).unwrap();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::ZeroPage) {
-                        program.push(vec![byte, address]);
-                        continue;
-                    } else if let Some(byte) =
-                        lookup_instruction(instruction, AddressingMode::Relative)
-                    {
-                        program.push(vec![byte, address]);
-                        continue;
+                    let address = match u8::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
+                    match lookup_instruction(instruction, AddressingMode::ZeroPage) {
+                        Some(byte) => {
+                            program.push(vec![byte, address]);
+                            continue;
+                        }
+                        None => match lookup_instruction(instruction, AddressingMode::Relative) {
+                            Some(byte) => {
+                                program.push(vec![byte, address]);
+                                continue;
+                            }
+                            None => return Err(AssemblerError::InvalidInstruction(line_number)),
+                        },
                     }
                 }
             } else if let Some(captures) = zero_page_x_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u8::from_str_radix(&address, 16).unwrap();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::ZeroPageX) {
-                        program.push(vec![byte, address]);
-                        continue;
+                    let address = match u8::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
+                    match lookup_instruction(instruction, AddressingMode::ZeroPageX) {
+                        Some(byte) => {
+                            program.push(vec![byte, address]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
             } else if let Some(captures) = zero_page_y_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u8::from_str_radix(&address, 16).unwrap();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::ZeroPageY) {
-                        program.push(vec![byte, address]);
-                        continue;
+                    let address = match u8::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
+                    match lookup_instruction(instruction, AddressingMode::ZeroPageY) {
+                        Some(byte) => {
+                            program.push(vec![byte, address]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
             } else if let Some(captures) = absolute_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u16::from_str_radix(&address, 16).unwrap();
+                    let address = match u16::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
                     let [address_high, address_low] = address.to_be_bytes();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::Absolute) {
-                        program.push(vec![byte, address_low, address_high]);
-                        continue;
+                    match lookup_instruction(instruction, AddressingMode::Absolute) {
+                        Some(byte) => {
+                            program.push(vec![byte, address_low, address_high]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
             } else if let Some(captures) = absolute_x_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u16::from_str_radix(&address, 16).unwrap();
+                    let address = match u16::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
                     let [address_high, address_low] = address.to_be_bytes();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::AbsoluteX) {
-                        program.push(vec![byte, address_low, address_high]);
-                        continue;
+                    match lookup_instruction(instruction, AddressingMode::AbsoluteX) {
+                        Some(byte) => {
+                            program.push(vec![byte, address_low, address_high]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
             } else if let Some(captures) = absolute_y_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u16::from_str_radix(&address, 16).unwrap();
+                    let address = match u16::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
                     let [address_high, address_low] = address.to_be_bytes();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::AbsoluteY) {
-                        program.push(vec![byte, address_low, address_high]);
-                        continue;
+                    match lookup_instruction(instruction, AddressingMode::AbsoluteY) {
+                        Some(byte) => {
+                            program.push(vec![byte, address_low, address_high]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
             } else if let Some(captures) = indirect_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u8::from_str_radix(&address, 16).unwrap();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::Indirect) {
-                        program.push(vec![byte, address]);
-                        continue;
+                    let address = match u8::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
+                    match lookup_instruction(instruction, AddressingMode::Indirect) {
+                        Some(byte) => {
+                            program.push(vec![byte, address]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
             } else if let Some(captures) = indirect_x_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u8::from_str_radix(&address, 16).unwrap();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::IndirectX) {
-                        program.push(vec![byte, address]);
-                        continue;
+                    let address = match u8::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
+                    match lookup_instruction(instruction, AddressingMode::IndirectX) {
+                        Some(byte) => {
+                            program.push(vec![byte, address]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
             } else if let Some(captures) = indirect_y_re.captures(parameter) {
                 if let Some(address) = captures.get(1) {
                     let address = address.as_str();
-                    let address = u8::from_str_radix(&address, 16).unwrap();
-                    if let Some(byte) = lookup_instruction(instruction, AddressingMode::IndirectY) {
-                        program.push(vec![byte, address]);
-                        continue;
+                    let address = match u8::from_str_radix(&address, 16) {
+                        Ok(address) => address,
+                        Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
+                    };
+                    match lookup_instruction(instruction, AddressingMode::IndirectY) {
+                        Some(byte) => {
+                            program.push(vec![byte, address]);
+                            continue;
+                        }
+                        None => return Err(AssemblerError::InvalidInstruction(line_number)),
                     }
                 }
+            } else {
+                return Err(AssemblerError::InvalidAddressingMode(line_number));
             }
         }
     }
 
-    program
+    Ok(program)
 }
 
 #[allow(dead_code)]
-pub fn run_program(program: &str) -> Rp2a03 {
-    let program = assemble_program(&program);
+pub fn run_program(program: &str) -> Result<Rp2a03, AssemblerError> {
+    let program = match assemble_program(&program) {
+        Ok(program) => program,
+        Err(error) => return Err(error),
+    };
     let mut mem: Vec<u8> = Vec::new();
     for instruction in program.iter().cloned() {
         mem.extend_from_slice(&instruction);
@@ -164,7 +244,7 @@ pub fn run_program(program: &str) -> Rp2a03 {
     for _ in 0..program.len() {
         while !rp2a03.clock() {}
     }
-    rp2a03
+    Ok(rp2a03)
 }
 
 fn lookup_instruction(instruction: &str, addressing_mode: AddressingMode) -> Option<u8> {
