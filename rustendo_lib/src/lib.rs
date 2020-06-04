@@ -271,7 +271,36 @@ mod tests {
 
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x02, "branch not taken");
     }
-    
+
+    #[test]
+    fn bne() {
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$FF
+        SBC #$FF // Result is 0x00, zero set
+        BNE $02  // Branch should not be taken, next line executes
+        LDA #$FF
+        STA $FF  // 0xFF stored to $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch not taken");
+
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$FF
+        SBC #$FE // Result is 0x01, zero cleared
+        BNE $02  // Branch should be taken to STA $FF
+        LDA #$FF
+        STA $FF  // 0x01 stored to $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x01, "branch taken");
+    }
+
     #[test]
     fn bpl() {
         let mut cpu = run_program(
@@ -302,31 +331,47 @@ mod tests {
     }
 
     #[test]
-    fn brk()
-    {
-        let mut cpu = run_program("
+    fn brk() {
+        let mut cpu = run_program(
+            "
             SEC
             LDA #$AA
             SBC #$AA
             BRK
-        ");
+        ",
+        );
 
-        assert_eq!(cpu.read_memory_at_address(0x01FD), 0x00, "address after BRK stored on stack");
-        assert_eq!(cpu.read_memory_at_address(0x01FC), 0x07, "address after BRK stored on stack");
-        assert_eq!(cpu.read_memory_at_address(0x01FB) & 0x02, 0x02, "zero flag stored on stack");
-        assert_eq!(cpu.read_memory_at_address(0x01FB) & 0x01, 0x01, "carry flag stored on stack");
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD),
+            0x00,
+            "address after BRK stored on stack"
+        );
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FC),
+            0x07,
+            "address after BRK stored on stack"
+        );
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FB) & 0x02,
+            0x02,
+            "zero flag stored on stack"
+        );
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FB) & 0x01,
+            0x01,
+            "carry flag stored on stack"
+        );
     }
 
     #[test]
-    fn bne() {
+    fn bvc() {
         let mut cpu = run_program(
             "
-        SEC
-        LDA #$FF
-        SBC #$FF // Result is 0x00, zero set
-        BNE $02  // Branch should not be taken, next line executes
-        LDA #$FF
-        STA $FF  // 0xFF stored to $FF
+            LDA #$FF
+            ADC #$05 // Result is 0x04, overflow set
+            BVC $02  // Branch should not be taken, execute next instruction
+            LDA #$FF
+            STA $FF  // Store 0xFF in $FF 
         ",
         );
 
@@ -334,16 +379,42 @@ mod tests {
 
         let mut cpu = run_program(
             "
-        SEC
-        LDA #$FF
-        SBC #$FE // Result is 0x01, zero cleared
-        BNE $02  // Branch should be taken to STA $FF
-        LDA #$FF
-        STA $FF  // 0x01 stored to $FF
+            LDA #$01
+            ADC #$05 // Result is 0x06, overflow not set
+            BVC $02  // Branch should be taken, continue with STA $FF
+            LDA #$FF
+            STA $FF  // Store 0x06 in $FF 
         ",
         );
 
-        assert_eq!(cpu.read_memory_at_address(0xFF), 0x01, "branch taken");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x06, "branch taken");
+    }
+
+    #[test]
+    fn bvs() {
+        let mut cpu = run_program(
+            "
+            LDA #$FF
+            ADC #$05 // Result is 0x04, overflow set
+            BVS $02  // Branch should be taken, continue with STA $FF
+            LDA #$FF
+            STA $FF  // Store 0x04 in $FF 
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x04, "branch taken");
+
+        let mut cpu = run_program(
+            "
+            LDA #$01
+            ADC #$05 // Result is 0x06, overflow not set
+            BVS $02  // Branch should not be taken, continue with STA $FF
+            LDA #$FF
+            STA $FF  // Store 0xFF in $FF 
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
     }
 
     #[test]
