@@ -58,18 +58,9 @@ impl Rp2a03 {
         self.mos6502.clock()
     }
 
-    /// Get memory at a particular address.
-    ///
-    /// Useful for testing. Resets internal address bus register
-    /// to its old state.
-    ///
-    /// ```
-    /// use rustendo_lib::rp2a03::Rp2a03;
-    /// let mut rp2a03 = Rp2a03::new(None);
-    /// let mem = rp2a03.read_memory_at_address(0);
-    /// assert_eq!(mem, 0x0);
-    /// ```
-    pub fn read_memory_at_address(&mut self, address: u16) -> u8 {
+    /// Only used for testing
+    #[allow(dead_code)]
+    fn read_memory_at_address(&mut self, address: u16) -> u8 {
         let old_address = self.bus.borrow().read_address();
         self.bus
             .borrow_mut()
