@@ -134,10 +134,10 @@ mod tests {
         let mut cpu = run_program(
             "
         LDA #$FE
-        ADC #$03
-        BCC $02
+        ADC #$03 // Result is 0x101, carry set
+        BCC $02  // Branch should not be taken, next line executes
         LDA #$FF
-        STA $FF
+        STA $FF  // 0xFF stored to $FF
         ",
         );
 
@@ -146,10 +146,10 @@ mod tests {
         let mut cpu = run_program(
             "
         LDA #$FE
-        ADC #$01
-        BCC $02
+        ADC #$01 // Result is 0xFF, carry cleared
+        BCC $02  // Branch should be taken to STA $FF
         LDA #$FA
-        STA $FF
+        STA $FF  // 0xFF stored to $FF
         ",
         );
 
@@ -161,10 +161,10 @@ mod tests {
         let mut cpu = run_program(
             "
         LDA #$FE
-        ADC #$03
-        BCS $02
+        ADC #$03 // Result is 0x101, carry set
+        BCS $02  // Branch should be taken to STA $FF
         LDA #$FF
-        STA $FF
+        STA $FF  // 0x01 stored to $FF
         ",
         );
 
@@ -173,10 +173,10 @@ mod tests {
         let mut cpu = run_program(
             "
         LDA #$FE
-        ADC #$01
-        BCS $02
+        ADC #$01 // Result is 0xFF, carry cleared
+        BCS $02  // Branch should not be taken, next line executes
         LDA #$FA
-        STA $FF
+        STA $FF  // 0xFA stored to $FF
         ",
         );
 
@@ -189,10 +189,10 @@ mod tests {
             "
         SEC
         LDA #$FF
-        SBC #$FF
-        BEQ $02
+        SBC #$FF // Result is 0x00, zero set
+        BEQ $02  // Branch should be taken to STA $FF
         LDA #$FF
-        STA $FF
+        STA $FF  // 0x00 stored to $FF
         ",
         );
 
@@ -202,10 +202,10 @@ mod tests {
             "
         SEC
         LDA #$FF
-        SBC #$FE
-        BEQ $02
+        SBC #$FE // Result is 0x01, zero cleared
+        BEQ $02  // Result should not be taken, next line executes
         LDA #$FF
-        STA $FF
+        STA $FF  // 0xFF stored to $FF
         ",
         );
 
@@ -218,10 +218,10 @@ mod tests {
             "
         SEC
         LDA #$FF
-        SBC #$FF
-        BNE $02
+        SBC #$FF // Result is 0x00, zero set
+        BNE $02  // Branch should not be taken, next line executes
         LDA #$FF
-        STA $FF
+        STA $FF  // 0xFF stored to $FF
         ",
         );
 
@@ -231,10 +231,10 @@ mod tests {
             "
         SEC
         LDA #$FF
-        SBC #$FE
-        BNE $02
+        SBC #$FE // Result is 0x01, zero cleared
+        BNE $02  // Branch should be taken to STA $FF
         LDA #$FF
-        STA $FF
+        STA $FF  // 0x01 stored to $FF
         ",
         );
 
@@ -264,10 +264,10 @@ mod tests {
         let mut cpu = run_program("
         SEC
         LDA #$00
-        SBC #$01
-        BMI $02
-        LDA #$00
-        STA $FF
+        SBC #$01 // Result is 0xFF, negative bit set
+        BMI $02  // Branch should be taken to STA $FF
+        LDA #$01
+        STA $FF  // 0xFF stored to $FF 
         ");
 
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
@@ -275,13 +275,13 @@ mod tests {
         let mut cpu = run_program("
         SEC
         LDA #$01
-        SBC #$01
-        BMI $02
-        LDA #$00
-        STA $FF
+        SBC #$01 // Result is 0x00, negative bit not set
+        BMI $02  // Branch should not be taken, next line executes
+        LDA #$02
+        STA $FF  // 0x02 stored to $FF
         ");
 
-        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "branch not taken");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x02, "branch not taken");
     }
 
     #[test]

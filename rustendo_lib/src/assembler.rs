@@ -1,6 +1,7 @@
 use crate::rp2a03::Rp2a03;
 use crate::mos6502::AddressingMode;
 use regex::Regex;
+use std::borrow::Cow;
 
 fn assemble_program(program: &str) -> Vec<Vec<u8>> {
     let lines: Vec<&str> = program.split("\n").collect();
@@ -8,7 +9,13 @@ fn assemble_program(program: &str) -> Vec<Vec<u8>> {
 
     for line in lines {
         let whitespace_re = Regex::new("^\\s+|\\s+$").unwrap();
-        let line = whitespace_re.replace_all(line, "");
+        let line = match whitespace_re.replace_all(line, "") {
+            Cow::Owned(line) => line,
+            Cow::Borrowed(line) => line.to_string()
+        };
+        // Remove comments
+        let comment_re = Regex::new("\\s*//.*$").unwrap();
+        let line = comment_re.replace_all(line.as_str(), "");
         let fields: Vec<&str> = line.split_whitespace().collect();
 
         if fields.len() == 0 {
