@@ -244,6 +244,80 @@ mod tests {
     }
 
     #[test]
+    fn bmi() {
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$00
+        SBC #$01 // Result is 0xFF, negative bit set
+        BMI $02  // Branch should be taken to STA $FF
+        LDA #$01
+        STA $FF  // 0xFF stored to $FF 
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
+
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$01
+        SBC #$01 // Result is 0x00, negative bit not set
+        BMI $02  // Branch should not be taken, next line executes
+        LDA #$02
+        STA $FF  // 0x02 stored to $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x02, "branch not taken");
+    }
+    
+    #[test]
+    fn bpl() {
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$00
+        SBC #$01 // Result is 0xFF, negative bit set
+        BPL $02  // Branch should not be taken to STA $FF
+        LDA #$01
+        STA $FF  // 0xFF stored to $FF 
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x01, "branch taken");
+
+        let mut cpu = run_program(
+            "
+        SEC
+        LDA #$04
+        SBC #$01 // Result is 0x00, negative bit not set
+        BPL $02  // Branch should be taken, next line executes
+        LDA #$02
+        STA $FF  // 0x03 stored to $FF
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x03, "branch not taken");
+    }
+
+    #[test]
+    fn brk()
+    {
+        let mut cpu = run_program("
+            SEC
+            LDA #$AA
+            SBC #$AA
+            BRK
+        ");
+
+        assert_eq!(cpu.read_memory_at_address(0x01FD), 0x00, "address after BRK stored on stack");
+        assert_eq!(cpu.read_memory_at_address(0x01FC), 0x07, "address after BRK stored on stack");
+        assert_eq!(cpu.read_memory_at_address(0x01FB) & 0x02, 0x02, "zero flag stored on stack");
+        assert_eq!(cpu.read_memory_at_address(0x01FB) & 0x01, 0x01, "carry flag stored on stack");
+    }
+
+    #[test]
     fn bne() {
         let mut cpu = run_program(
             "
@@ -288,35 +362,6 @@ mod tests {
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x60, 0x60, "overflow flag unset");
         assert_eq!(status & 0x20, 0x20, "zero flag set");
-    }
-
-    #[test]
-    fn bmi() {
-        let mut cpu = run_program(
-            "
-        SEC
-        LDA #$00
-        SBC #$01 // Result is 0xFF, negative bit set
-        BMI $02  // Branch should be taken to STA $FF
-        LDA #$01
-        STA $FF  // 0xFF stored to $FF 
-        ",
-        );
-
-        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch taken");
-
-        let mut cpu = run_program(
-            "
-        SEC
-        LDA #$01
-        SBC #$01 // Result is 0x00, negative bit not set
-        BMI $02  // Branch should not be taken, next line executes
-        LDA #$02
-        STA $FF  // 0x02 stored to $FF
-        ",
-        );
-
-        assert_eq!(cpu.read_memory_at_address(0xFF), 0x02, "branch not taken");
     }
 
     #[test]

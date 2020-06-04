@@ -1203,25 +1203,27 @@ impl Mos6502 {
             Instruction::BMI(mode, _, cycles, _) => self.branch(self.p.negative, mode, cycles),
             Instruction::BNE(mode, _, cycles, _) => self.branch(!self.p.zero, mode, cycles),
             Instruction::BPL(mode, _, cycles, _) => self.branch(!self.p.negative, mode, cycles),
-            Instruction::BRK(_, _, cycles, _) => {
+            Instruction::BRK(_, bytes, cycles, _) => {
                 self.cycles = cycles;
-
-                // Padding byte, ignored.
-                self.fetch_next_byte();
 
                 let mut address_bus = self.address_bus.borrow_mut();
                 let mut pc = self.pc.borrow_mut();
-                address_bus.write_directly_to_bus(0, self.s);
+                address_bus.write_directly_to_bus(0x01, self.s);
+                let address = pc.wide();
+                // Store the next instruction in 
+                let address = address.wrapping_add(bytes as u16);
+                let high = ((address >> 4) & 0x0F) as u8;
+                let low = (address & 0x0F) as u8;
                 self.s -= 1;
                 self.data_bus
                     .borrow_mut()
-                    .write_directly_to_bus(pc.read_high());
-                address_bus.write_directly_to_bus(0, self.s);
+                    .write_directly_to_bus(high);
+                address_bus.write_directly_to_bus(0x01, self.s);
                 self.s -= 1;
                 self.data_bus
                     .borrow_mut()
-                    .write_directly_to_bus(pc.read_low());
-                address_bus.write_directly_to_bus(0, self.s);
+                    .write_directly_to_bus(low);
+                address_bus.write_directly_to_bus(0x01, self.s);
                 self.data_bus
                     .borrow_mut()
                     .write_directly_to_bus(self.p.get());
