@@ -976,6 +976,7 @@ impl Mos6502 {
         self.address_bus
             .borrow_mut()
             .write_directly_to_bus(address_high, address_low);
+        self.data_bus.borrow_mut().read_from_bus();
     }
 
     fn do_addressing_mode(&mut self, mode: AddressingMode) {
@@ -986,6 +987,7 @@ impl Mos6502 {
                 self.address_bus
                     .borrow_mut()
                     .write_directly_to_bus(address_high, address_low);
+                self.data_bus.borrow_mut().read_from_bus();
             }
             AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
             AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
@@ -1006,6 +1008,7 @@ impl Mos6502 {
                 address_bus.write_directly_to_bus(0, zero_page_offset + 1);
                 let address_high = data_bus.read_directly_from_bus();
                 address_bus.write_directly_to_bus(address_high, address_low);
+                self.data_bus.borrow_mut().read_from_bus();
             }
             AddressingMode::IndirectX => {
                 // Indexed indirect addressing with register X
@@ -1019,6 +1022,7 @@ impl Mos6502 {
                 address_bus.write_directly_to_bus(0, zero_page_offset);
                 let address_high = data_bus.read_directly_from_bus();
                 address_bus.write(address_high, address_low);
+                self.data_bus.borrow_mut().read_from_bus();
             }
             AddressingMode::IndirectY => {
                 // Indirect indexed addressing with register Y
@@ -1040,6 +1044,7 @@ impl Mos6502 {
                     address_high
                 };
                 address_bus.write(address_high, address_low);
+                self.data_bus.borrow_mut().read_from_bus();
             }
             AddressingMode::Relative => {
                 let offset = self.fetch_next_byte();
@@ -1078,6 +1083,7 @@ impl Mos6502 {
                 self.address_bus
                     .borrow_mut()
                     .write_directly_to_bus(0, zero_page_offset);
+                self.data_bus.borrow_mut().read_from_bus();
             }
             AddressingMode::ZeroPageX => {
                 let zero_page_offset = self.fetch_next_byte();
@@ -1085,6 +1091,7 @@ impl Mos6502 {
                 self.address_bus
                     .borrow_mut()
                     .write_directly_to_bus(0, zero_page_offset);
+                self.data_bus.borrow_mut().read_from_bus();
             }
             AddressingMode::ZeroPageY => {
                 let zero_page_offset = self.fetch_next_byte();
@@ -1092,6 +1099,7 @@ impl Mos6502 {
                 self.address_bus
                     .borrow_mut()
                     .write_directly_to_bus(0, zero_page_offset);
+                self.data_bus.borrow_mut().read_from_bus();
             }
         }
     }
