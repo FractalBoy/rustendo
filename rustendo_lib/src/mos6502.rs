@@ -1438,6 +1438,16 @@ impl Mos6502 {
                 self.a.borrow().write_to_bus();
                 self.data_bus.borrow().write_to_bus();
             }
+            Instruction::STX(mode, _, cycles, _) => {
+                self.cycles = cycles;
+                self.do_addressing_mode(mode);
+                self.data_bus.borrow_mut().write_directly_to_bus(self.x);
+            }
+            Instruction::STY(mode, _, cycles, _) => {
+                self.cycles = cycles;
+                self.do_addressing_mode(mode);
+                self.data_bus.borrow_mut().write_directly_to_bus(self.y);
+            }
             instruction => unimplemented!("{:?} instruction is unimplemented", instruction),
         }
 

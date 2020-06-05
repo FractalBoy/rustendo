@@ -661,6 +661,74 @@ mod tests {
     }
 
     #[test]
+    fn dex()
+    {
+        let mut cpu = run_program("
+            LDX #$02
+            STX $FF
+            LDX #$01
+            STX $FF
+            DEX
+            STX $FF
+            PHP
+        ");
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x02, "zero flag set");        
+        assert_eq!(status & 0x80, 0x00, "negative flag unset");        
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "correct result");
+
+        let mut cpu = run_program("
+            LDX #$02
+            STX $FF
+            LDX #$00
+            STX $FF
+            DEX
+            STX $FF
+            PHP
+        ");
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x00, "zero flag unset");        
+        assert_eq!(status & 0x80, 0x80, "negative flag set");        
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+    }
+
+    #[test]
+    fn dey()
+    {
+        let mut cpu = run_program("
+            LDY #$02
+            STY $FF
+            LDY #$01
+            STY $FF
+            DEY
+            STY $FF
+            PHP
+        ");
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x02, "zero flag set");        
+        assert_eq!(status & 0x80, 0x00, "negative flag unset");        
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "correct result");
+
+        let mut cpu = run_program("
+            LDY #$02
+            STY $FF
+            LDY #$00
+            STY $FF
+            DEY
+            STY $FF
+            PHP
+        ");
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x00, "zero flag unset");        
+        assert_eq!(status & 0x80, 0x80, "negative flag set");        
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+    }
+
+    #[test]
     fn sbc() {
         let mut cpu = run_program(
             "
