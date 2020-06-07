@@ -1037,6 +1037,92 @@ mod tests {
     }
 
     #[test]
+    fn rol() {
+        let mut cpu = run_program(
+            "
+        LDA #$FF
+        STA $FF
+        ROL $FF
+        PHP
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD) & 0x01,
+            0x01,
+            "carry bit set"
+        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFE, "correct result");
+
+        let mut cpu = run_program(
+            "
+        LDA #$FF
+        STA $FF
+        SEC
+        ROL $FF
+        PHP
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD) & 0x01,
+            0x01,
+            "carry bit set"
+        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+    }
+
+    #[test]
+    fn ror() {
+        let mut cpu = run_program(
+            "
+            LDA #$FF
+            STA $FF
+            ROR $FF
+            PHP
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD) & 0x01,
+            0x01,
+            "carry bit set"
+        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x7F, "correct result");
+
+        let mut cpu = run_program(
+            "
+            LDA #$FF
+            STA $FF
+            SEC
+            ROR $FF
+            PHP
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD) & 0x01,
+            0x01,
+            "carry bit set"
+        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+    }
+
+    #[test]
+    fn tax()
+    {
+        let mut cpu = run_program("
+            LDA #$FF
+            TAX
+            STX $FF
+            PHP
+        ");
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+        assert_eq!(cpu.read_memory_at_address(0x01FD) & 0x80, 0x80, "negative bit set");
+    }
+
+    #[test]
     fn sbc() {
         let mut cpu = run_program(
             "

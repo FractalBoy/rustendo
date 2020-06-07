@@ -1340,6 +1340,8 @@ impl Mos6502 {
                 self.p.carry = operand & 0x01 != 0;
                 self.p.negative = result & 0x80 == 0x80;
                 self.p.zero = result == 0;
+
+                self.data_bus.borrow_mut().write_directly_to_bus(result);
             }
             Instruction::RTI(_, _, cycles) => {
                 self.cycles = cycles;
