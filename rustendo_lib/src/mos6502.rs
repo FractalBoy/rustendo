@@ -1218,19 +1218,15 @@ impl Mos6502 {
                 let mut pc = self.pc.borrow_mut();
                 address_bus.write_directly_to_bus(0x01, self.s);
                 let address = pc.wide();
-                // Store the next instruction in 
+                // Store the next instruction in
                 let address = address.wrapping_add(bytes as u16);
                 let high = ((address >> 4) & 0x0F) as u8;
                 let low = (address & 0x0F) as u8;
                 self.s -= 1;
-                self.data_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(high);
+                self.data_bus.borrow_mut().write_directly_to_bus(high);
                 address_bus.write_directly_to_bus(0x01, self.s);
                 self.s -= 1;
-                self.data_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(low);
+                self.data_bus.borrow_mut().write_directly_to_bus(low);
                 address_bus.write_directly_to_bus(0x01, self.s);
                 self.data_bus
                     .borrow_mut()
@@ -1419,6 +1415,73 @@ impl Mos6502 {
                 let value = self.data_bus.borrow_mut().read_directly_from_bus();
                 self.p.set(value);
             }
+            Instruction::ROL(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.do_addressing_mode(mode);
+                let operand = self.data_bus.borrow().read();
+                // Shift left and make bit 0 the carry bit
+                let result = operand << 1 | (self.p.carry as u8);
+                // The new carry bit is the old bit 7.
+                self.p.carry = ((operand & 0x80) >> 7) != 0;
+                self.p.negative = result & 0x80 == 0x80;
+                self.p.zero = result == 0;
+
+                if mode == AddressingMode::Accumulator {
+                    self.a.borrow_mut().write(result);
+                } else {
+                    self.data_bus.borrow_mut().write_directly_to_bus(result);
+                }
+            }
+            Instruction::ROR(mode, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.do_addressing_mode(mode);
+                let operand = self.data_bus.borrow().read();
+                // Shift right and make bit 7 the carry bit
+                let result = operand >> 1 | ((self.p.carry as u8) << 7);
+                // The new carry is the old bit 0.
+                self.p.carry = operand & 0x01 != 0;
+                self.p.negative = result & 0x80 == 0x80;
+                self.p.zero = result == 0;
+            }
+            Instruction::RTI(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.s += 1;
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.p
+                    .set(self.data_bus.borrow_mut().read_directly_from_bus());
+
+                self.s += 1;
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.pc.borrow_mut().read_low_from_data_bus();
+
+                self.s += 1;
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.pc.borrow_mut().read_high_from_data_bus();
+            }
+            Instruction::RTS(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.s += 1;
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.pc.borrow_mut().read_low_from_data_bus();
+
+                self.s += 1;
+                self.address_bus
+                    .borrow_mut()
+                    .write_directly_to_bus(0x01, self.s);
+                self.pc.borrow_mut().read_high_from_data_bus();
+            }
             Instruction::SBC(mode, _, cycles, _) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
@@ -1431,6 +1494,10 @@ impl Mos6502 {
             Instruction::SED(_, _, cycles, _) => {
                 self.cycles = cycles;
                 self.p.decimal_mode = true;
+            }
+            Instruction::SEI(_, _, cycles, _) => {
+                self.cycles = cycles;
+                self.p.irq_disable = true;
             }
             Instruction::STA(mode, _, cycles, _) => {
                 self.cycles = cycles;
@@ -1448,7 +1515,50 @@ impl Mos6502 {
                 self.do_addressing_mode(mode);
                 self.data_bus.borrow_mut().write_directly_to_bus(self.y);
             }
-            instruction => unimplemented!("{:?} instruction is unimplemented", instruction),
+            Instruction::TAX(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.x = self.a.borrow().read();
+                self.p.negative = self.x & 0x80 == 0x80;
+                self.p.zero = self.x == 0;
+            }
+            Instruction::TAY(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.y = self.a.borrow().read();
+                self.p.negative = self.y & 0x80 == 0x80;
+                self.p.zero = self.y == 0;
+            }
+            Instruction::TSX(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.x = self.s;
+                self.p.negative = self.x & 0x80 == 0x80;
+                self.p.zero = self.x == 0;
+            }
+            Instruction::TXA(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.a.borrow_mut().write(self.x);
+                self.p.negative = self.a.borrow().read() & 0x80 == 0x80;
+                self.p.zero = self.a.borrow().read() == 0x00;
+            }
+            Instruction::TXS(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.s = self.x;
+            }
+            Instruction::TYA(_, _, cycles, _) => {
+                self.cycles = cycles;
+
+                self.a.borrow_mut().write(self.y);
+                self.p.negative = self.a.borrow().read() & 0x80 == 0x80;
+                self.p.zero = self.a.borrow().read() == 0x00;
+            }
+            Instruction::KIL => panic!(
+                "{:x} instruction not implemented",
+                self.instruction_register.data
+            ),
         }
 
         self.pc.borrow_mut().increment();

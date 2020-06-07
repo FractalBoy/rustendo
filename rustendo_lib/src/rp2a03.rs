@@ -75,8 +75,8 @@ impl Rp2a03 {
 
 #[cfg(test)]
 mod tests {
-    use crate::assembler::{self, AssemblerError};
     use super::Rp2a03;
+    use crate::assembler::{self, AssemblerError};
 
     fn run_program(program: &str) -> Rp2a03 {
         match assembler::run_program(program) {
@@ -318,7 +318,6 @@ mod tests {
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "branch not taken");
     }
 
-
     #[test]
     fn bit() {
         let mut cpu = run_program(
@@ -518,7 +517,7 @@ mod tests {
             LDA #$10
             CMP #$05
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -530,7 +529,7 @@ mod tests {
             LDA #$10
             CMP #$10
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -542,7 +541,7 @@ mod tests {
             LDA #$10
             CMP #$11
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -557,7 +556,7 @@ mod tests {
             LDX #$10
             CPX #$05
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -569,7 +568,7 @@ mod tests {
             LDX #$10
             CPX #$10
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -581,7 +580,7 @@ mod tests {
             LDX #$10
             CPX #$11
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -596,7 +595,7 @@ mod tests {
             LDY #$10
             CPY #$05
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -608,7 +607,7 @@ mod tests {
             LDY #$10
             CPY #$10
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -620,7 +619,7 @@ mod tests {
             LDY #$10
             CPY #$11
             PHP
-            "
+            ",
         );
 
         let status = cpu.read_memory_at_address(0x01FD);
@@ -629,41 +628,44 @@ mod tests {
     }
 
     #[test]
-    fn dec()
-    {
-        let mut cpu = run_program("
+    fn dec() {
+        let mut cpu = run_program(
+            "
             LDA #$02
             STA $FF
             LDA #$01
             STA $FF
             DEC $FF
             PHP
-        ");
+        ",
+        );
 
         let status = cpu.read_memory_at_address(0x01FD);
-        assert_eq!(status & 0x02, 0x02, "zero flag set");        
-        assert_eq!(status & 0x80, 0x00, "negative flag unset");        
+        assert_eq!(status & 0x02, 0x02, "zero flag set");
+        assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "correct result");
 
-        let mut cpu = run_program("
+        let mut cpu = run_program(
+            "
             LDA #$02
             STA $FF
             LDA #$00
             STA $FF
             DEC $FF
             PHP
-        ");
+        ",
+        );
 
         let status = cpu.read_memory_at_address(0x01FD);
-        assert_eq!(status & 0x02, 0x00, "zero flag unset");        
-        assert_eq!(status & 0x80, 0x80, "negative flag set");        
+        assert_eq!(status & 0x02, 0x00, "zero flag unset");
+        assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
     }
 
     #[test]
-    fn dex()
-    {
-        let mut cpu = run_program("
+    fn dex() {
+        let mut cpu = run_program(
+            "
             LDX #$02
             STX $FF
             LDX #$01
@@ -671,14 +673,16 @@ mod tests {
             DEX
             STX $FF
             PHP
-        ");
+        ",
+        );
 
         let status = cpu.read_memory_at_address(0x01FD);
-        assert_eq!(status & 0x02, 0x02, "zero flag set");        
-        assert_eq!(status & 0x80, 0x00, "negative flag unset");        
+        assert_eq!(status & 0x02, 0x02, "zero flag set");
+        assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "correct result");
 
-        let mut cpu = run_program("
+        let mut cpu = run_program(
+            "
             LDX #$02
             STX $FF
             LDX #$00
@@ -686,18 +690,19 @@ mod tests {
             DEX
             STX $FF
             PHP
-        ");
+        ",
+        );
 
         let status = cpu.read_memory_at_address(0x01FD);
-        assert_eq!(status & 0x02, 0x00, "zero flag unset");        
-        assert_eq!(status & 0x80, 0x80, "negative flag set");        
+        assert_eq!(status & 0x02, 0x00, "zero flag unset");
+        assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
     }
 
     #[test]
-    fn dey()
-    {
-        let mut cpu = run_program("
+    fn dey() {
+        let mut cpu = run_program(
+            "
             LDY #$02
             STY $FF
             LDY #$01
@@ -705,14 +710,16 @@ mod tests {
             DEY
             STY $FF
             PHP
-        ");
+        ",
+        );
 
         let status = cpu.read_memory_at_address(0x01FD);
-        assert_eq!(status & 0x02, 0x02, "zero flag set");        
-        assert_eq!(status & 0x80, 0x00, "negative flag unset");        
+        assert_eq!(status & 0x02, 0x02, "zero flag set");
+        assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "correct result");
 
-        let mut cpu = run_program("
+        let mut cpu = run_program(
+            "
             LDY #$02
             STY $FF
             LDY #$00
@@ -720,12 +727,185 @@ mod tests {
             DEY
             STY $FF
             PHP
-        ");
+        ",
+        );
 
         let status = cpu.read_memory_at_address(0x01FD);
-        assert_eq!(status & 0x02, 0x00, "zero flag unset");        
-        assert_eq!(status & 0x80, 0x80, "negative flag set");        
+        assert_eq!(status & 0x02, 0x00, "zero flag unset");
+        assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+    }
+
+    #[test]
+    fn eor() {
+        let mut cpu = run_program(
+            "
+            LDA #$55
+            EOR #$AA
+            STA $FF
+            PHP
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0xFF),
+            0xFF,
+            "0x55 xor 0xAA = 0xFF"
+        );
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD) & 0x80,
+            0x80,
+            "negative bit set"
+        );
+
+        let mut cpu = run_program(
+            "
+            LDA #$FF
+            EOR #$FF
+            STA $FF
+            PHP
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0xFF),
+            0x00,
+            "0xFF xor 0xFF = 0x00"
+        );
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD) & 0x02,
+            0x02,
+            "zero bit set"
+        );
+    }
+
+    #[test]
+    fn inc() {
+        let mut cpu = run_program(
+            "
+            LDA #$02
+            STA $FF
+            LDA #$FF
+            STA $FF
+            INC $FF
+            PHP
+        ",
+        );
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x02, "zero flag set");
+        assert_eq!(status & 0x80, 0x00, "negative flag unset");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "correct result");
+
+        let mut cpu = run_program(
+            "
+            LDA #$02
+            STA $FF
+            LDA #$FE
+            STA $FF
+            INC $FF
+            PHP
+        ",
+        );
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x00, "zero flag unset");
+        assert_eq!(status & 0x80, 0x80, "negative flag set");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+    }
+
+    #[test]
+    fn inx() {
+        let mut cpu = run_program(
+            "
+            LDX #$02
+            STX $FF
+            LDX #$FF
+            STX $FF
+            INX
+            STX $FF
+            PHP
+        ",
+        );
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x02, "zero flag set");
+        assert_eq!(status & 0x80, 0x00, "negative flag unset");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "correct result");
+
+        let mut cpu = run_program(
+            "
+            LDX #$02
+            STX $FF
+            LDX #$FE
+            STX $FF
+            INX
+            STX $FF
+            PHP
+        ",
+        );
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x00, "zero flag unset");
+        assert_eq!(status & 0x80, 0x80, "negative flag set");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+    }
+
+    #[test]
+    fn iny() {
+        let mut cpu = run_program(
+            "
+            LDY #$02
+            STY $FF
+            LDY #$FF
+            STY $FF
+            INY
+            STY $FF
+            PHP
+        ",
+        );
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x02, "zero flag set");
+        assert_eq!(status & 0x80, 0x00, "negative flag unset");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "correct result");
+
+        let mut cpu = run_program(
+            "
+            LDY #$02
+            STY $FF
+            LDY #$FE
+            STY $FF
+            INY
+            STY $FF
+            PHP
+        ",
+        );
+
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x02, 0x00, "zero flag unset");
+        assert_eq!(status & 0x80, 0x80, "negative flag set");
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "correct result");
+    }
+
+    #[test]
+    fn jmp() {
+        let mut cpu = run_program(
+            "
+            JMP $0800
+            NOP
+            NOP
+            LDA #$FF // These two lines should not execute
+            STA $FF  // so $FF should be empty.
+            NOP
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0xFF),
+            0x00,
+            "load and store jumped over"
+        );
     }
 
     #[test]

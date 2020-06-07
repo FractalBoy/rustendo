@@ -135,7 +135,7 @@ fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
                         Ok(address) => address,
                         Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
                     };
-                    let [address_high, address_low] = address.to_be_bytes();
+                    let [address_low, address_high] = address.to_be_bytes();
                     match lookup_instruction(instruction, AddressingMode::Absolute) {
                         Some(byte) => {
                             program.push(vec![byte, address_low, address_high]);
@@ -151,7 +151,7 @@ fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
                         Ok(address) => address,
                         Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
                     };
-                    let [address_high, address_low] = address.to_be_bytes();
+                    let [address_low, address_high] = address.to_be_bytes();
                     match lookup_instruction(instruction, AddressingMode::AbsoluteX) {
                         Some(byte) => {
                             program.push(vec![byte, address_low, address_high]);
@@ -167,7 +167,7 @@ fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
                         Ok(address) => address,
                         Err(_) => return Err(AssemblerError::InvalidAddress(line_number)),
                     };
-                    let [address_high, address_low] = address.to_be_bytes();
+                    let [address_low, address_high] = address.to_be_bytes();
                     match lookup_instruction(instruction, AddressingMode::AbsoluteY) {
                         Some(byte) => {
                             program.push(vec![byte, address_low, address_high]);
