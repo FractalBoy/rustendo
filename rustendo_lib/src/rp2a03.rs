@@ -909,6 +909,134 @@ mod tests {
     }
 
     #[test]
+    fn jsr() {
+        let mut cpu = run_program(
+            "
+            JSR $0800
+            LDA #$FF
+            STA $FF
+            LDA #$FF
+            STA $FE
+        ",
+        );
+
+        assert_ne!(
+            cpu.read_memory_at_address(0xFF),
+            0xFF,
+            "first store skipped"
+        );
+        assert_ne!(
+            cpu.read_memory_at_address(0xFE),
+            0xFF,
+            "second store skipped"
+        );
+        assert_eq!(cpu.read_memory_at_address(0x01FD), 0x00, "high byte = 0x00");
+        assert_eq!(cpu.read_memory_at_address(0x01FC), 0x02, "low byte = 0x02");
+    }
+
+    #[test]
+    fn lsr() {
+        let mut cpu = run_program(
+            "
+        LDA #$FF
+        STA $FF
+        LSR $FF
+        PHP
+       ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x7F, "0xFF >> 1 = 0x7F");
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x01, 0x01, "carry bit set");
+        assert_eq!(status & 0x02, 0x00, "zero bit unset");
+        assert_eq!(status & 0x80, 0x00, "negative bit unset");
+
+        let mut cpu = run_program(
+            "
+            LDA #$01
+            STA $FF
+            LSR $FF
+            PHP
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "0x01 >> 1 = 0x00");
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x01, 0x01, "carry bit set");
+        assert_eq!(status & 0x02, 0x02, "zero bit set");
+        assert_eq!(status & 0x80, 0x00, "negative bit unset");
+    }
+
+    #[test]
+    fn ora() {
+        let mut cpu = run_program(
+            "
+            LDA #$AA
+            STA $FF
+            LDA #$55
+            ORA $FF
+            STA $FF
+            PHP
+        ",
+        );
+
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0xFF, "0xAA | 0x55 = 0xFF");
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x80, 0x80, "result negative");
+        assert_eq!(status & 0x02, 0x00, "result not zero");
+
+        let mut cpu = run_program(
+            "
+            LDA #$00
+            STA $FF
+            LDA #$00
+            ORA $FF
+            STA $FF
+            PHP
+        ",
+        );
+        assert_eq!(cpu.read_memory_at_address(0xFF), 0x00, "0x00 | 0x00 = 0x00");
+        let status = cpu.read_memory_at_address(0x01FD);
+        assert_eq!(status & 0x80, 0x00, "result not negative");
+        assert_eq!(status & 0x02, 0x02, "result zero");
+    }
+
+    #[test]
+    fn pha() {
+        let mut cpu = run_program(
+            "
+            LDA #$FF
+            PHA
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD),
+            0xFF,
+            "accumulator pushed on stack"
+        );
+    }
+
+    #[test]
+    fn pla() {
+        let mut cpu = run_program(
+            "
+        LDA #$FF
+        PHA
+        LDA #$00
+        PLA
+        STA $FF
+        ",
+        );
+
+        assert_eq!(
+            cpu.read_memory_at_address(0x01FD),
+            0xFF,
+            "accumulator pulled from stack"
+        );
+    }
+
+    #[test]
     fn sbc() {
         let mut cpu = run_program(
             "

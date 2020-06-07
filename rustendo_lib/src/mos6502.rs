@@ -748,7 +748,7 @@ pub struct Mos6502 {
     sync: bool,
     #[allow(dead_code)]
     not_reset: bool,
-    interrupt_vector: u16
+    interrupt_vector: u16,
 }
 
 enum IndexRegister {
@@ -796,7 +796,7 @@ impl Mos6502 {
             not_reset: true,
             not_set_overflow: true,
             sync: false,
-            interrupt_vector: 0xFFFE
+            interrupt_vector: 0xFFFE,
         }
     }
 
@@ -826,9 +826,7 @@ impl Mos6502 {
             self.execute_instruction();
         }
 
-
         self.cycles -= 1;
-
 
         self.cycles == 0
     }
@@ -1190,28 +1188,33 @@ impl Mos6502 {
             Instruction::INY(_, _, cycles) => self.y = self.increment(self.y, 1, cycles),
             Instruction::JMP(mode, _, cycles) => self.jump(mode, cycles),
             Instruction::JSR(mode, bytes, cycles) => {
-                let address_low = self
+                let next_address = self
                     .pc
                     .borrow()
-                    .read_high()
-                    .wrapping_add((bytes & 0xFF) as u8);
-                let address_high = self.pc.borrow().read_low();
+                    .wide()
+                    .wrapping_add((bytes & 0xFFFF) as u16)
+                    // We want the next address to be the last byte of this instruction,
+                    // not the first byte of the next, so we subtract one.
+                    .wrapping_sub(1);
+                let next_address_high = ((next_address & 0xFF00) >> 8) as u8;
+                let next_address_low = (next_address & 0x00FF) as u8;
 
                 // Save next instruction location to the stack.
                 self.address_bus
                     .borrow_mut()
                     .write_directly_to_bus(0x01, self.s);
-                self.s -= 1;
                 self.data_bus
                     .borrow_mut()
-                    .write_directly_to_bus(address_low);
+                    .write_directly_to_bus(next_address_high);
+                self.s -= 1;
+
                 self.address_bus
                     .borrow_mut()
                     .write_directly_to_bus(0x01, self.s);
-                self.s -= 1;
                 self.data_bus
                     .borrow_mut()
-                    .write_directly_to_bus(address_high);
+                    .write_directly_to_bus(next_address_low);
+                self.s -= 1;
 
                 self.jump(mode, cycles);
             }
@@ -1242,6 +1245,8 @@ impl Mos6502 {
 
                 let result = operand >> 1;
                 self.data_bus.borrow_mut().write(result);
+                self.p.zero = result == 0x00;
+                self.p.negative = false;
 
                 if mode == AddressingMode::Accumulator {
                     self.a.borrow_mut().read_from_bus();
