@@ -739,7 +739,6 @@ pub struct Mos6502 {
     output_clock2: bool,
     #[allow(dead_code)]
     ready: bool,
-    #[allow(dead_code)]
     not_irq: bool,
     #[allow(dead_code)]
     not_nmi: bool,
@@ -749,6 +748,7 @@ pub struct Mos6502 {
     sync: bool,
     #[allow(dead_code)]
     not_reset: bool,
+    interrupt_vector: u16
 }
 
 enum IndexRegister {
@@ -796,6 +796,7 @@ impl Mos6502 {
             not_reset: true,
             not_set_overflow: true,
             sync: false,
+            interrupt_vector: 0xFFFE
         }
     }
 
@@ -809,10 +810,26 @@ impl Mos6502 {
     pub fn clock(&mut self) -> bool {
         if self.cycles == 0 {
             self.read_instruction();
+
+            if !self.p.irq_disable && !self.not_irq {
+                self.interrupt_vector = 0xFFFE;
+                // Set instruction register to 0, the BRK instruction.
+                self.instruction_register.data = 0x00;
+            }
+
+            if !self.not_nmi {
+                self.interrupt_vector = 0xFFFB;
+                // Set instruction register to 0, the BRK instruction.
+                self.instruction_register.data = 0x00;
+            }
+
             self.execute_instruction();
         }
 
+
         self.cycles -= 1;
+
+
         self.cycles == 0
     }
 
@@ -1023,6 +1040,42 @@ impl Mos6502 {
         self.pc.borrow_mut().read_high_from_data_bus();
     }
 
+    fn interrupt(&mut self, cycles: u32, bytes: u32) {
+        self.cycles = cycles;
+
+        let mut address_bus = self.address_bus.borrow_mut();
+        let mut pc = self.pc.borrow_mut();
+        address_bus.write_directly_to_bus(0x01, self.s);
+        let address = pc.wide();
+        // Store the next instruction in the stack
+        let address = address.wrapping_add(bytes as u16);
+        let high = ((address >> 4) & 0x0F) as u8;
+        let low = (address & 0x0F) as u8;
+        self.s -= 1;
+        self.data_bus.borrow_mut().write_directly_to_bus(high);
+        address_bus.write_directly_to_bus(0x01, self.s);
+        self.s -= 1;
+        self.data_bus.borrow_mut().write_directly_to_bus(low);
+        address_bus.write_directly_to_bus(0x01, self.s);
+        self.data_bus
+            .borrow_mut()
+            .write_directly_to_bus(self.p.get());
+
+        let interrupt_vector = self.interrupt_vector;
+        let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
+        let vector_low = (interrupt_vector & 0xFF) as u8;
+        address_bus.write_directly_to_bus(vector_high, vector_low);
+        self.data_bus.borrow_mut().read_from_bus();
+        pc.read_low_from_data_bus();
+
+        let interrupt_vector = interrupt_vector.wrapping_sub(1);
+        let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
+        let vector_low = (interrupt_vector & 0xFF) as u8;
+        address_bus.write_directly_to_bus(vector_high, vector_low);
+        self.data_bus.borrow_mut().read_from_bus();
+        pc.read_high_from_data_bus();
+    }
+
     fn read_instruction(&mut self) {
         self.pc.borrow().write_to_address_bus();
         self.data_bus.borrow_mut().read_from_bus();
@@ -1080,34 +1133,7 @@ impl Mos6502 {
             Instruction::BMI(mode, _, cycles) => self.branch(self.p.negative, mode, cycles),
             Instruction::BNE(mode, _, cycles) => self.branch(!self.p.zero, mode, cycles),
             Instruction::BPL(mode, _, cycles) => self.branch(!self.p.negative, mode, cycles),
-            Instruction::BRK(_, bytes, cycles) => {
-                self.cycles = cycles;
-
-                let mut address_bus = self.address_bus.borrow_mut();
-                let mut pc = self.pc.borrow_mut();
-                address_bus.write_directly_to_bus(0x01, self.s);
-                let address = pc.wide();
-                // Store the next instruction in
-                let address = address.wrapping_add(bytes as u16);
-                let high = ((address >> 4) & 0x0F) as u8;
-                let low = (address & 0x0F) as u8;
-                self.s -= 1;
-                self.data_bus.borrow_mut().write_directly_to_bus(high);
-                address_bus.write_directly_to_bus(0x01, self.s);
-                self.s -= 1;
-                self.data_bus.borrow_mut().write_directly_to_bus(low);
-                address_bus.write_directly_to_bus(0x01, self.s);
-                self.data_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(self.p.get());
-
-                address_bus.write_directly_to_bus(0xFF, 0xFE);
-                self.data_bus.borrow_mut().read_from_bus();
-                pc.read_low_from_data_bus();
-                address_bus.write_directly_to_bus(0xFF, 0xFF);
-                self.data_bus.borrow_mut().read_from_bus();
-                pc.read_high_from_data_bus();
-            }
+            Instruction::BRK(_, bytes, cycles) => self.interrupt(cycles, bytes),
             Instruction::BVC(mode, _, cycles) => self.branch(!self.p.overflow, mode, cycles),
             Instruction::BVS(mode, _, cycles) => self.branch(self.p.overflow, mode, cycles),
             Instruction::CLC(_, _, cycles) => {
