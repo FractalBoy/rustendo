@@ -205,318 +205,198 @@ impl InstructionRegister {
             0x0 => match high_nibble {
                 // BRK is a 2 byte instruction, despite 6502 documentation.
                 // That is, the next instruction is at PC + 2
-                0x0 => Instruction::BRK(AddressingMode::Implied, 2, 7, Penalty::None),
-                0x1 => Instruction::BPL(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
-                0x2 => Instruction::JSR(AddressingMode::Absolute, 3, 6, Penalty::None),
-                0x3 => Instruction::BMI(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
-                0x4 => Instruction::RTI(AddressingMode::Implied, 1, 6, Penalty::None),
-                0x5 => Instruction::BVC(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
-                0x6 => Instruction::RTS(AddressingMode::Implied, 1, 6, Penalty::None),
-                0x7 => Instruction::BVS(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
+                0x0 => Instruction::BRK(AddressingMode::Implied, 2, 7),
+                0x1 => Instruction::BPL(AddressingMode::Relative, 2, 2),
+                0x2 => Instruction::JSR(AddressingMode::Absolute, 3, 6),
+                0x3 => Instruction::BMI(AddressingMode::Relative, 2, 2),
+                0x4 => Instruction::RTI(AddressingMode::Implied, 1, 6),
+                0x5 => Instruction::BVC(AddressingMode::Relative, 2, 2),
+                0x6 => Instruction::RTS(AddressingMode::Implied, 1, 6),
+                0x7 => Instruction::BVS(AddressingMode::Relative, 2, 2),
                 0x8 => Instruction::KIL,
-                0x9 => Instruction::BCC(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
-                0xA => Instruction::LDY(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0xB => Instruction::BCS(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
-                0xC => Instruction::CPY(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0xD => Instruction::BNE(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
-                0xE => Instruction::CPX(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0xF => Instruction::BEQ(AddressingMode::Relative, 2, 2, Penalty::BranchTaken),
+                0x9 => Instruction::BCC(AddressingMode::Relative, 2, 2),
+                0xA => Instruction::LDY(AddressingMode::Immediate, 2, 2),
+                0xB => Instruction::BCS(AddressingMode::Relative, 2, 2),
+                0xC => Instruction::CPY(AddressingMode::Immediate, 2, 2),
+                0xD => Instruction::BNE(AddressingMode::Relative, 2, 2),
+                0xE => Instruction::CPX(AddressingMode::Immediate, 2, 2),
+                0xF => Instruction::BEQ(AddressingMode::Relative, 2, 2),
                 _ => panic!("nibble should have only 4 bits"),
             },
             0x1 => match high_nibble {
-                0x0 => Instruction::ORA(AddressingMode::IndirectX, 2, 6, Penalty::None),
-                0x1 => Instruction::ORA(
-                    AddressingMode::IndirectY,
-                    2,
-                    5,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x2 => Instruction::AND(AddressingMode::IndirectX, 2, 6, Penalty::None),
-                0x3 => Instruction::AND(
-                    AddressingMode::IndirectY,
-                    2,
-                    5,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x4 => Instruction::EOR(AddressingMode::IndirectX, 2, 6, Penalty::None),
-                0x5 => Instruction::EOR(
-                    AddressingMode::IndirectY,
-                    2,
-                    5,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x6 => Instruction::ADC(AddressingMode::IndirectX, 2, 6, Penalty::None),
-                0x7 => Instruction::ADC(
-                    AddressingMode::IndirectY,
-                    2,
-                    5,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x8 => Instruction::STA(AddressingMode::IndirectX, 2, 6, Penalty::None),
-                0x9 => Instruction::STA(AddressingMode::IndirectY, 2, 6, Penalty::None),
-                0xA => Instruction::LDA(AddressingMode::IndirectX, 2, 6, Penalty::None),
-                0xB => Instruction::LDA(
-                    AddressingMode::IndirectY,
-                    2,
-                    5,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xC => Instruction::CMP(AddressingMode::IndirectX, 2, 6, Penalty::None),
-                0xD => Instruction::CMP(
-                    AddressingMode::IndirectY,
-                    2,
-                    5,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xE => Instruction::SBC(AddressingMode::IndirectX, 2, 6, Penalty::None),
-                0xF => Instruction::SBC(
-                    AddressingMode::IndirectY,
-                    2,
-                    5,
-                    Penalty::PageBoundaryCrossed,
-                ),
+                0x0 => Instruction::ORA(AddressingMode::IndirectX, 2, 6),
+                0x1 => Instruction::ORA(AddressingMode::IndirectY, 2, 5),
+                0x2 => Instruction::AND(AddressingMode::IndirectX, 2, 6),
+                0x3 => Instruction::AND(AddressingMode::IndirectY, 2, 5),
+                0x4 => Instruction::EOR(AddressingMode::IndirectX, 2, 6),
+                0x5 => Instruction::EOR(AddressingMode::IndirectY, 2, 5),
+                0x6 => Instruction::ADC(AddressingMode::IndirectX, 2, 6),
+                0x7 => Instruction::ADC(AddressingMode::IndirectY, 2, 5),
+                0x8 => Instruction::STA(AddressingMode::IndirectX, 2, 6),
+                0x9 => Instruction::STA(AddressingMode::IndirectY, 2, 6),
+                0xA => Instruction::LDA(AddressingMode::IndirectX, 2, 6),
+                0xB => Instruction::LDA(AddressingMode::IndirectY, 2, 5),
+                0xC => Instruction::CMP(AddressingMode::IndirectX, 2, 6),
+                0xD => Instruction::CMP(AddressingMode::IndirectY, 2, 5),
+                0xE => Instruction::SBC(AddressingMode::IndirectX, 2, 6),
+                0xF => Instruction::SBC(AddressingMode::IndirectY, 2, 5),
                 _ => panic!("nibble should have only 4 bits"),
             },
             0x2 => match high_nibble {
-                0xA => Instruction::LDX(AddressingMode::Immediate, 2, 2, Penalty::None),
+                0xA => Instruction::LDX(AddressingMode::Immediate, 2, 2),
                 0x0..=0x9 => Instruction::KIL,
                 _ => panic!("nibble should have only 4 bits"),
             },
             0x3 | 0x7 | 0xB | 0xF => Instruction::KIL,
             0x4 => match high_nibble {
-                0x2 => Instruction::BIT(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x8 => Instruction::STY(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x9 => Instruction::STY(AddressingMode::ZeroPage, 2, 4, Penalty::None),
-                0xA => Instruction::LDY(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0xB => Instruction::LDY(AddressingMode::ZeroPage, 2, 4, Penalty::None),
-                0xC => Instruction::CPY(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0xE => Instruction::CPX(AddressingMode::ZeroPage, 2, 3, Penalty::None),
+                0x2 => Instruction::BIT(AddressingMode::ZeroPage, 2, 3),
+                0x8 => Instruction::STY(AddressingMode::ZeroPage, 2, 3),
+                0x9 => Instruction::STY(AddressingMode::ZeroPage, 2, 4),
+                0xA => Instruction::LDY(AddressingMode::ZeroPage, 2, 3),
+                0xB => Instruction::LDY(AddressingMode::ZeroPage, 2, 4),
+                0xC => Instruction::CPY(AddressingMode::ZeroPage, 2, 3),
+                0xE => Instruction::CPX(AddressingMode::ZeroPage, 2, 3),
                 0x0 | 0x1 | 0x3..=0x7 | 0xD | 0xF => Instruction::KIL,
                 _ => panic!("nibble should have only 4 bits"),
             },
             0x5 => match high_nibble {
-                0x0 => Instruction::ORA(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x1 => Instruction::ORA(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
-                0x2 => Instruction::AND(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x3 => Instruction::AND(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
-                0x4 => Instruction::EOR(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x5 => Instruction::EOR(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
-                0x6 => Instruction::ADC(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x7 => Instruction::ADC(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
-                0x8 => Instruction::STA(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x9 => Instruction::STA(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
-                0xA => Instruction::LDA(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0xB => Instruction::LDA(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
-                0xC => Instruction::CMP(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0xD => Instruction::CMP(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
-                0xE => Instruction::SBC(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0xF => Instruction::SBC(AddressingMode::ZeroPageX, 2, 4, Penalty::None),
+                0x0 => Instruction::ORA(AddressingMode::ZeroPage, 2, 3),
+                0x1 => Instruction::ORA(AddressingMode::ZeroPageX, 2, 4),
+                0x2 => Instruction::AND(AddressingMode::ZeroPage, 2, 3),
+                0x3 => Instruction::AND(AddressingMode::ZeroPageX, 2, 4),
+                0x4 => Instruction::EOR(AddressingMode::ZeroPage, 2, 3),
+                0x5 => Instruction::EOR(AddressingMode::ZeroPageX, 2, 4),
+                0x6 => Instruction::ADC(AddressingMode::ZeroPage, 2, 3),
+                0x7 => Instruction::ADC(AddressingMode::ZeroPageX, 2, 4),
+                0x8 => Instruction::STA(AddressingMode::ZeroPage, 2, 3),
+                0x9 => Instruction::STA(AddressingMode::ZeroPageX, 2, 4),
+                0xA => Instruction::LDA(AddressingMode::ZeroPage, 2, 3),
+                0xB => Instruction::LDA(AddressingMode::ZeroPageX, 2, 4),
+                0xC => Instruction::CMP(AddressingMode::ZeroPage, 2, 3),
+                0xD => Instruction::CMP(AddressingMode::ZeroPageX, 2, 4),
+                0xE => Instruction::SBC(AddressingMode::ZeroPage, 2, 3),
+                0xF => Instruction::SBC(AddressingMode::ZeroPageX, 2, 4),
                 _ => panic!("nibble should have only 4 bits"),
             },
             0x6 => match high_nibble {
-                0x0 => Instruction::ASL(AddressingMode::ZeroPage, 2, 5, Penalty::None),
-                0x1 => Instruction::ASL(AddressingMode::ZeroPageX, 2, 6, Penalty::None),
-                0x2 => Instruction::ROL(AddressingMode::ZeroPage, 2, 5, Penalty::None),
-                0x3 => Instruction::ROL(AddressingMode::ZeroPageX, 2, 6, Penalty::None),
-                0x4 => Instruction::LSR(AddressingMode::ZeroPage, 2, 5, Penalty::None),
-                0x5 => Instruction::LSR(AddressingMode::ZeroPageX, 2, 6, Penalty::None),
-                0x6 => Instruction::ROR(AddressingMode::ZeroPage, 2, 5, Penalty::None),
-                0x7 => Instruction::ROR(AddressingMode::ZeroPageX, 2, 6, Penalty::None),
-                0x8 => Instruction::STX(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0x9 => Instruction::STX(AddressingMode::ZeroPageY, 2, 4, Penalty::None),
-                0xA => Instruction::LDX(AddressingMode::ZeroPage, 2, 3, Penalty::None),
-                0xB => Instruction::LDX(AddressingMode::ZeroPageY, 2, 4, Penalty::None),
-                0xC => Instruction::DEC(AddressingMode::ZeroPage, 2, 5, Penalty::None),
-                0xD => Instruction::DEC(AddressingMode::ZeroPageX, 2, 6, Penalty::None),
-                0xE => Instruction::INC(AddressingMode::ZeroPage, 2, 5, Penalty::None),
-                0xF => Instruction::INC(AddressingMode::ZeroPageX, 2, 6, Penalty::None),
+                0x0 => Instruction::ASL(AddressingMode::ZeroPage, 2, 5),
+                0x1 => Instruction::ASL(AddressingMode::ZeroPageX, 2, 6),
+                0x2 => Instruction::ROL(AddressingMode::ZeroPage, 2, 5),
+                0x3 => Instruction::ROL(AddressingMode::ZeroPageX, 2, 6),
+                0x4 => Instruction::LSR(AddressingMode::ZeroPage, 2, 5),
+                0x5 => Instruction::LSR(AddressingMode::ZeroPageX, 2, 6),
+                0x6 => Instruction::ROR(AddressingMode::ZeroPage, 2, 5),
+                0x7 => Instruction::ROR(AddressingMode::ZeroPageX, 2, 6),
+                0x8 => Instruction::STX(AddressingMode::ZeroPage, 2, 3),
+                0x9 => Instruction::STX(AddressingMode::ZeroPageY, 2, 4),
+                0xA => Instruction::LDX(AddressingMode::ZeroPage, 2, 3),
+                0xB => Instruction::LDX(AddressingMode::ZeroPageY, 2, 4),
+                0xC => Instruction::DEC(AddressingMode::ZeroPage, 2, 5),
+                0xD => Instruction::DEC(AddressingMode::ZeroPageX, 2, 6),
+                0xE => Instruction::INC(AddressingMode::ZeroPage, 2, 5),
+                0xF => Instruction::INC(AddressingMode::ZeroPageX, 2, 6),
                 _ => panic!("nibble should have only 4 bits"),
             },
             0x8 => match high_nibble {
-                0x0 => Instruction::PHP(AddressingMode::Implied, 1, 3, Penalty::None),
-                0x1 => Instruction::CLC(AddressingMode::Implied, 1, 2, Penalty::None),
-                0x2 => Instruction::PLP(AddressingMode::Implied, 1, 4, Penalty::None),
-                0x3 => Instruction::SEC(AddressingMode::Implied, 1, 2, Penalty::None),
-                0x4 => Instruction::PHA(AddressingMode::Implied, 1, 3, Penalty::None),
-                0x5 => Instruction::CLI(AddressingMode::Implied, 1, 2, Penalty::None),
-                0x6 => Instruction::PLA(AddressingMode::Implied, 1, 4, Penalty::None),
-                0x7 => Instruction::SEI(AddressingMode::Implied, 1, 2, Penalty::None),
-                0x8 => Instruction::DEY(AddressingMode::Implied, 1, 2, Penalty::None),
-                0x9 => Instruction::TYA(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xA => Instruction::TAY(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xB => Instruction::CLV(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xC => Instruction::INY(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xD => Instruction::CLD(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xE => Instruction::INX(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xF => Instruction::SED(AddressingMode::Implied, 1, 2, Penalty::None),
+                0x0 => Instruction::PHP(AddressingMode::Implied, 1, 3),
+                0x1 => Instruction::CLC(AddressingMode::Implied, 1, 2),
+                0x2 => Instruction::PLP(AddressingMode::Implied, 1, 4),
+                0x3 => Instruction::SEC(AddressingMode::Implied, 1, 2),
+                0x4 => Instruction::PHA(AddressingMode::Implied, 1, 3),
+                0x5 => Instruction::CLI(AddressingMode::Implied, 1, 2),
+                0x6 => Instruction::PLA(AddressingMode::Implied, 1, 4),
+                0x7 => Instruction::SEI(AddressingMode::Implied, 1, 2),
+                0x8 => Instruction::DEY(AddressingMode::Implied, 1, 2),
+                0x9 => Instruction::TYA(AddressingMode::Implied, 1, 2),
+                0xA => Instruction::TAY(AddressingMode::Implied, 1, 2),
+                0xB => Instruction::CLV(AddressingMode::Implied, 1, 2),
+                0xC => Instruction::INY(AddressingMode::Implied, 1, 2),
+                0xD => Instruction::CLD(AddressingMode::Implied, 1, 2),
+                0xE => Instruction::INX(AddressingMode::Implied, 1, 2),
+                0xF => Instruction::SED(AddressingMode::Implied, 1, 2),
                 _ => panic!("nibble should have only 4 bits"),
             },
             0x9 => match high_nibble {
-                0x0 => Instruction::ORA(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0x1 => Instruction::ORA(
-                    AddressingMode::AbsoluteY,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x2 => Instruction::AND(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0x3 => Instruction::AND(
-                    AddressingMode::AbsoluteY,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x4 => Instruction::EOR(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0x5 => Instruction::EOR(
-                    AddressingMode::AbsoluteY,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x6 => Instruction::ADC(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0x7 => Instruction::ADC(
-                    AddressingMode::AbsoluteY,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
+                0x0 => Instruction::ORA(AddressingMode::Immediate, 2, 2),
+                0x1 => Instruction::ORA(AddressingMode::AbsoluteY, 3, 4),
+                0x2 => Instruction::AND(AddressingMode::Immediate, 2, 2),
+                0x3 => Instruction::AND(AddressingMode::AbsoluteY, 3, 4),
+                0x4 => Instruction::EOR(AddressingMode::Immediate, 2, 2),
+                0x5 => Instruction::EOR(AddressingMode::AbsoluteY, 3, 4),
+                0x6 => Instruction::ADC(AddressingMode::Immediate, 2, 2),
+                0x7 => Instruction::ADC(AddressingMode::AbsoluteY, 3, 4),
                 0x8 => Instruction::KIL,
-                0x9 => Instruction::STA(AddressingMode::AbsoluteY, 3, 5, Penalty::None),
-                0xA => Instruction::LDA(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0xB => Instruction::LDA(
-                    AddressingMode::AbsoluteY,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xC => Instruction::CMP(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0xD => Instruction::CMP(
-                    AddressingMode::AbsoluteY,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xE => Instruction::SBC(AddressingMode::Immediate, 2, 2, Penalty::None),
-                0xF => Instruction::SBC(
-                    AddressingMode::AbsoluteY,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
+                0x9 => Instruction::STA(AddressingMode::AbsoluteY, 3, 5),
+                0xA => Instruction::LDA(AddressingMode::Immediate, 2, 2),
+                0xB => Instruction::LDA(AddressingMode::AbsoluteY, 3, 4),
+                0xC => Instruction::CMP(AddressingMode::Immediate, 2, 2),
+                0xD => Instruction::CMP(AddressingMode::AbsoluteY, 3, 4),
+                0xE => Instruction::SBC(AddressingMode::Immediate, 2, 2),
+                0xF => Instruction::SBC(AddressingMode::AbsoluteY, 3, 4),
                 _ => panic!("nibble should have only 4 bits"),
             },
             0xA => match high_nibble {
-                0x0 => Instruction::ASL(AddressingMode::Accumulator, 1, 2, Penalty::None),
-                0x2 => Instruction::ROL(AddressingMode::Accumulator, 1, 2, Penalty::None),
-                0x4 => Instruction::LSR(AddressingMode::Accumulator, 1, 2, Penalty::None),
-                0x6 => Instruction::ROR(AddressingMode::Accumulator, 1, 2, Penalty::None),
-                0x8 => Instruction::TXA(AddressingMode::Implied, 1, 2, Penalty::None),
-                0x9 => Instruction::TXS(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xA => Instruction::TAX(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xB => Instruction::TSX(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xC => Instruction::DEX(AddressingMode::Implied, 1, 2, Penalty::None),
-                0xE => Instruction::NOP(AddressingMode::Implied, 1, 2, Penalty::None),
+                0x0 => Instruction::ASL(AddressingMode::Accumulator, 1, 2),
+                0x2 => Instruction::ROL(AddressingMode::Accumulator, 1, 2),
+                0x4 => Instruction::LSR(AddressingMode::Accumulator, 1, 2),
+                0x6 => Instruction::ROR(AddressingMode::Accumulator, 1, 2),
+                0x8 => Instruction::TXA(AddressingMode::Implied, 1, 2),
+                0x9 => Instruction::TXS(AddressingMode::Implied, 1, 2),
+                0xA => Instruction::TAX(AddressingMode::Implied, 1, 2),
+                0xB => Instruction::TSX(AddressingMode::Implied, 1, 2),
+                0xC => Instruction::DEX(AddressingMode::Implied, 1, 2),
+                0xE => Instruction::NOP(AddressingMode::Implied, 1, 2),
                 0x1 | 0x3 | 0x5 | 0x7 | 0xD | 0xF => Instruction::KIL,
                 _ => panic!("nibble should have only 4 bits"),
             },
             0xC => match high_nibble {
-                0x2 => Instruction::BIT(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0x4 => Instruction::JMP(AddressingMode::Absolute, 3, 3, Penalty::None),
-                0x6 => Instruction::JMP(AddressingMode::Indirect, 3, 5, Penalty::None),
-                0x8 => Instruction::STY(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0xA => Instruction::LDY(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0xB => Instruction::LDY(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xC => Instruction::CPY(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0xE => Instruction::CPX(AddressingMode::Absolute, 3, 4, Penalty::None),
+                0x2 => Instruction::BIT(AddressingMode::Absolute, 3, 4),
+                0x4 => Instruction::JMP(AddressingMode::Absolute, 3, 3),
+                0x6 => Instruction::JMP(AddressingMode::Indirect, 3, 5),
+                0x8 => Instruction::STY(AddressingMode::Absolute, 3, 4),
+                0xA => Instruction::LDY(AddressingMode::Absolute, 3, 4),
+                0xB => Instruction::LDY(AddressingMode::AbsoluteX, 3, 4),
+                0xC => Instruction::CPY(AddressingMode::Absolute, 3, 4),
+                0xE => Instruction::CPX(AddressingMode::Absolute, 3, 4),
                 0x0 | 0x1 | 0x3 | 0x5 | 0x7 | 0x9 | 0xD | 0xF => Instruction::KIL,
                 _ => panic!("nibble should have only 4 bits"),
             },
             0xD => match high_nibble {
-                0x0 => Instruction::ORA(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0x1 => Instruction::ORA(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x2 => Instruction::AND(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0x3 => Instruction::AND(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x4 => Instruction::EOR(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0x5 => Instruction::EOR(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x6 => Instruction::ADC(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0x7 => Instruction::ADC(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0x8 => Instruction::STA(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0x9 => Instruction::STA(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    5,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xA => Instruction::LDA(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0xB => Instruction::LDA(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xC => Instruction::CMP(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0xD => Instruction::CMP(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xE => Instruction::SBC(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0xF => Instruction::SBC(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
+                0x0 => Instruction::ORA(AddressingMode::Absolute, 3, 4),
+                0x1 => Instruction::ORA(AddressingMode::AbsoluteX, 3, 4),
+                0x2 => Instruction::AND(AddressingMode::Absolute, 3, 4),
+                0x3 => Instruction::AND(AddressingMode::AbsoluteX, 3, 4),
+                0x4 => Instruction::EOR(AddressingMode::Absolute, 3, 4),
+                0x5 => Instruction::EOR(AddressingMode::AbsoluteX, 3, 4),
+                0x6 => Instruction::ADC(AddressingMode::Absolute, 3, 4),
+                0x7 => Instruction::ADC(AddressingMode::AbsoluteX, 3, 4),
+                0x8 => Instruction::STA(AddressingMode::Absolute, 3, 4),
+                0x9 => Instruction::STA(AddressingMode::AbsoluteX, 3, 5),
+                0xA => Instruction::LDA(AddressingMode::Absolute, 3, 4),
+                0xB => Instruction::LDA(AddressingMode::AbsoluteX, 3, 4),
+                0xC => Instruction::CMP(AddressingMode::Absolute, 3, 4),
+                0xD => Instruction::CMP(AddressingMode::AbsoluteX, 3, 4),
+                0xE => Instruction::SBC(AddressingMode::Absolute, 3, 4),
+                0xF => Instruction::SBC(AddressingMode::AbsoluteX, 3, 4),
                 _ => panic!("nibble should have only 4 bits"),
             },
             0xE => match high_nibble {
-                0x0 => Instruction::ASL(AddressingMode::Absolute, 3, 6, Penalty::None),
-                0x1 => Instruction::ASL(AddressingMode::AbsoluteX, 3, 7, Penalty::None),
-                0x2 => Instruction::ROL(AddressingMode::Absolute, 3, 6, Penalty::None),
-                0x3 => Instruction::ROL(AddressingMode::AbsoluteX, 3, 7, Penalty::None),
-                0x4 => Instruction::LSR(AddressingMode::Absolute, 3, 6, Penalty::None),
-                0x5 => Instruction::LSR(AddressingMode::AbsoluteX, 3, 7, Penalty::None),
-                0x6 => Instruction::ROR(AddressingMode::Absolute, 3, 6, Penalty::None),
-                0x7 => Instruction::ROR(AddressingMode::AbsoluteX, 3, 7, Penalty::None),
-                0x8 => Instruction::STX(AddressingMode::Absolute, 3, 4, Penalty::None),
+                0x0 => Instruction::ASL(AddressingMode::Absolute, 3, 6),
+                0x1 => Instruction::ASL(AddressingMode::AbsoluteX, 3, 7),
+                0x2 => Instruction::ROL(AddressingMode::Absolute, 3, 6),
+                0x3 => Instruction::ROL(AddressingMode::AbsoluteX, 3, 7),
+                0x4 => Instruction::LSR(AddressingMode::Absolute, 3, 6),
+                0x5 => Instruction::LSR(AddressingMode::AbsoluteX, 3, 7),
+                0x6 => Instruction::ROR(AddressingMode::Absolute, 3, 6),
+                0x7 => Instruction::ROR(AddressingMode::AbsoluteX, 3, 7),
+                0x8 => Instruction::STX(AddressingMode::Absolute, 3, 4),
                 0x9 => Instruction::KIL,
-                0xA => Instruction::LDX(AddressingMode::Absolute, 3, 4, Penalty::None),
-                0xB => Instruction::LDX(
-                    AddressingMode::AbsoluteX,
-                    3,
-                    4,
-                    Penalty::PageBoundaryCrossed,
-                ),
-                0xC => Instruction::DEC(AddressingMode::Absolute, 3, 6, Penalty::None),
-                0xD => Instruction::DEC(AddressingMode::AbsoluteX, 3, 7, Penalty::None),
-                0xE => Instruction::INC(AddressingMode::Absolute, 3, 6, Penalty::None),
-                0xF => Instruction::INC(AddressingMode::AbsoluteX, 3, 7, Penalty::None),
+                0xA => Instruction::LDX(AddressingMode::Absolute, 3, 4),
+                0xB => Instruction::LDX(AddressingMode::AbsoluteX, 3, 4),
+                0xC => Instruction::DEC(AddressingMode::Absolute, 3, 6),
+                0xD => Instruction::DEC(AddressingMode::AbsoluteX, 3, 7),
+                0xE => Instruction::INC(AddressingMode::Absolute, 3, 6),
+                0xF => Instruction::INC(AddressingMode::AbsoluteX, 3, 7),
                 _ => panic!("nibble should have only 4 bits"),
             },
             _ => panic!("nibble should have only 4 bits"),
@@ -541,145 +421,134 @@ pub enum AddressingMode {
     IndirectY,
 }
 
-#[derive(Debug)]
-pub enum Penalty {
-    /// Don't add clock cycles
-    None,
-    /// Add one to the number of clock cycles if page boundary crossed
-    PageBoundaryCrossed,
-    /// Add one to the number of clock cycles if branch occurs to same page
-    /// Add two to the number of clock cycles if branch occurs to different page
-    BranchTaken,
-}
-
 /// Tuple is (addressing mode, instruction bytes, clock cycles,ClockCycles)
 #[derive(Debug)]
 pub enum Instruction {
     /// Add Memory to Accumulator with Carry
-    ADC(AddressingMode, u32, u32, Penalty),
+    ADC(AddressingMode, u32, u32),
     /// "AND" Memory with Accumulator
-    AND(AddressingMode, u32, u32, Penalty),
+    AND(AddressingMode, u32, u32),
     /// Shift Left One Bit (Memory or Accumulator,ClockCycles)
-    ASL(AddressingMode, u32, u32, Penalty),
+    ASL(AddressingMode, u32, u32),
 
     /// Branch on Carry Clear
-    BCC(AddressingMode, u32, u32, Penalty),
+    BCC(AddressingMode, u32, u32),
     /// Branch on Carry Set
-    BCS(AddressingMode, u32, u32, Penalty),
+    BCS(AddressingMode, u32, u32),
     /// Branch on Result Zero
-    BEQ(AddressingMode, u32, u32, Penalty),
+    BEQ(AddressingMode, u32, u32),
     /// Test Bits in Memory with Accumulator
-    BIT(AddressingMode, u32, u32, Penalty),
+    BIT(AddressingMode, u32, u32),
     /// Branch on Result Minus
-    BMI(AddressingMode, u32, u32, Penalty),
+    BMI(AddressingMode, u32, u32),
     /// Branch on Result not Zero
-    BNE(AddressingMode, u32, u32, Penalty),
+    BNE(AddressingMode, u32, u32),
     /// Branch on Result Plus
-    BPL(AddressingMode, u32, u32, Penalty),
+    BPL(AddressingMode, u32, u32),
     /// Force Break
-    BRK(AddressingMode, u32, u32, Penalty),
+    BRK(AddressingMode, u32, u32),
     /// Branch on Overflow Clear
-    BVC(AddressingMode, u32, u32, Penalty),
+    BVC(AddressingMode, u32, u32),
     /// Branch on Overflow Set
-    BVS(AddressingMode, u32, u32, Penalty),
+    BVS(AddressingMode, u32, u32),
 
     /// Clear Carry Flag
-    CLC(AddressingMode, u32, u32, Penalty),
+    CLC(AddressingMode, u32, u32),
     /// Clear Decimal Mode
-    CLD(AddressingMode, u32, u32, Penalty),
+    CLD(AddressingMode, u32, u32),
     /// Clear Interrupt Disable Bit
-    CLI(AddressingMode, u32, u32, Penalty),
+    CLI(AddressingMode, u32, u32),
     /// Clear Overflow Flag
-    CLV(AddressingMode, u32, u32, Penalty),
+    CLV(AddressingMode, u32, u32),
     /// Compare Memory and Accumulator
-    CMP(AddressingMode, u32, u32, Penalty),
+    CMP(AddressingMode, u32, u32),
     /// Compare Memory and Index X
-    CPX(AddressingMode, u32, u32, Penalty),
+    CPX(AddressingMode, u32, u32),
     /// Compare Memory and Index Y
-    CPY(AddressingMode, u32, u32, Penalty),
+    CPY(AddressingMode, u32, u32),
 
     /// Decrement Memory by One
-    DEC(AddressingMode, u32, u32, Penalty),
+    DEC(AddressingMode, u32, u32),
     /// Decrement Index X by One
-    DEX(AddressingMode, u32, u32, Penalty),
+    DEX(AddressingMode, u32, u32),
     /// Decrement Index Y by One
-    DEY(AddressingMode, u32, u32, Penalty),
+    DEY(AddressingMode, u32, u32),
 
     /// "Exclusive-OR" Memory with Accumulator
-    EOR(AddressingMode, u32, u32, Penalty),
+    EOR(AddressingMode, u32, u32),
 
     /// Increment Memory by One
-    INC(AddressingMode, u32, u32, Penalty),
+    INC(AddressingMode, u32, u32),
     /// Increment Index X by One
-    INX(AddressingMode, u32, u32, Penalty),
+    INX(AddressingMode, u32, u32),
     /// Increment Index Y by One
-    INY(AddressingMode, u32, u32, Penalty),
+    INY(AddressingMode, u32, u32),
 
     /// Jump to New Location
-    JMP(AddressingMode, u32, u32, Penalty),
+    JMP(AddressingMode, u32, u32),
     /// Jump to New Location Saving Return Address
-    JSR(AddressingMode, u32, u32, Penalty),
+    JSR(AddressingMode, u32, u32),
 
     /// Load Accumulator with Memory
-    LDA(AddressingMode, u32, u32, Penalty),
+    LDA(AddressingMode, u32, u32),
     /// Load Index X with Memory
-    LDX(AddressingMode, u32, u32, Penalty),
+    LDX(AddressingMode, u32, u32),
     /// Load Index Y with Memory
-    LDY(AddressingMode, u32, u32, Penalty),
+    LDY(AddressingMode, u32, u32),
     /// Shift One Bit Right (Memory or Accumulator,ClockCycles)
-    LSR(AddressingMode, u32, u32, Penalty),
+    LSR(AddressingMode, u32, u32),
 
     /// No Operation
-    NOP(AddressingMode, u32, u32, Penalty),
+    NOP(AddressingMode, u32, u32),
 
     /// "OR" Memory with Accumulator
-    ORA(AddressingMode, u32, u32, Penalty),
+    ORA(AddressingMode, u32, u32),
 
     /// Push Accumulator on Stack
-    PHA(AddressingMode, u32, u32, Penalty),
+    PHA(AddressingMode, u32, u32),
     /// Push Processor Status on Stack
-    PHP(AddressingMode, u32, u32, Penalty),
+    PHP(AddressingMode, u32, u32),
     /// Pull Accumulator from Stack
-    PLA(AddressingMode, u32, u32, Penalty),
+    PLA(AddressingMode, u32, u32),
     /// Pull Processor Status from Stack
-    PLP(AddressingMode, u32, u32, Penalty),
+    PLP(AddressingMode, u32, u32),
 
     /// Rotate One Bit Left (Memory or Accumulator,ClockCycles)
-    ROL(AddressingMode, u32, u32, Penalty),
+    ROL(AddressingMode, u32, u32),
     /// Rotate One Bit Right (Memory or Accumulator,ClockCycles)
-    ROR(AddressingMode, u32, u32, Penalty),
+    ROR(AddressingMode, u32, u32),
     /// Return from Interrupt
-    RTI(AddressingMode, u32, u32, Penalty),
+    RTI(AddressingMode, u32, u32),
     /// Return from Subroutine
-    RTS(AddressingMode, u32, u32, Penalty),
+    RTS(AddressingMode, u32, u32),
 
     /// Subtract Memory from Accumulator with Borrow
-    SBC(AddressingMode, u32, u32, Penalty),
+    SBC(AddressingMode, u32, u32),
     /// Set Carry Flag
-    SEC(AddressingMode, u32, u32, Penalty),
+    SEC(AddressingMode, u32, u32),
     /// Set Decimal Mode
-    SED(AddressingMode, u32, u32, Penalty),
+    SED(AddressingMode, u32, u32),
     /// Set Interrupt Disable Status
-    SEI(AddressingMode, u32, u32, Penalty),
+    SEI(AddressingMode, u32, u32),
     /// Store Accumulator in Memoryj
-    STA(AddressingMode, u32, u32, Penalty),
+    STA(AddressingMode, u32, u32),
     /// Store Index X in Memory
-    STX(AddressingMode, u32, u32, Penalty),
+    STX(AddressingMode, u32, u32),
     /// Store Index Y in Memory
-    STY(AddressingMode, u32, u32, Penalty),
+    STY(AddressingMode, u32, u32),
 
     /// Transfer Accumulator to Index X
-    TAX(AddressingMode, u32, u32, Penalty),
+    TAX(AddressingMode, u32, u32),
     /// Transfer Accumulator to Index Y
-    TAY(AddressingMode, u32, u32, Penalty),
+    TAY(AddressingMode, u32, u32),
     /// Transfer Stack Pointer to Index X
-    TSX(AddressingMode, u32, u32, Penalty),
+    TSX(AddressingMode, u32, u32),
     /// Transfer Index X to Accumulator
-    TXA(AddressingMode, u32, u32, Penalty),
+    TXA(AddressingMode, u32, u32),
     /// Transfer Index X to Stack Register
-    TXS(AddressingMode, u32, u32, Penalty),
+    TXS(AddressingMode, u32, u32),
     /// Transfer Index Y to Accumulator
-    TYA(AddressingMode, u32, u32, Penalty),
+    TYA(AddressingMode, u32, u32),
 
     /// Illegal opcode
     KIL,
@@ -1163,12 +1032,12 @@ impl Mos6502 {
     fn execute_instruction(&mut self) {
         let instruction = self.instruction_register.decode_instruction();
         match instruction {
-            Instruction::ADC(mode, _, cycles, _) => {
+            Instruction::ADC(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.alu.add_with_carry(&mut self.p);
             }
-            Instruction::AND(mode, _, cycles, _) => {
+            Instruction::AND(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
 
@@ -1180,7 +1049,7 @@ impl Mos6502 {
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
             }
-            Instruction::ASL(mode, _, cycles, _) => {
+            Instruction::ASL(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 let operand = self.data_bus.borrow().read();
@@ -1197,10 +1066,10 @@ impl Mos6502 {
                     self.data_bus.borrow().write_to_bus();
                 }
             }
-            Instruction::BCC(mode, _, cycles, _) => self.branch(!self.p.carry, mode, cycles),
-            Instruction::BCS(mode, _, cycles, _) => self.branch(self.p.carry, mode, cycles),
-            Instruction::BEQ(mode, _, cycles, _) => self.branch(self.p.zero, mode, cycles),
-            Instruction::BIT(mode, _, cycles, _) => {
+            Instruction::BCC(mode, _, cycles) => self.branch(!self.p.carry, mode, cycles),
+            Instruction::BCS(mode, _, cycles) => self.branch(self.p.carry, mode, cycles),
+            Instruction::BEQ(mode, _, cycles) => self.branch(self.p.zero, mode, cycles),
+            Instruction::BIT(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 let operand = self.data_bus.borrow().read();
@@ -1208,10 +1077,10 @@ impl Mos6502 {
                 self.p.overflow = operand & 0x40 == 0x40;
                 self.p.zero = operand & self.a.borrow().read() == 0;
             }
-            Instruction::BMI(mode, _, cycles, _) => self.branch(self.p.negative, mode, cycles),
-            Instruction::BNE(mode, _, cycles, _) => self.branch(!self.p.zero, mode, cycles),
-            Instruction::BPL(mode, _, cycles, _) => self.branch(!self.p.negative, mode, cycles),
-            Instruction::BRK(_, bytes, cycles, _) => {
+            Instruction::BMI(mode, _, cycles) => self.branch(self.p.negative, mode, cycles),
+            Instruction::BNE(mode, _, cycles) => self.branch(!self.p.zero, mode, cycles),
+            Instruction::BPL(mode, _, cycles) => self.branch(!self.p.negative, mode, cycles),
+            Instruction::BRK(_, bytes, cycles) => {
                 self.cycles = cycles;
 
                 let mut address_bus = self.address_bus.borrow_mut();
@@ -1239,44 +1108,40 @@ impl Mos6502 {
                 self.data_bus.borrow_mut().read_from_bus();
                 pc.read_high_from_data_bus();
             }
-            Instruction::BVC(mode, _, cycles, _) => self.branch(!self.p.overflow, mode, cycles),
-            Instruction::BVS(mode, _, cycles, _) => self.branch(self.p.overflow, mode, cycles),
-            Instruction::CLC(_, _, cycles, _) => {
+            Instruction::BVC(mode, _, cycles) => self.branch(!self.p.overflow, mode, cycles),
+            Instruction::BVS(mode, _, cycles) => self.branch(self.p.overflow, mode, cycles),
+            Instruction::CLC(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.carry = false;
             }
-            Instruction::CLD(_, _, cycles, _) => {
+            Instruction::CLD(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.decimal_mode = false;
             }
-            Instruction::CLI(_, _, cycles, _) => {
+            Instruction::CLI(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.irq_disable = false;
             }
-            Instruction::CLV(_, _, cycles, _) => {
+            Instruction::CLV(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.overflow = false;
             }
-            Instruction::CMP(mode, _, cycles, _) => {
+            Instruction::CMP(mode, _, cycles) => {
                 let operand = self.a.borrow().read();
                 self.compare(mode, operand, cycles)
             }
-            Instruction::CPX(mode, _, cycles, _) => self.compare(mode, self.x, cycles),
-            Instruction::CPY(mode, _, cycles, _) => self.compare(mode, self.y, cycles),
-            Instruction::DEC(mode, _, cycles, _) => {
+            Instruction::CPX(mode, _, cycles) => self.compare(mode, self.x, cycles),
+            Instruction::CPY(mode, _, cycles) => self.compare(mode, self.y, cycles),
+            Instruction::DEC(mode, _, cycles) => {
                 self.do_addressing_mode(mode);
                 let memory = self.data_bus.borrow().read();
                 let result = self.increment(memory, NEGATIVE_ONE, cycles);
 
                 self.data_bus.borrow_mut().write_directly_to_bus(result);
             }
-            Instruction::DEX(_, _, cycles, _) => {
-                self.x = self.increment(self.x, NEGATIVE_ONE, cycles)
-            }
-            Instruction::DEY(_, _, cycles, _) => {
-                self.y = self.increment(self.y, NEGATIVE_ONE, cycles)
-            }
-            Instruction::EOR(mode, _, cycles, _) => {
+            Instruction::DEX(_, _, cycles) => self.x = self.increment(self.x, NEGATIVE_ONE, cycles),
+            Instruction::DEY(_, _, cycles) => self.y = self.increment(self.y, NEGATIVE_ONE, cycles),
+            Instruction::EOR(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
@@ -1288,17 +1153,17 @@ impl Mos6502 {
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
             }
-            Instruction::INC(mode, _, cycles, _) => {
+            Instruction::INC(mode, _, cycles) => {
                 self.do_addressing_mode(mode);
                 let operand = self.data_bus.borrow().read();
 
                 let result = self.increment(operand, 1, cycles);
                 self.data_bus.borrow_mut().write_directly_to_bus(result);
             }
-            Instruction::INX(_, _, cycles, _) => self.x = self.increment(self.x, 1, cycles),
-            Instruction::INY(_, _, cycles, _) => self.y = self.increment(self.y, 1, cycles),
-            Instruction::JMP(mode, _, cycles, _) => self.jump(mode, cycles),
-            Instruction::JSR(mode, bytes, cycles, _) => {
+            Instruction::INX(_, _, cycles) => self.x = self.increment(self.x, 1, cycles),
+            Instruction::INY(_, _, cycles) => self.y = self.increment(self.y, 1, cycles),
+            Instruction::JMP(mode, _, cycles) => self.jump(mode, cycles),
+            Instruction::JSR(mode, bytes, cycles) => {
                 let address_low = self
                     .pc
                     .borrow()
@@ -1324,25 +1189,25 @@ impl Mos6502 {
 
                 self.jump(mode, cycles);
             }
-            Instruction::LDA(mode, _, cycles, _) => {
+            Instruction::LDA(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
                 self.a.borrow_mut().read_from_bus();
             }
-            Instruction::LDX(mode, _, cycles, _) => {
+            Instruction::LDX(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
                 self.x = self.data_bus.borrow().read();
             }
-            Instruction::LDY(mode, _, cycles, _) => {
+            Instruction::LDY(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
                 self.y = self.data_bus.borrow().read();
             }
-            Instruction::LSR(mode, _, cycles, _) => {
+            Instruction::LSR(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
@@ -1358,8 +1223,8 @@ impl Mos6502 {
                     self.data_bus.borrow().write_to_bus();
                 }
             }
-            Instruction::NOP(_, _, cycles, _) => self.cycles = cycles,
-            Instruction::ORA(mode, _, cycles, _) => {
+            Instruction::NOP(_, _, cycles) => self.cycles = cycles,
+            Instruction::ORA(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
@@ -1371,7 +1236,7 @@ impl Mos6502 {
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
             }
-            Instruction::PHA(_, _, cycles, _) => {
+            Instruction::PHA(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.address_bus
@@ -1382,7 +1247,7 @@ impl Mos6502 {
                     .write_directly_to_bus(self.a.borrow().read());
                 self.s -= 1;
             }
-            Instruction::PHP(_, _, cycles, _) => {
+            Instruction::PHP(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.address_bus
@@ -1393,7 +1258,7 @@ impl Mos6502 {
                     .write_directly_to_bus(self.p.get());
                 self.s -= 1;
             }
-            Instruction::PLA(_, _, cycles, _) => {
+            Instruction::PLA(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s += 1;
@@ -1405,7 +1270,7 @@ impl Mos6502 {
                 self.p.negative = value & 0x80 == 0x80;
                 self.p.zero = value == 0;
             }
-            Instruction::PLP(_, _, cycles, _) => {
+            Instruction::PLP(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s += 1;
@@ -1415,7 +1280,7 @@ impl Mos6502 {
                 let value = self.data_bus.borrow_mut().read_directly_from_bus();
                 self.p.set(value);
             }
-            Instruction::ROL(mode, _, cycles, _) => {
+            Instruction::ROL(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
@@ -1433,7 +1298,7 @@ impl Mos6502 {
                     self.data_bus.borrow_mut().write_directly_to_bus(result);
                 }
             }
-            Instruction::ROR(mode, _, cycles, _) => {
+            Instruction::ROR(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
@@ -1445,7 +1310,7 @@ impl Mos6502 {
                 self.p.negative = result & 0x80 == 0x80;
                 self.p.zero = result == 0;
             }
-            Instruction::RTI(_, _, cycles, _) => {
+            Instruction::RTI(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s += 1;
@@ -1467,7 +1332,7 @@ impl Mos6502 {
                     .write_directly_to_bus(0x01, self.s);
                 self.pc.borrow_mut().read_high_from_data_bus();
             }
-            Instruction::RTS(_, _, cycles, _) => {
+            Instruction::RTS(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s += 1;
@@ -1482,73 +1347,73 @@ impl Mos6502 {
                     .write_directly_to_bus(0x01, self.s);
                 self.pc.borrow_mut().read_high_from_data_bus();
             }
-            Instruction::SBC(mode, _, cycles, _) => {
+            Instruction::SBC(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.alu.subtract_with_borrow(&mut self.p);
             }
-            Instruction::SEC(_, _, cycles, _) => {
+            Instruction::SEC(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.carry = true;
             }
-            Instruction::SED(_, _, cycles, _) => {
+            Instruction::SED(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.decimal_mode = true;
             }
-            Instruction::SEI(_, _, cycles, _) => {
+            Instruction::SEI(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.irq_disable = true;
             }
-            Instruction::STA(mode, _, cycles, _) => {
+            Instruction::STA(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.a.borrow().write_to_bus();
                 self.data_bus.borrow().write_to_bus();
             }
-            Instruction::STX(mode, _, cycles, _) => {
+            Instruction::STX(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.data_bus.borrow_mut().write_directly_to_bus(self.x);
             }
-            Instruction::STY(mode, _, cycles, _) => {
+            Instruction::STY(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.data_bus.borrow_mut().write_directly_to_bus(self.y);
             }
-            Instruction::TAX(_, _, cycles, _) => {
+            Instruction::TAX(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.x = self.a.borrow().read();
                 self.p.negative = self.x & 0x80 == 0x80;
                 self.p.zero = self.x == 0;
             }
-            Instruction::TAY(_, _, cycles, _) => {
+            Instruction::TAY(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.y = self.a.borrow().read();
                 self.p.negative = self.y & 0x80 == 0x80;
                 self.p.zero = self.y == 0;
             }
-            Instruction::TSX(_, _, cycles, _) => {
+            Instruction::TSX(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.x = self.s;
                 self.p.negative = self.x & 0x80 == 0x80;
                 self.p.zero = self.x == 0;
             }
-            Instruction::TXA(_, _, cycles, _) => {
+            Instruction::TXA(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.a.borrow_mut().write(self.x);
                 self.p.negative = self.a.borrow().read() & 0x80 == 0x80;
                 self.p.zero = self.a.borrow().read() == 0x00;
             }
-            Instruction::TXS(_, _, cycles, _) => {
+            Instruction::TXS(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s = self.x;
             }
-            Instruction::TYA(_, _, cycles, _) => {
+            Instruction::TYA(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.a.borrow_mut().write(self.y);
