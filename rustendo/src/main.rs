@@ -1,6 +1,8 @@
-use rustendo_lib::rp2a03::Rp2a03;
+use rustendo_lib::nes::Nes;
 
 fn main() {
-    let mut rp2a03 = Rp2a03::new(None);
-    rp2a03.clock();
+    let mut nes = Nes::new();
+    loop {
+        nes.clock();
+    }
 }

@@ -22,6 +22,8 @@ impl Connect for Ram {
             None => return,
         }
     }
+
+    fn clock(&mut self) {}
 }
 
 impl Ram {

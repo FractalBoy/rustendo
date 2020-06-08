@@ -2,4 +2,6 @@ mod assembler;
 mod bus;
 mod mos6502;
 mod ram;
-pub mod rp2a03;
+mod cartridge;
+mod nes2c02;
+pub mod nes;

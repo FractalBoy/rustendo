@@ -1,7 +1,10 @@
-use crate::mos6502::AddressingMode;
-use crate::rp2a03::Rp2a03;
+use crate::bus::Bus;
+use crate::mos6502::{AddressingMode, Mos6502};
+use crate::ram::Ram;
 use regex::Regex;
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub enum AssemblerError {
     InvalidInstruction(u32),
@@ -231,7 +234,7 @@ fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
 }
 
 #[allow(dead_code)]
-pub fn run_program(program: &str) -> Result<Rp2a03, AssemblerError> {
+pub fn run_program(program: &str) -> Result<Rc<RefCell<Bus>>, AssemblerError> {
     let program = match assemble_program(&program) {
         Ok(program) => program,
         Err(error) => return Err(error),
@@ -240,11 +243,18 @@ pub fn run_program(program: &str) -> Result<Rp2a03, AssemblerError> {
     for instruction in program.iter().cloned() {
         mem.extend_from_slice(&instruction);
     }
-    let mut rp2a03 = Rp2a03::new(Some(&mem));
+
+    let mut bus = Bus::new();
+    let mut ram = Box::new(Ram::new());
+    ram.load_mem(&mem);
+    bus.connect(ram);
+    let bus = Rc::new(RefCell::new(bus));
+
+    let mut cpu = Mos6502::new(&bus);
     for _ in 0..program.len() {
-        while !rp2a03.clock() {}
+        while !cpu.clock() {}
     }
-    Ok(rp2a03)
+    Ok(Rc::clone(&bus))
 }
 
 fn lookup_instruction(instruction: &str, addressing_mode: AddressingMode) -> Option<u8> {
