@@ -18,7 +18,7 @@ enum ConsoleType {
     NES,
     NintendoVsSystem,
     NintendoPlaychoice10,
-    ExtendedConsoleType
+    ExtendedConsoleType,
 }
 
 impl Cartridge {
@@ -29,6 +29,10 @@ impl Cartridge {
         } else {
             Cartridge::read_ines(raw)
         }
+    }
+
+    pub fn read(&self, address: u16) -> u8 {
+        unimplemented!();
     }
 
     fn read_ines(raw: Vec<u8>) -> Self {
@@ -52,7 +56,7 @@ impl Cartridge {
             0x1 => ConsoleType::NintendoVsSystem,
             0x2 => ConsoleType::NintendoPlaychoice10,
             0x3 => ConsoleType::ExtendedConsoleType,
-            t => panic!("{} is not a valid console type", t)
+            t => panic!("{} is not a valid console type", t),
         };
         unimplemented!();
     }
@@ -64,7 +68,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-//    #[test]
+    //    #[test]
     fn it_works() {
         let current_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let nes_test = current_dir.parent().unwrap().join("nestest.nes");
