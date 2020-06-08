@@ -1,29 +1,5 @@
-use crate::bus::Connect;
-
 pub struct Ram {
     ram: [u8; 0x800],
-}
-
-impl Connect for Ram {
-    fn read(&self, address_high: u8, address_low: u8) -> Option<u8> {
-        let address = ((address_high as u16) << 8) | (address_low as u16);
-
-        match self.find_address(address) {
-            Some(address) => Some(self.ram[address as usize]),
-            None => None,
-        }
-    }
-
-    fn write(&mut self, address_high: u8, address_low: u8, data: u8) {
-        let address = ((address_high as u16) << 8) | (address_low as u16);
-
-        match self.find_address(address) {
-            Some(address) => self.ram[address as usize] = data,
-            None => return,
-        }
-    }
-
-    fn clock(&mut self) {}
 }
 
 impl Ram {
@@ -38,6 +14,20 @@ impl Ram {
             0x1000..=0x17FF => Some(address - 0x1000),
             0x1800..=0x1FFF => Some(address - 0x1800),
             _ => None,
+        }
+    }
+
+    pub fn read(&self, address: u16) -> Option<u8> {
+        match self.find_address(address) {
+            Some(address) => Some(self.ram[address as usize]),
+            None => None,
+        }
+    }
+
+    pub fn write(&mut self, address: u16, data: u8) {
+        match self.find_address(address) {
+            Some(address) => self.ram[address as usize] = data,
+            None => return,
         }
     }
 

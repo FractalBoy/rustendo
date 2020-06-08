@@ -6,15 +6,11 @@ const NEGATIVE_ONE: u8 = !1 + 1;
 
 struct DataBus {
     data: u8,
-    bus: Rc<RefCell<Bus>>,
 }
 
 impl DataBus {
-    pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
-        DataBus {
-            data: 0,
-            bus: Rc::clone(bus),
-        }
+    pub fn new() -> Self {
+        DataBus { data: 0 }
     }
 
     pub fn read(&self) -> u8 {
@@ -24,56 +20,28 @@ impl DataBus {
     pub fn write(&mut self, data: u8) {
         self.data = data
     }
-
-    pub fn write_to_bus(&self) {
-        self.bus.borrow_mut().write_data(self.data);
-        self.bus.borrow_mut().write();
-    }
-
-    pub fn write_directly_to_bus(&mut self, data: u8) {
-        self.write(data);
-        self.write_to_bus();
-    }
-
-    pub fn read_from_bus(&mut self) {
-        self.data = self.bus.borrow_mut().read();
-    }
-
-    pub fn read_directly_from_bus(&mut self) -> u8 {
-        self.read_from_bus();
-        self.read()
-    }
 }
 
 struct AddressBus {
     address_high: u8,
     address_low: u8,
-    bus: Rc<RefCell<Bus>>,
 }
 
 impl AddressBus {
-    pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
+    pub fn new() -> Self {
         AddressBus {
             address_high: 0,
             address_low: 0,
-            bus: Rc::clone(bus),
         }
+    }
+
+    fn address(&self) -> u16 {
+        ((self.address_high as u16) << 8) | self.address_low as u16
     }
 
     pub fn write(&mut self, address_high: u8, address_low: u8) {
         self.address_high = address_high;
         self.address_low = address_low;
-    }
-
-    pub fn write_directly_to_bus(&mut self, address_high: u8, address_low: u8) {
-        self.write(address_high, address_low);
-        self.write_to_bus();
-    }
-
-    pub fn write_to_bus(&self) {
-        self.bus
-            .borrow_mut()
-            .write_address(self.address_high, self.address_low);
     }
 }
 
@@ -95,9 +63,7 @@ impl ProgramCounter {
     }
 
     pub fn write_to_address_bus(&self) {
-        self.address_bus
-            .borrow_mut()
-            .write_directly_to_bus(self.pch, self.pcl);
+        self.address_bus.borrow_mut().write(self.pch, self.pcl);
     }
 
     pub fn read_high_from_data_bus(&mut self) {
@@ -731,6 +697,8 @@ pub struct Mos6502 {
     data_bus: Rc<RefCell<DataBus>>,
     /// Internal address bus
     address_bus: Rc<RefCell<AddressBus>>,
+    /// External bus
+    bus: Rc<RefCell<Bus>>,
     /// Number of cycles remaining in current instruction
     cycles: u32,
     /// Number of input clocks since startup.
@@ -757,10 +725,10 @@ enum IndexRegister {
 impl Mos6502 {
     /// Initializes a new `Mos6502` processor emulator.
     pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
-        let data_bus = DataBus::new(bus);
+        let data_bus = DataBus::new();
         let data_bus = Rc::new(RefCell::new(data_bus));
 
-        let address_bus = AddressBus::new(bus);
+        let address_bus = AddressBus::new();
         let address_bus = Rc::new(RefCell::new(address_bus));
 
         let a = Accumulator::new(&data_bus);
@@ -785,6 +753,7 @@ impl Mos6502 {
             p,
             data_bus,
             address_bus,
+            bus: Rc::clone(bus),
             cycles: 0,
             clocks: 0,
             ready: false,
@@ -795,6 +764,26 @@ impl Mos6502 {
             sync: false,
             interrupt_vector: 0xFFFE,
         }
+    }
+
+    fn write_address(&mut self, address_high: u8, address_low: u8) {
+        self.address_bus
+            .borrow_mut()
+            .write(address_high, address_low);
+    }
+
+    fn read(&mut self) -> u8 {
+        let address = self.address_bus.borrow().address();
+        let data = self.bus.borrow_mut().read(address);
+        self.data_bus.borrow_mut().write(data);
+        self.data_bus.borrow().read()
+    }
+
+    fn write(&mut self) {
+        self.bus.borrow_mut().write(
+            self.address_bus.borrow().address(),
+            self.data_bus.borrow().read(),
+        );
     }
 
     /// Runs the processor for a single clock cycle.
@@ -836,11 +825,9 @@ impl Mos6502 {
     }
 
     fn fetch_next_byte(&mut self) -> u8 {
-        let mut pc = self.pc.borrow_mut();
-        pc.increment();
-        pc.write_to_address_bus();
-        self.address_bus.borrow().write_to_bus();
-        self.data_bus.borrow_mut().read_directly_from_bus()
+        self.pc.borrow_mut().increment();
+        self.pc.borrow().write_to_address_bus();
+        self.read()
     }
 
     fn absolute_indexed_addressing(&mut self, index: IndexRegister) {
@@ -863,8 +850,8 @@ impl Mos6502 {
 
         self.address_bus
             .borrow_mut()
-            .write_directly_to_bus(address_high, address_low);
-        self.data_bus.borrow_mut().read_from_bus();
+            .write(address_high, address_low);
+        self.read();
     }
 
     fn do_addressing_mode(&mut self, mode: AddressingMode) {
@@ -874,8 +861,8 @@ impl Mos6502 {
                 let address_high = self.fetch_next_byte();
                 self.address_bus
                     .borrow_mut()
-                    .write_directly_to_bus(address_high, address_low);
-                self.data_bus.borrow_mut().read_from_bus();
+                    .write(address_high, address_low);
+                self.read();
             }
             AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
             AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
@@ -889,39 +876,40 @@ impl Mos6502 {
             AddressingMode::Implied => return,
             AddressingMode::Indirect => {
                 let zero_page_offset = self.fetch_next_byte();
-                let mut address_bus = self.address_bus.borrow_mut();
-                let mut data_bus = self.data_bus.borrow_mut();
-                address_bus.write_directly_to_bus(0, zero_page_offset);
-                let address_low = data_bus.read_directly_from_bus();
-                address_bus.write_directly_to_bus(0, zero_page_offset + 1);
-                let address_high = data_bus.read_directly_from_bus();
-                address_bus.write_directly_to_bus(address_high, address_low);
-                self.data_bus.borrow_mut().read_from_bus();
+
+                self.write_address(0, zero_page_offset);
+                let address_low = self.read();
+
+                self.write_address(0, zero_page_offset + 1);
+                let address_high = self.read();
+
+                self.write_address(address_high, address_low);
+                self.read();
             }
             AddressingMode::IndirectX => {
                 // Indexed indirect addressing with register X
                 let zero_page_offset = self.fetch_next_byte();
-                let mut address_bus = self.address_bus.borrow_mut();
-                let mut data_bus = self.data_bus.borrow_mut();
                 let zero_page_offset = zero_page_offset.wrapping_add(self.x);
-                address_bus.write_directly_to_bus(0, zero_page_offset);
-                let address_low = data_bus.read_directly_from_bus();
+                self.write_address(0, zero_page_offset);
+                let address_low = self.read();
+
                 let zero_page_offset = zero_page_offset.wrapping_add(1);
-                address_bus.write_directly_to_bus(0, zero_page_offset);
-                let address_high = data_bus.read_directly_from_bus();
-                address_bus.write(address_high, address_low);
-                self.data_bus.borrow_mut().read_from_bus();
+                self.write_address(0, zero_page_offset);
+                let address_high = self.read();
+
+                self.write_address(address_high, address_low);
+                self.read();
             }
             AddressingMode::IndirectY => {
                 // Indirect indexed addressing with register Y
                 let zero_page_offset = self.fetch_next_byte();
-                let mut address_bus = self.address_bus.borrow_mut();
-                let mut data_bus = self.data_bus.borrow_mut();
-                address_bus.write_directly_to_bus(0, zero_page_offset);
-                let address_low = data_bus.read_directly_from_bus();
+                self.write_address(0, zero_page_offset);
+                let address_low = self.read();
+
                 let zero_page_offset = zero_page_offset.wrapping_add(1);
-                address_bus.write_directly_to_bus(0, zero_page_offset);
-                let address_high = data_bus.read_directly_from_bus();
+                self.write_address(0, zero_page_offset);
+                let address_high = self.read();
+
                 let (address_low, carry) = address_low.overflowing_add(self.y);
                 let address_high = if carry {
                     // a carry occurred (page boundary crossed), need to add one
@@ -931,8 +919,8 @@ impl Mos6502 {
                 } else {
                     address_high
                 };
-                address_bus.write(address_high, address_low);
-                self.data_bus.borrow_mut().read_from_bus();
+                self.write_address(address_high, address_low);
+                self.read();
             }
             AddressingMode::Relative => {
                 let offset = self.fetch_next_byte();
@@ -968,26 +956,20 @@ impl Mos6502 {
             }
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0, zero_page_offset);
-                self.data_bus.borrow_mut().read_from_bus();
+                self.write_address(0, zero_page_offset);
+                self.read();
             }
             AddressingMode::ZeroPageX => {
                 let zero_page_offset = self.fetch_next_byte();
                 let zero_page_offset = zero_page_offset.wrapping_add(self.x);
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0, zero_page_offset);
-                self.data_bus.borrow_mut().read_from_bus();
+                self.write_address(0, zero_page_offset);
+                self.read();
             }
             AddressingMode::ZeroPageY => {
                 let zero_page_offset = self.fetch_next_byte();
                 let zero_page_offset = zero_page_offset.wrapping_add(self.y);
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0, zero_page_offset);
-                self.data_bus.borrow_mut().read_from_bus();
+                self.write_address(0, zero_page_offset);
+                self.read();
             }
         }
     }
@@ -1034,53 +1016,60 @@ impl Mos6502 {
 
         self.do_addressing_mode(mode);
 
-        self.data_bus.borrow_mut().read_from_bus();
+        self.read();
         self.pc.borrow_mut().read_low_from_data_bus();
 
         self.fetch_next_byte();
-        self.data_bus.borrow_mut().read_from_bus();
+
+        self.read();
         self.pc.borrow_mut().read_high_from_data_bus();
     }
 
     fn interrupt(&mut self, cycles: u32, bytes: u32) {
         self.cycles = cycles;
 
-        let mut address_bus = self.address_bus.borrow_mut();
-        let mut pc = self.pc.borrow_mut();
-        address_bus.write_directly_to_bus(0x01, self.s);
-        let address = pc.wide();
+        let address = self.pc.borrow().wide();
         // Store the next instruction in the stack
         let address = address.wrapping_add(bytes as u16);
         let high = ((address >> 4) & 0x0F) as u8;
         let low = (address & 0x0F) as u8;
+
+        self.write_address(0x01, self.s);
+        self.data_bus.borrow_mut().write(high);
+        self.write();
+
         self.s -= 1;
-        self.data_bus.borrow_mut().write_directly_to_bus(high);
-        address_bus.write_directly_to_bus(0x01, self.s);
+
+        self.write_address(0x01, self.s);
+        self.data_bus.borrow_mut().write(low);
+        self.write();
+
         self.s -= 1;
-        self.data_bus.borrow_mut().write_directly_to_bus(low);
-        address_bus.write_directly_to_bus(0x01, self.s);
-        self.data_bus
-            .borrow_mut()
-            .write_directly_to_bus(self.p.get());
+
+        self.write_address(0x01, self.s);
+        self.data_bus.borrow_mut().write(self.p.get());
+        self.write();
 
         let interrupt_vector = self.interrupt_vector;
         let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
         let vector_low = (interrupt_vector & 0xFF) as u8;
-        address_bus.write_directly_to_bus(vector_high, vector_low);
-        self.data_bus.borrow_mut().read_from_bus();
-        pc.read_low_from_data_bus();
+
+        self.write_address(vector_high, vector_low);
+        self.read();
+        self.pc.borrow_mut().read_low_from_data_bus();
 
         let interrupt_vector = interrupt_vector.wrapping_sub(1);
         let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
         let vector_low = (interrupt_vector & 0xFF) as u8;
-        address_bus.write_directly_to_bus(vector_high, vector_low);
-        self.data_bus.borrow_mut().read_from_bus();
-        pc.read_high_from_data_bus();
+
+        self.write_address(vector_high, vector_low);
+        self.read();
+        self.pc.borrow_mut().read_high_from_data_bus();
     }
 
     fn read_instruction(&mut self) {
         self.pc.borrow().write_to_address_bus();
-        self.data_bus.borrow_mut().read_from_bus();
+        self.read();
         self.instruction_register.read_from_bus();
     }
 
@@ -1118,7 +1107,7 @@ impl Mos6502 {
                 if mode == AddressingMode::Accumulator {
                     self.a.borrow_mut().read_from_bus();
                 } else {
-                    self.data_bus.borrow().write_to_bus();
+                    self.write();
                 }
             }
             Instruction::BCC(mode, _, cycles) => self.branch(!self.p.carry, mode, cycles),
@@ -1165,7 +1154,8 @@ impl Mos6502 {
                 let memory = self.data_bus.borrow().read();
                 let result = self.increment(memory, NEGATIVE_ONE, cycles);
 
-                self.data_bus.borrow_mut().write_directly_to_bus(result);
+                self.data_bus.borrow_mut().write(result);
+                self.write();
             }
             Instruction::DEX(_, _, cycles) => self.x = self.increment(self.x, NEGATIVE_ONE, cycles),
             Instruction::DEY(_, _, cycles) => self.y = self.increment(self.y, NEGATIVE_ONE, cycles),
@@ -1186,7 +1176,8 @@ impl Mos6502 {
                 let operand = self.data_bus.borrow().read();
 
                 let result = self.increment(operand, 1, cycles);
-                self.data_bus.borrow_mut().write_directly_to_bus(result);
+                self.data_bus.borrow_mut().write(result);
+                self.write();
             }
             Instruction::INX(_, _, cycles) => self.x = self.increment(self.x, 1, cycles),
             Instruction::INY(_, _, cycles) => self.y = self.increment(self.y, 1, cycles),
@@ -1204,20 +1195,14 @@ impl Mos6502 {
                 let next_address_low = (next_address & 0x00FF) as u8;
 
                 // Save next instruction location to the stack.
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
-                self.data_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(next_address_high);
+                self.write_address(0x01, self.s);
+                self.data_bus.borrow_mut().write(next_address_high);
+                self.write();
                 self.s -= 1;
 
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
-                self.data_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(next_address_low);
+                self.write_address(0x01, self.s);
+                self.data_bus.borrow_mut().write(next_address_low);
+                self.write();
                 self.s -= 1;
 
                 self.jump(mode, cycles);
@@ -1255,7 +1240,7 @@ impl Mos6502 {
                 if mode == AddressingMode::Accumulator {
                     self.a.borrow_mut().read_from_bus();
                 } else {
-                    self.data_bus.borrow().write_to_bus();
+                    self.write();
                 }
             }
             Instruction::NOP(_, _, cycles) => self.cycles = cycles,
@@ -1274,33 +1259,25 @@ impl Mos6502 {
             Instruction::PHA(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
-                self.data_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(self.a.borrow().read());
+                self.write_address(0x01, self.s);
+                self.data_bus.borrow_mut().write(self.a.borrow().read());
+                self.write();
                 self.s -= 1;
             }
             Instruction::PHP(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
-                self.data_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(self.p.get());
+                self.write_address(0x01, self.s);
+                self.data_bus.borrow_mut().write(self.p.get());
+                self.write();
                 self.s -= 1;
             }
             Instruction::PLA(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s += 1;
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
-                let value = self.data_bus.borrow_mut().read_directly_from_bus();
+                self.write_address(0x01, self.s);
+                let value = self.read();
                 self.a.borrow_mut().write(value);
                 self.p.negative = value & 0x80 == 0x80;
                 self.p.zero = value == 0;
@@ -1309,10 +1286,8 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 self.s += 1;
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
-                let value = self.data_bus.borrow_mut().read_directly_from_bus();
+                self.write_address(0x01, self.s);
+                let value = self.read();
                 self.p.set(value);
             }
             Instruction::ROL(mode, _, cycles) => {
@@ -1327,10 +1302,12 @@ impl Mos6502 {
                 self.p.negative = result & 0x80 == 0x80;
                 self.p.zero = result == 0;
 
+                self.data_bus.borrow_mut().write(result);
+
                 if mode == AddressingMode::Accumulator {
-                    self.a.borrow_mut().write(result);
+                    self.a.borrow_mut().read_from_bus();
                 } else {
-                    self.data_bus.borrow_mut().write_directly_to_bus(result);
+                    self.write();
                 }
             }
             Instruction::ROR(mode, _, cycles) => {
@@ -1345,43 +1322,38 @@ impl Mos6502 {
                 self.p.negative = result & 0x80 == 0x80;
                 self.p.zero = result == 0;
 
-                self.data_bus.borrow_mut().write_directly_to_bus(result);
+                self.data_bus.borrow_mut().write(result);
+                self.write();
             }
             Instruction::RTI(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s += 1;
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
-                self.p
-                    .set(self.data_bus.borrow_mut().read_directly_from_bus());
+                self.write_address(0x01, self.s);
+                let data = self.read();
+                self.p.set(data);
 
                 self.s += 1;
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
+                self.write_address(0x01, self.s);
+                self.read();
                 self.pc.borrow_mut().read_low_from_data_bus();
 
                 self.s += 1;
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
+                self.write_address(0x01, self.s);
+                self.read();
                 self.pc.borrow_mut().read_high_from_data_bus();
             }
             Instruction::RTS(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s += 1;
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
+                self.write_address(0x01, self.s);
+                self.read();
                 self.pc.borrow_mut().read_low_from_data_bus();
 
                 self.s += 1;
-                self.address_bus
-                    .borrow_mut()
-                    .write_directly_to_bus(0x01, self.s);
+                self.write_address(0x01, self.s);
+                self.read();
                 self.pc.borrow_mut().read_high_from_data_bus();
             }
             Instruction::SBC(mode, _, cycles) => {
@@ -1405,17 +1377,19 @@ impl Mos6502 {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.a.borrow().write_to_bus();
-                self.data_bus.borrow().write_to_bus();
+                self.write();
             }
             Instruction::STX(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                self.data_bus.borrow_mut().write_directly_to_bus(self.x);
+                self.data_bus.borrow_mut().write(self.x);
+                self.write();
             }
             Instruction::STY(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                self.data_bus.borrow_mut().write_directly_to_bus(self.y);
+                self.data_bus.borrow_mut().write(self.y);
+                self.write();
             }
             Instruction::TAX(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1508,12 +1482,8 @@ mod tests {
         PHP
         ",
         );
-        assert_eq!(bus.read_directly(0x00, 0xFF), 2, "0x1 + 0x1 = 0x2");
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD) & 0x01,
-            0x00,
-            "carry bit cleared"
-        );
+        assert_eq!(bus.read(0xFF), 2, "0x1 + 0x1 = 0x2");
+        assert_eq!(bus.read(0x01FD) & 0x01, 0x00, "carry bit cleared");
 
         let mut bus = run_program(
             "
@@ -1523,8 +1493,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFE, "0xFF + 0xFF = 0xFE");
-        assert_eq!(bus.read_directly(0x01, 0xFD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.read(0xFF), 0xFE, "0xFF + 0xFF = 0xFE");
+        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
     }
 
     #[test]
@@ -1538,16 +1508,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(
-            bus.read_directly(0x00, 0xFF),
-            0x20,
-            "0x10 + 0x10 = 0x20 in BCD"
-        );
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD) & 0x01,
-            0x00,
-            "carry bit cleared"
-        );
+        assert_eq!(bus.read(0xFF), 0x20, "0x10 + 0x10 = 0x20 in BCD");
+        assert_eq!(bus.read(0x01FD) & 0x01, 0x00, "carry bit cleared");
 
         let mut bus = run_program(
             "
@@ -1558,16 +1520,8 @@ mod tests {
             PHP
             ",
         );
-        assert_eq!(
-            bus.read_directly(0x00, 0xFF),
-            0x73,
-            "0x81 + 0x92 = 0x73 in BCD"
-        );
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD) & 0x01,
-            0x01,
-            "0x81 + 0x92 sets carry flag"
-        );
+        assert_eq!(bus.read(0xFF), 0x73, "0x81 + 0x92 = 0x73 in BCD");
+        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "0x81 + 0x92 sets carry flag");
     }
 
     #[test]
@@ -1582,8 +1536,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "(0xAA & 0x55) = 0x00");
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0x00, "(0xAA & 0x55) = 0x00");
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag cleared");
 
@@ -1595,17 +1549,9 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x80, "0xFF & 0x80 = 0x80");
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD) & 0x80,
-            0x80,
-            "negative bit set"
-        );
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD) & 0x02,
-            0x00,
-            "zero bit not set"
-        );
+        assert_eq!(bus.read(0xFF), 0x80, "0xFF & 0x80 = 0x80");
+        assert_eq!(bus.read(0x01FD) & 0x80, 0x80, "negative bit set");
+        assert_eq!(bus.read(0x01FD) & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
@@ -1618,8 +1564,8 @@ mod tests {
         PHP
         ",
         );
-        let status = bus.read_directly(0x01, 0xFD);
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFE, "asl result correct");
+        let status = bus.read(0x01FD);
+        assert_eq!(bus.read(0xFF), 0xFE, "asl result correct");
         assert!(status & 0x80 == 0x80, "negative bit set");
         assert!(status & 0x02 == 0x00, "zero bit not set");
         assert!(status & 0x01 == 0x01, "carry bit set");
@@ -1637,7 +1583,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.read(0xFF), 0xFF, "branch not taken");
 
         let mut bus = run_program(
             "
@@ -1649,7 +1595,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.read(0xFF), 0xFF, "branch taken");
     }
 
     #[test]
@@ -1664,7 +1610,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x01, "branch taken");
+        assert_eq!(bus.read(0xFF), 0x01, "branch taken");
 
         let mut bus = run_program(
             "
@@ -1676,7 +1622,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFA, "branch not taken");
+        assert_eq!(bus.read(0xFF), 0xFA, "branch not taken");
     }
 
     #[test]
@@ -1692,7 +1638,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "branch taken");
+        assert_eq!(bus.read(0xFF), 0x00, "branch taken");
         let mut bus = run_program(
             "
         SEC
@@ -1704,7 +1650,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.read(0xFF), 0xFF, "branch not taken");
     }
 
     #[test]
@@ -1719,7 +1665,7 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x40, 0x00, "overflow flag unset");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
@@ -1738,7 +1684,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.read(0xFF), 0xFF, "branch taken");
 
         let mut bus = run_program(
             "
@@ -1751,7 +1697,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x02, "branch not taken");
+        assert_eq!(bus.read(0xFF), 0x02, "branch not taken");
     }
 
     #[test]
@@ -1767,7 +1713,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.read(0xFF), 0xFF, "branch not taken");
 
         let mut bus = run_program(
             "
@@ -1780,7 +1726,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x01, "branch taken");
+        assert_eq!(bus.read(0xFF), 0x01, "branch taken");
     }
 
     #[test]
@@ -1796,7 +1742,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x01, "branch taken");
+        assert_eq!(bus.read(0xFF), 0x01, "branch taken");
 
         let mut bus = run_program(
             "
@@ -1809,7 +1755,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x03, "branch not taken");
+        assert_eq!(bus.read(0xFF), 0x03, "branch not taken");
     }
 
     #[test]
@@ -1823,26 +1769,10 @@ mod tests {
         ",
         );
 
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD),
-            0x00,
-            "address after BRK stored on stack"
-        );
-        assert_eq!(
-            bus.read_directly(0x01, 0xFC),
-            0x07,
-            "address after BRK stored on stack"
-        );
-        assert_eq!(
-            bus.read_directly(0x01, 0xFB) & 0x02,
-            0x02,
-            "zero flag stored on stack"
-        );
-        assert_eq!(
-            bus.read_directly(0x01, 0xFB) & 0x01,
-            0x01,
-            "carry flag stored on stack"
-        );
+        assert_eq!(bus.read(0x01FD), 0x00, "address after BRK stored on stack");
+        assert_eq!(bus.read(0x01FC), 0x07, "address after BRK stored on stack");
+        assert_eq!(bus.read(0x01FB) & 0x02, 0x02, "zero flag stored on stack");
+        assert_eq!(bus.read(0x01FB) & 0x01, 0x01, "carry flag stored on stack");
     }
 
     #[test]
@@ -1857,7 +1787,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.read(0xFF), 0xFF, "branch not taken");
 
         let mut bus = run_program(
             "
@@ -1869,7 +1799,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x06, "branch taken");
+        assert_eq!(bus.read(0xFF), 0x06, "branch taken");
     }
 
     #[test]
@@ -1884,7 +1814,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x04, "branch taken");
+        assert_eq!(bus.read(0xFF), 0x04, "branch taken");
 
         let mut bus = run_program(
             "
@@ -1896,7 +1826,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.read(0xFF), 0xFF, "branch taken");
     }
 
     #[test]
@@ -1909,7 +1839,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
@@ -1921,7 +1851,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
@@ -1933,7 +1863,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
@@ -1948,7 +1878,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
@@ -1960,7 +1890,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
@@ -1972,7 +1902,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
@@ -1987,7 +1917,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
@@ -1999,7 +1929,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
@@ -2011,7 +1941,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
@@ -2029,10 +1959,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "correct result");
+        assert_eq!(bus.read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2045,10 +1975,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2065,10 +1995,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "correct result");
+        assert_eq!(bus.read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2082,10 +2012,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2102,10 +2032,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "correct result");
+        assert_eq!(bus.read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2119,10 +2049,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2136,12 +2066,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "0x55 xor 0xAA = 0xFF");
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD) & 0x80,
-            0x80,
-            "negative bit set"
-        );
+        assert_eq!(bus.read(0xFF), 0xFF, "0x55 xor 0xAA = 0xFF");
+        assert_eq!(bus.read(0x01FD) & 0x80, 0x80, "negative bit set");
 
         let mut bus = run_program(
             "
@@ -2152,8 +2078,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "0xFF xor 0xFF = 0x00");
-        assert_eq!(bus.read_directly(0x01, 0xFD) & 0x02, 0x02, "zero bit set");
+        assert_eq!(bus.read(0xFF), 0x00, "0xFF xor 0xFF = 0x00");
+        assert_eq!(bus.read(0x01FD) & 0x02, 0x02, "zero bit set");
     }
 
     #[test]
@@ -2169,10 +2095,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "correct result");
+        assert_eq!(bus.read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2185,10 +2111,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2205,10 +2131,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "correct result");
+        assert_eq!(bus.read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2222,10 +2148,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2242,10 +2168,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "correct result");
+        assert_eq!(bus.read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2259,10 +2185,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read_directly(0x01, 0xFD);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2278,11 +2204,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(
-            bus.read_directly(0x00, 0xFF),
-            0x00,
-            "load and store jumped over"
-        );
+        assert_eq!(bus.read(0xFF), 0x00, "load and store jumped over");
     }
 
     #[test]
@@ -2297,10 +2219,10 @@ mod tests {
         ",
         );
 
-        assert_ne!(bus.read_directly(0x00, 0xFF), 0xFF, "first store skipped");
-        assert_ne!(bus.read_directly(0x00, 0xFE), 0xFF, "second store skipped");
-        assert_eq!(bus.read_directly(0x01, 0xFD), 0x00, "high byte = 0x00");
-        assert_eq!(bus.read_directly(0x01, 0xFC), 0x02, "low byte = 0x02");
+        assert_ne!(bus.read(0xFF), 0xFF, "first store skipped");
+        assert_ne!(bus.read(0x00FE), 0xFF, "second store skipped");
+        assert_eq!(bus.read(0x01FD), 0x00, "high byte = 0x00");
+        assert_eq!(bus.read(0x01FC), 0x02, "low byte = 0x02");
     }
 
     #[test]
@@ -2314,8 +2236,8 @@ mod tests {
        ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x7F, "0xFF >> 1 = 0x7F");
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0x7F, "0xFF >> 1 = 0x7F");
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x01, 0x01, "carry bit set");
         assert_eq!(status & 0x02, 0x00, "zero bit unset");
         assert_eq!(status & 0x80, 0x00, "negative bit unset");
@@ -2329,8 +2251,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "0x01 >> 1 = 0x00");
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0x00, "0x01 >> 1 = 0x00");
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x01, 0x01, "carry bit set");
         assert_eq!(status & 0x02, 0x02, "zero bit set");
         assert_eq!(status & 0x80, 0x00, "negative bit unset");
@@ -2349,8 +2271,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "0xAA | 0x55 = 0xFF");
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0xFF, "0xAA | 0x55 = 0xFF");
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "result negative");
         assert_eq!(status & 0x02, 0x00, "result not zero");
 
@@ -2364,8 +2286,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x00, "0x00 | 0x00 = 0x00");
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0x00, "0x00 | 0x00 = 0x00");
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "result not negative");
         assert_eq!(status & 0x02, 0x02, "result zero");
     }
@@ -2379,11 +2301,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD),
-            0xFF,
-            "accumulator pushed on stack"
-        );
+        assert_eq!(bus.read(0x01FD), 0xFF, "accumulator pushed on stack");
     }
 
     #[test]
@@ -2398,11 +2316,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD),
-            0xFF,
-            "accumulator pulled from stack"
-        );
+        assert_eq!(bus.read(0x01FD), 0xFF, "accumulator pulled from stack");
     }
 
     #[test]
@@ -2416,8 +2330,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x01, 0xFD) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFE, "correct result");
+        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.read(0xFF), 0xFE, "correct result");
 
         let mut bus = run_program(
             "
@@ -2429,8 +2343,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x01, 0xFD) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2444,8 +2358,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x01, 0xFD) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x7F, "correct result");
+        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.read(0xFF), 0x7F, "correct result");
 
         let mut bus = run_program(
             "
@@ -2457,8 +2371,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x01, 0xFD) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2472,12 +2386,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0xFF, "correct result");
-        assert_eq!(
-            bus.read_directly(0x01, 0xFD) & 0x80,
-            0x80,
-            "negative bit set"
-        );
+        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.read(0x01FD) & 0x80, 0x80, "negative bit set");
     }
 
     #[test]
@@ -2491,8 +2401,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x71, "0x76 - 0x05 = 0x71");
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0x71, "0x76 - 0x05 = 0x71");
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x01, 0x01, "no borrow (carry set)");
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
@@ -2506,12 +2416,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(
-            bus.read_directly(0x00, 0xFF),
-            0xFB,
-            "0x5 - 0xA = -0x5 (0xFB)"
-        );
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0xFB, "0x5 - 0xA = -0x5 (0xFB)");
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x01, 0x00, "borrow (carry not set)");
         assert_eq!(status & 0x80, 0x80, "negative bit set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
@@ -2529,8 +2435,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x67);
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0x67);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
         assert_eq!(status & 0x01, 0x01, "carry bit set");
@@ -2544,8 +2450,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read_directly(0x00, 0xFF), 0x33);
-        let status = bus.read_directly(0x01, 0xFD);
+        assert_eq!(bus.read(0xFF), 0x33);
+        let status = bus.read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
         assert_eq!(status & 0x01, 0x00, "carry bit not set");

@@ -245,11 +245,14 @@ pub fn run_program(program: &str) -> Result<Rc<RefCell<Bus>>, AssemblerError> {
     }
 
     let mut bus = Bus::new();
-    let mut ram = Box::new(Ram::new());
-    ram.load_mem(&mem);
-    bus.connect(ram);
-    let bus = Rc::new(RefCell::new(bus));
+    let mut location: u16 = 0;
 
+    for byte in mem {
+        bus.write(location, byte);
+        location += 1;
+    }
+
+    let bus = Rc::new(RefCell::new(bus));
     let mut cpu = Mos6502::new(&bus);
     for _ in 0..program.len() {
         while !cpu.clock() {}
