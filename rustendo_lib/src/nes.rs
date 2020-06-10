@@ -17,6 +17,6 @@ impl Nes {
 
     pub fn clock(&mut self) {
         self.cpu.clock();
-        self.bus.borrow_mut().clock();
+        self.bus.borrow_mut().ppu.clock();
     }
 }

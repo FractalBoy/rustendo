@@ -1,11 +1,12 @@
-use crate::cartridge::Cartridge;
+use crate::cartridge::{Cartridge, Mapper};
+use crate::mappers::mapper000::Mapper000;
 use crate::nes2c02::Nes2c02;
 use crate::ram::Ram;
 
 pub struct Bus {
     pub ram: Ram,
     pub ppu: Nes2c02,
-    cartridge: Option<Cartridge>,
+    mapper: Option<Box<dyn Mapper>>,
 }
 
 impl Bus {
@@ -13,17 +14,25 @@ impl Bus {
         Bus {
             ram: Ram::new(),
             ppu: Nes2c02::new(),
-            cartridge: None,
+            mapper: None,
         }
     }
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        self.cartridge = Some(cartridge);
+        // The mapper is used to access the cartridge
+        self.mapper = Some(Box::new(match cartridge.mapper() {
+            0 => Mapper000::new(cartridge),
+            mapper => unimplemented!("Mapper {} is unimplemented", mapper),
+        }));
     }
 
     pub fn write(&mut self, address: u16, data: u8) {
         match address {
             0x0..=0x1FFF => self.ram.write(address, data),
+            0x4020..=0xFFFF => match &mut self.mapper {
+                Some(mapper) => mapper.write(address, data),
+                None => return,
+            },
             _ => unimplemented!(),
         };
     }
@@ -31,15 +40,11 @@ impl Bus {
     pub fn read(&mut self, address: u16) -> u8 {
         match address {
             0x0..=0x1FFF => self.ram.read(address).unwrap(),
-            0x4020..=0xFFFF => match &self.cartridge {
-                Some(cartridge) => cartridge.read(address),
+            0x4020..=0xFFFF => match &self.mapper {
+                Some(mapper) => mapper.read(address),
                 None => 0,
             },
-            _ => 0
+            _ => 0,
         }
-    }
-
-    pub fn clock(&mut self) {
-        self.ppu.clock();
     }
 }

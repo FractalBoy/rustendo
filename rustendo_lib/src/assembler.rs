@@ -1,6 +1,5 @@
 use crate::bus::Bus;
 use crate::mos6502::{AddressingMode, Mos6502};
-use crate::ram::Ram;
 use regex::Regex;
 use std::borrow::Cow;
 use std::cell::RefCell;
