@@ -1,12 +1,5 @@
 pub struct Cartridge {
     raw: Vec<u8>,
-    header: [u8; 0x10],
-    trainer: Option<[u8; 0x200]>,
-    prg: Vec<u8>,
-    chr: Vec<u8>,
-    inst_rom: Option<[u8; 0x2000]>,
-    p_rom: Option<[u8; 0x20]>,
-    mirroring: Mirroring,
 }
 
 enum Mirroring {
@@ -23,42 +16,68 @@ enum ConsoleType {
 
 impl Cartridge {
     pub fn new(raw: Vec<u8>) -> Self {
-        // NES 2.0 has bit 2 cleared and bit 4 set
-        if raw[7] & 0xC == 0x8 {
-            Cartridge::read_nes_2_0(raw)
-        } else {
-            Cartridge::read_ines(raw)
+        Cartridge { raw }
+    }
+
+    pub fn header(&self) -> &[u8] {
+        &self.raw[0..0x10]
+    }
+
+    fn calc_rom_size(size: u16) -> u16 {
+        match size & 0xF00 >> 8 {
+            0xF => {
+                let multiplier = size & 0x3;
+                let exponent = (size & 0xFC) >> 2;
+                2u16.pow(exponent as u32) * (multiplier * 2 + 1)
+            }
+            _ => size * 0x4000,
         }
     }
 
-    pub fn read(&self, address: u16) -> u8 {
-        unimplemented!();
+    pub fn prg_rom_size(&self) -> usize {
+        let lsb = self.header()[4] as u16;
+        let msb = ((self.header()[9] as u16) & 0xF) << 4;
+        let size = msb | lsb;
+
+        Cartridge::calc_rom_size(size) as usize
     }
 
-    fn read_ines(raw: Vec<u8>) -> Self {
-        unimplemented!();
+    pub fn prg_rom(&self) -> &[u8] {
+        let start = 0x10 + self.trainer_size();
+        let end = start + self.prg_rom_size();
+        &self.raw[start..end]
     }
 
-    fn read_nes_2_0(raw: Vec<u8>) -> Self {
-        let prg_rom_size = raw[4];
-        let chr_rom_size = raw[5];
-        let mirroring = if raw[6] & 0x1 == 0x1 {
-            Mirroring::Vertical
+    pub fn chr_rom_size(&self) -> usize{
+        let lsb = self.header()[5] as u16;
+        let msb = (self.header()[9] as u16) & 0xF0;
+        let size = msb | lsb;
+
+        Cartridge::calc_rom_size(size) as usize
+    }
+
+    pub fn chr_rom(&self) -> &[u8] {
+        let start = 0x10 + self.trainer_size() + self.prg_rom_size();
+        let end = start + self.chr_rom_size();
+        &self.raw[start..end]
+    }
+
+    pub fn has_trainer(&self) -> bool {
+        self.header()[6] & 0x4 == 0x4
+    }
+
+    pub fn trainer(&self) -> &[u8] {
+        let start:usize = 0x10;
+        let end = 0x10 + self.trainer_size() as usize;
+        &self.raw[start..end]
+    }
+
+    pub fn trainer_size(&self) -> usize {
+        if self.has_trainer() {
+            0x200
         } else {
-            Mirroring::Horizontal
-        };
-        let battery = raw[6] & 0x2 == 0x2;
-        let trainer = raw[6] & 0x4 == 0x4;
-        let four_screen_mode = raw[6] & 0x8 == 0x8;
-        let mapper_number = raw[6] & 0xF0;
-        let console_type = match raw[7] & 0x3 {
-            0x0 => ConsoleType::NES,
-            0x1 => ConsoleType::NintendoVsSystem,
-            0x2 => ConsoleType::NintendoPlaychoice10,
-            0x3 => ConsoleType::ExtendedConsoleType,
-            t => panic!("{} is not a valid console type", t),
-        };
-        unimplemented!();
+            0
+        }
     }
 }
 
