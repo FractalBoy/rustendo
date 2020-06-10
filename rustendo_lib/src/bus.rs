@@ -39,7 +39,7 @@ impl Bus {
 
     pub fn read(&mut self, address: u16) -> u8 {
         match address {
-            0x0..=0x1FFF => self.ram.read(address).unwrap(),
+            0x0..=0x1FFF => self.ram.read(address),
             0x4020..=0xFFFF => match &self.mapper {
                 Some(mapper) => mapper.read(address),
                 None => 0,

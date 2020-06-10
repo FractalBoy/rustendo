@@ -7,28 +7,16 @@ impl Ram {
         Ram { ram: [0; 0x800] }
     }
 
-    fn find_address(&self, address: u16) -> Option<u16> {
-        match address {
-            0x0..=0x7FF => Some(address),
-            0x800..=0xFFF => Some(address - 0x800),
-            0x1000..=0x17FF => Some(address - 0x1000),
-            0x1800..=0x1FFF => Some(address - 0x1800),
-            _ => None,
-        }
+    fn find_address(&self, address: u16) -> usize {
+        (address as usize) & 0x7FF
     }
 
-    pub fn read(&self, address: u16) -> Option<u8> {
-        match self.find_address(address) {
-            Some(address) => Some(self.ram[address as usize]),
-            None => None,
-        }
+    pub fn read(&self, address: u16) -> u8 {
+        self.ram[self.find_address(address)]
     }
 
     pub fn write(&mut self, address: u16, data: u8) {
-        match self.find_address(address) {
-            Some(address) => self.ram[address as usize] = data,
-            None => return,
-        }
+        self.ram[self.find_address(address)] = data
     }
 
     pub fn load_mem(&mut self, memory: &[u8]) {
