@@ -26,22 +26,22 @@ impl Bus {
         }));
     }
 
-    pub fn write(&mut self, address: u16, data: u8) {
+    pub fn cpu_write(&mut self, address: u16, data: u8) {
         match address {
             0x0..=0x1FFF => self.ram.write(address, data),
             0x4020..=0xFFFF => match &mut self.mapper {
-                Some(mapper) => mapper.write(address, data),
+                Some(mapper) => mapper.cpu_write(address, data),
                 None => return,
             },
             _ => unimplemented!(),
         };
     }
 
-    pub fn read(&mut self, address: u16) -> u8 {
+    pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
             0x0..=0x1FFF => self.ram.read(address),
             0x4020..=0xFFFF => match &self.mapper {
-                Some(mapper) => mapper.read(address),
+                Some(mapper) => mapper.cpu_read(address),
                 None => 0,
             },
             _ => 0,

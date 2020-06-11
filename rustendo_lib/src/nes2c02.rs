@@ -7,7 +7,7 @@ impl Nes2c02 {
         Nes2c02 { clocks: 0 }
     }
 
-    fn read(&self, address: u16) -> Option<u8> {
+    fn read(&self, address: u16) -> u8 {
         unimplemented!();
     }
 

@@ -774,13 +774,13 @@ impl Mos6502 {
 
     fn read(&mut self) -> u8 {
         let address = self.address_bus.borrow().address();
-        let data = self.bus.borrow_mut().read(address);
+        let data = self.bus.borrow_mut().cpu_read(address);
         self.data_bus.borrow_mut().write(data);
         self.data_bus.borrow().read()
     }
 
     fn write(&mut self) {
-        self.bus.borrow_mut().write(
+        self.bus.borrow_mut().cpu_write(
             self.address_bus.borrow().address(),
             self.data_bus.borrow().read(),
         );

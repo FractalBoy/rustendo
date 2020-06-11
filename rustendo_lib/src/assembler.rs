@@ -247,7 +247,7 @@ pub fn run_program(program: &str) -> Result<Rc<RefCell<Bus>>, AssemblerError> {
     let mut location: u16 = 0;
 
     for byte in mem {
-        bus.write(location, byte);
+        bus.cpu_write(location, byte);
         location += 1;
     }
 

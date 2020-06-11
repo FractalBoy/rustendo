@@ -1,6 +1,8 @@
 pub trait Mapper {
-    fn read(&self, address: u16) -> u8;
-    fn write(&mut self, address: u16, data: u8);
+    fn cpu_read(&self, address: u16) -> u8;
+    fn cpu_write(&mut self, address: u16, data: u8);
+    fn ppu_read(&self, address: u16) -> u8;
+    fn ppu_write(&mut self, address: u16, data: u8);
 }
 
 pub enum MirroringType {
@@ -80,6 +82,38 @@ impl Cartridge {
         &self.raw[start..end]
     }
 
+    pub fn prg_ram_size(&self) -> usize {
+        let shift_count = self.header()[10] & 0x0F;
+        match shift_count {
+            0 => 0,
+            _ => 64 << shift_count,
+        }
+    }
+
+    pub fn prg_nvram_size(&self) -> usize {
+        let shift_count = self.header()[10] & 0xF0;
+        match shift_count {
+            0 => 0,
+            _ => 64 << shift_count,
+        }
+    }
+
+    pub fn chr_ram_size(&self) -> usize {
+        let shift_count = self.header()[11] & 0x0F;
+        match shift_count {
+            0 => 0,
+            _ => 64 << shift_count,
+        }
+    }
+
+    pub fn chr_nvram_size(&self) -> usize {
+        let shift_count = self.header()[11] & 0xF0;
+        match shift_count {
+            0 => 0,
+            _ => 64 << shift_count,
+        }
+    }
+
     pub fn has_trainer(&self) -> bool {
         self.header()[6] & 0x4 == 0x4
     }
@@ -131,7 +165,7 @@ impl Cartridge {
             1 => ConsoleType::NintendoVsSystem,
             2 => ConsoleType::NintendoPlaychoice10,
             3 => ConsoleType::ExtendedConsoleType,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -141,7 +175,7 @@ impl Cartridge {
             0x1 => TimingMode::PalNes,
             0x2 => TimingMode::MultipleRegion,
             0x3 => TimingMode::Dendy,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
