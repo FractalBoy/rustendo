@@ -1,7 +1,9 @@
 use crate::cartridge::{Cartridge, Mapper};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct Mapper000 {
-    cartridge: Cartridge,
+    cartridge: Rc<RefCell<Cartridge>>,
     prg_ram: Vec<u8>,
     chr_ram: Vec<u8>,
     // Non-volatile RAM should really be non-volatile, but for now
@@ -11,11 +13,12 @@ pub struct Mapper000 {
 }
 
 impl Mapper000 {
-    pub fn new(cartridge: Cartridge) -> Self {
-        let prg_ram = vec![0; cartridge.prg_ram_size()];
-        let chr_ram = vec![0; cartridge.chr_ram_size()];
-        let prg_nv_ram = vec![0; cartridge.prg_nvram_size()];
-        let chr_nv_ram = vec![0; cartridge.chr_nvram_size()];
+    pub fn new(cartridge: &Rc<RefCell<Cartridge>>) -> Self {
+        let cartridge = Rc::clone(cartridge);
+        let prg_ram = vec![0; cartridge.borrow().prg_ram_size()];
+        let chr_ram = vec![0; cartridge.borrow().chr_ram_size()];
+        let prg_nv_ram = vec![0; cartridge.borrow().prg_nvram_size()];
+        let chr_nv_ram = vec![0; cartridge.borrow().chr_nvram_size()];
 
         Mapper000 {
             cartridge,

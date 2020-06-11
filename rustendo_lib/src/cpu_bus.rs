@@ -1,7 +1,9 @@
 use crate::cartridge::{Cartridge, Mapper};
-use crate::mappers::mapper000::Mapper000;
+use crate::mappers::mapper_000::Mapper000;
 use crate::nes2c02::Nes2c02;
 use crate::ram::Ram;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct Bus {
     pub ram: Ram,
@@ -18,9 +20,9 @@ impl Bus {
         }
     }
 
-    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
+    pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
         // The mapper is used to access the cartridge
-        self.mapper = Some(Box::new(match cartridge.mapper() {
+        self.mapper = Some(Box::new(match cartridge.borrow().mapper() {
             0 => Mapper000::new(cartridge),
             mapper => unimplemented!("Mapper {} is unimplemented", mapper),
         }));

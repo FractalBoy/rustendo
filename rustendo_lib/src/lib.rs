@@ -1,5 +1,6 @@
 mod assembler;
-mod bus;
+mod cpu_bus;
+mod ppu_bus;
 mod mos6502;
 mod ram;
 mod cartridge;

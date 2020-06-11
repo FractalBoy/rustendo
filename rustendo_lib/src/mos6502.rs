@@ -1,4 +1,4 @@
-use crate::bus::Bus;
+use crate::cpu_bus::Bus;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -1444,7 +1444,7 @@ impl Mos6502 {
 #[cfg(test)]
 mod tests {
     use crate::assembler::{self, AssemblerError};
-    use crate::bus::Bus;
+    use crate::cpu_bus::Bus;
     use std::rc::Rc;
 
     fn run_program(program: &str) -> Bus {

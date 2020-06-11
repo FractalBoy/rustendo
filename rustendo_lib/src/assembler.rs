@@ -1,4 +1,4 @@
-use crate::bus::Bus;
+use crate::cpu_bus::Bus;
 use crate::mos6502::{AddressingMode, Mos6502};
 use regex::Regex;
 use std::borrow::Cow;
