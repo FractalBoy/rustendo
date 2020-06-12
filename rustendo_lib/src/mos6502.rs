@@ -1482,8 +1482,8 @@ mod tests {
         PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 2, "0x1 + 0x1 = 0x2");
-        assert_eq!(bus.read(0x01FD) & 0x01, 0x00, "carry bit cleared");
+        assert_eq!(bus.cpu_read(0xFF), 2, "0x1 + 0x1 = 0x2");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x00, "carry bit cleared");
 
         let mut bus = run_program(
             "
@@ -1493,8 +1493,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0xFE, "0xFF + 0xFF = 0xFE");
-        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(0xFF), 0xFE, "0xFF + 0xFF = 0xFE");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x01, "carry bit set");
     }
 
     #[test]
@@ -1508,8 +1508,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0x20, "0x10 + 0x10 = 0x20 in BCD");
-        assert_eq!(bus.read(0x01FD) & 0x01, 0x00, "carry bit cleared");
+        assert_eq!(bus.cpu_read(0xFF), 0x20, "0x10 + 0x10 = 0x20 in BCD");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x00, "carry bit cleared");
 
         let mut bus = run_program(
             "
@@ -1520,8 +1520,8 @@ mod tests {
             PHP
             ",
         );
-        assert_eq!(bus.read(0xFF), 0x73, "0x81 + 0x92 = 0x73 in BCD");
-        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "0x81 + 0x92 sets carry flag");
+        assert_eq!(bus.cpu_read(0xFF), 0x73, "0x81 + 0x92 = 0x73 in BCD");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x01, "0x81 + 0x92 sets carry flag");
     }
 
     #[test]
@@ -1536,8 +1536,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0x00, "(0xAA & 0x55) = 0x00");
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "(0xAA & 0x55) = 0x00");
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag cleared");
 
@@ -1549,9 +1549,9 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0x80, "0xFF & 0x80 = 0x80");
-        assert_eq!(bus.read(0x01FD) & 0x80, 0x80, "negative bit set");
-        assert_eq!(bus.read(0x01FD) & 0x02, 0x00, "zero bit not set");
+        assert_eq!(bus.cpu_read(0xFF), 0x80, "0xFF & 0x80 = 0x80");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x80, 0x80, "negative bit set");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
@@ -1564,8 +1564,8 @@ mod tests {
         PHP
         ",
         );
-        let status = bus.read(0x01FD);
-        assert_eq!(bus.read(0xFF), 0xFE, "asl result correct");
+        let status = bus.cpu_read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0xFE, "asl result correct");
         assert!(status & 0x80 == 0x80, "negative bit set");
         assert!(status & 0x02 == 0x00, "zero bit not set");
         assert!(status & 0x01 == 0x01, "carry bit set");
@@ -1583,7 +1583,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
 
         let mut bus = run_program(
             "
@@ -1595,7 +1595,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch taken");
     }
 
     #[test]
@@ -1610,7 +1610,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x01, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0x01, "branch taken");
 
         let mut bus = run_program(
             "
@@ -1622,7 +1622,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFA, "branch not taken");
+        assert_eq!(bus.cpu_read(0xFF), 0xFA, "branch not taken");
     }
 
     #[test]
@@ -1638,7 +1638,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x00, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "branch taken");
         let mut bus = run_program(
             "
         SEC
@@ -1650,7 +1650,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
     }
 
     #[test]
@@ -1665,7 +1665,7 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x40, 0x00, "overflow flag unset");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
@@ -1684,7 +1684,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch taken");
 
         let mut bus = run_program(
             "
@@ -1697,7 +1697,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x02, "branch not taken");
+        assert_eq!(bus.cpu_read(0xFF), 0x02, "branch not taken");
     }
 
     #[test]
@@ -1713,7 +1713,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
 
         let mut bus = run_program(
             "
@@ -1726,7 +1726,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x01, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0x01, "branch taken");
     }
 
     #[test]
@@ -1742,7 +1742,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x01, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0x01, "branch taken");
 
         let mut bus = run_program(
             "
@@ -1755,7 +1755,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x03, "branch not taken");
+        assert_eq!(bus.cpu_read(0xFF), 0x03, "branch not taken");
     }
 
     #[test]
@@ -1769,10 +1769,10 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0x01FD), 0x00, "address after BRK stored on stack");
-        assert_eq!(bus.read(0x01FC), 0x07, "address after BRK stored on stack");
-        assert_eq!(bus.read(0x01FB) & 0x02, 0x02, "zero flag stored on stack");
-        assert_eq!(bus.read(0x01FB) & 0x01, 0x01, "carry flag stored on stack");
+        assert_eq!(bus.cpu_read(0x01FD), 0x00, "address after BRK stored on stack");
+        assert_eq!(bus.cpu_read(0x01FC), 0x07, "address after BRK stored on stack");
+        assert_eq!(bus.cpu_read(0x01FB) & 0x02, 0x02, "zero flag stored on stack");
+        assert_eq!(bus.cpu_read(0x01FB) & 0x01, 0x01, "carry flag stored on stack");
     }
 
     #[test]
@@ -1787,7 +1787,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
 
         let mut bus = run_program(
             "
@@ -1799,7 +1799,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x06, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0x06, "branch taken");
     }
 
     #[test]
@@ -1814,7 +1814,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x04, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0x04, "branch taken");
 
         let mut bus = run_program(
             "
@@ -1826,7 +1826,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch taken");
     }
 
     #[test]
@@ -1839,7 +1839,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
@@ -1851,7 +1851,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
@@ -1863,7 +1863,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
@@ -1878,7 +1878,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
@@ -1890,7 +1890,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
@@ -1902,7 +1902,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
@@ -1917,7 +1917,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
@@ -1929,7 +1929,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
@@ -1941,7 +1941,7 @@ mod tests {
             ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
@@ -1959,10 +1959,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -1975,10 +1975,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -1995,10 +1995,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2012,10 +2012,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2032,10 +2032,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2049,10 +2049,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2066,8 +2066,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "0x55 xor 0xAA = 0xFF");
-        assert_eq!(bus.read(0x01FD) & 0x80, 0x80, "negative bit set");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "0x55 xor 0xAA = 0xFF");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x80, 0x80, "negative bit set");
 
         let mut bus = run_program(
             "
@@ -2078,8 +2078,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x00, "0xFF xor 0xFF = 0x00");
-        assert_eq!(bus.read(0x01FD) & 0x02, 0x02, "zero bit set");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "0xFF xor 0xFF = 0x00");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x02, 0x02, "zero bit set");
     }
 
     #[test]
@@ -2095,10 +2095,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2111,10 +2111,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2131,10 +2131,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2148,10 +2148,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2168,10 +2168,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
         let mut bus = run_program(
             "
@@ -2185,10 +2185,10 @@ mod tests {
         ",
         );
 
-        let status = bus.read(0x01FD);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2204,7 +2204,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x00, "load and store jumped over");
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "load and store jumped over");
     }
 
     #[test]
@@ -2219,10 +2219,10 @@ mod tests {
         ",
         );
 
-        assert_ne!(bus.read(0xFF), 0xFF, "first store skipped");
-        assert_ne!(bus.read(0x00FE), 0xFF, "second store skipped");
-        assert_eq!(bus.read(0x01FD), 0x00, "high byte = 0x00");
-        assert_eq!(bus.read(0x01FC), 0x02, "low byte = 0x02");
+        assert_ne!(bus.cpu_read(0xFF), 0xFF, "first store skipped");
+        assert_ne!(bus.cpu_read(0x00FE), 0xFF, "second store skipped");
+        assert_eq!(bus.cpu_read(0x01FD), 0x00, "high byte = 0x00");
+        assert_eq!(bus.cpu_read(0x01FC), 0x02, "low byte = 0x02");
     }
 
     #[test]
@@ -2236,8 +2236,8 @@ mod tests {
        ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x7F, "0xFF >> 1 = 0x7F");
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0x7F, "0xFF >> 1 = 0x7F");
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x01, 0x01, "carry bit set");
         assert_eq!(status & 0x02, 0x00, "zero bit unset");
         assert_eq!(status & 0x80, 0x00, "negative bit unset");
@@ -2251,8 +2251,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0x00, "0x01 >> 1 = 0x00");
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "0x01 >> 1 = 0x00");
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x01, 0x01, "carry bit set");
         assert_eq!(status & 0x02, 0x02, "zero bit set");
         assert_eq!(status & 0x80, 0x00, "negative bit unset");
@@ -2271,8 +2271,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "0xAA | 0x55 = 0xFF");
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "0xAA | 0x55 = 0xFF");
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x80, "result negative");
         assert_eq!(status & 0x02, 0x00, "result not zero");
 
@@ -2286,8 +2286,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0x00, "0x00 | 0x00 = 0x00");
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0x00, "0x00 | 0x00 = 0x00");
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "result not negative");
         assert_eq!(status & 0x02, 0x02, "result zero");
     }
@@ -2301,7 +2301,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0x01FD), 0xFF, "accumulator pushed on stack");
+        assert_eq!(bus.cpu_read(0x01FD), 0xFF, "accumulator pushed on stack");
     }
 
     #[test]
@@ -2316,7 +2316,7 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0x01FD), 0xFF, "accumulator pulled from stack");
+        assert_eq!(bus.cpu_read(0x01FD), 0xFF, "accumulator pulled from stack");
     }
 
     #[test]
@@ -2330,8 +2330,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.read(0xFF), 0xFE, "correct result");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(0xFF), 0xFE, "correct result");
 
         let mut bus = run_program(
             "
@@ -2343,8 +2343,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2358,8 +2358,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.read(0xFF), 0x7F, "correct result");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(0xFF), 0x7F, "correct result");
 
         let mut bus = run_program(
             "
@@ -2371,8 +2371,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0x01FD) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
     }
 
     #[test]
@@ -2386,8 +2386,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.read(0xFF), 0xFF, "correct result");
-        assert_eq!(bus.read(0x01FD) & 0x80, 0x80, "negative bit set");
+        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(0x01FD) & 0x80, 0x80, "negative bit set");
     }
 
     #[test]
@@ -2401,8 +2401,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0x71, "0x76 - 0x05 = 0x71");
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0x71, "0x76 - 0x05 = 0x71");
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x01, 0x01, "no borrow (carry set)");
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
@@ -2416,8 +2416,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0xFB, "0x5 - 0xA = -0x5 (0xFB)");
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0xFB, "0x5 - 0xA = -0x5 (0xFB)");
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x01, 0x00, "borrow (carry not set)");
         assert_eq!(status & 0x80, 0x80, "negative bit set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
@@ -2435,8 +2435,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0x67);
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0x67);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
         assert_eq!(status & 0x01, 0x01, "carry bit set");
@@ -2450,8 +2450,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.read(0xFF), 0x33);
-        let status = bus.read(0x01FD);
+        assert_eq!(bus.cpu_read(0xFF), 0x33);
+        let status = bus.cpu_read(0x01FD);
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
         assert_eq!(status & 0x01, 0x00, "carry bit not set");
