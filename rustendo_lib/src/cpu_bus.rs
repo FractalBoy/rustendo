@@ -1,5 +1,4 @@
-use crate::cartridge::{Cartridge, Mapper};
-use crate::mappers::mapper_000::Mapper000;
+use crate::cartridge::Cartridge;
 use crate::nes2c02::Nes2c02;
 use crate::ram::Ram;
 use std::cell::RefCell;
@@ -8,7 +7,7 @@ use std::rc::Rc;
 pub struct Bus {
     pub ram: Ram,
     pub ppu: Nes2c02,
-    mapper: Option<Box<dyn Mapper>>,
+    cartridge: Option<Rc<RefCell<Cartridge>>>,
 }
 
 impl Bus {
@@ -16,23 +15,19 @@ impl Bus {
         Bus {
             ram: Ram::new(),
             ppu: Nes2c02::new(),
-            mapper: None,
+            cartridge: None,
         }
     }
 
     pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
-        // The mapper is used to access the cartridge
-        self.mapper = Some(Box::new(match cartridge.borrow().mapper() {
-            0 => Mapper000::new(cartridge),
-            mapper => unimplemented!("Mapper {} is unimplemented", mapper),
-        }));
+        self.cartridge = Some(Rc::clone(cartridge));
     }
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
         match address {
             0x0..=0x1FFF => self.ram.write(address, data),
-            0x4020..=0xFFFF => match &mut self.mapper {
-                Some(mapper) => mapper.cpu_write(address, data),
+            0x4020..=0xFFFF => match &self.cartridge {
+                Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
                 None => return,
             },
             _ => unimplemented!(),
@@ -42,8 +37,8 @@ impl Bus {
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
             0x0..=0x1FFF => self.ram.read(address),
-            0x4020..=0xFFFF => match &self.mapper {
-                Some(mapper) => mapper.cpu_read(address),
+            0x4020..=0xFFFF => match &self.cartridge {
+                Some(cartridge) => cartridge.borrow().cpu_read(address),
                 None => 0,
             },
             _ => 0,

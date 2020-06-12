@@ -1,23 +1,18 @@
-use crate::cartridge::{Cartridge, Mapper};
-use crate::mappers::mapper_000::Mapper000;
+use crate::cartridge::Cartridge;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct Bus {
-    mapper: Option<Box<dyn Mapper>>,
+    cartridge: Option<Rc<RefCell<Cartridge>>>,
 }
 
 impl Bus {
     pub fn new() -> Self {
-        Bus { mapper: None }
+        Bus { cartridge: None }
     }
 
     pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
-        // The mapper is used to access the cartridge
-        self.mapper = Some(Box::new(match cartridge.borrow().mapper() {
-            0 => Mapper000::new(cartridge),
-            mapper => unimplemented!("Mapper {} is unimplemented", mapper),
-        }));
+        self.cartridge = Some(Rc::clone(cartridge));
     }
 
     pub fn ppu_read(&self, address: u16) -> u8 {
