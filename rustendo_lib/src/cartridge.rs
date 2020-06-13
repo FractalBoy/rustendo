@@ -28,8 +28,8 @@ pub struct Cartridge {
 impl Cartridge {
     pub fn new(raw: Vec<u8>) -> Self {
         let header = Cartridge::_header(&raw);
-        let mapper = match Cartridge::_mapper(&header) {
-            0 => Mapper000::new(Cartridge::_prg_rom_size(&header), Cartridge::_chr_ram_size(&header)),
+        let mapper = match Self::_mapper(&header) {
+            0 => Mapper000::new(Self::_prg_rom_size(&header), Self::_chr_ram_size(&header)),
             _ => unimplemented!(),
         };
         let mapper = Box::new(mapper);
@@ -38,7 +38,7 @@ impl Cartridge {
     }
 
     pub fn header(&self) -> &[u8] {
-        Cartridge::_header(&self.raw)
+        Self::_header(&self.raw)
     }
 
     fn _header<'a>(raw: &'a [u8]) -> &'a [u8] {
@@ -57,7 +57,7 @@ impl Cartridge {
     }
 
     fn prg_rom_size(&self) -> usize {
-        Cartridge::_prg_rom_size(self.header())
+        Self::_prg_rom_size(self.header())
     }
 
     fn _prg_rom_size(header: &[u8]) -> usize {
@@ -65,7 +65,7 @@ impl Cartridge {
         let msb = ((header[9] as u16) & 0xF) << 4;
         let size = msb | lsb;
 
-        Cartridge::rom_size(size) as usize
+        Self::rom_size(size) as usize
     }
 
     pub fn prg_rom(&self) -> &[u8] {
@@ -79,7 +79,7 @@ impl Cartridge {
         let msb = (self.header()[9] as u16) & 0xF0;
         let size = msb | lsb;
 
-        Cartridge::rom_size(size) as usize
+        Self::rom_size(size) as usize
     }
 
     pub fn chr_rom(&self) -> &[u8] {
@@ -119,7 +119,7 @@ impl Cartridge {
     }
 
     pub fn chr_ram_size(&self) -> usize {
-        Cartridge::_chr_ram_size(self.header())
+        Self::_chr_ram_size(self.header())
     }
 
     pub fn chr_nvram_size(&self) -> usize {
@@ -172,7 +172,7 @@ impl Cartridge {
     }
 
     pub fn mapper(&self) -> u16 {
-        Cartridge::_mapper(self.header())
+        Self::_mapper(self.header())
     }
 
     pub fn submapper(&self) -> u8 {
