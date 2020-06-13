@@ -1,12 +1,12 @@
 use crate::cartridge::Cartridge;
 use crate::cpu_ram::Ram;
-use crate::nes2c02::Nes2c02;
+use crate::ricoh2c02::Ricoh2c02;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct Bus {
     pub ram: Ram,
-    pub ppu: Nes2c02,
+    pub ppu: Ricoh2c02,
     cartridge: Option<Rc<RefCell<Cartridge>>>,
 }
 
@@ -14,7 +14,7 @@ impl Bus {
     pub fn new() -> Self {
         Bus {
             ram: Ram::new(),
-            ppu: Nes2c02::new(),
+            ppu: Ricoh2c02::new(),
             cartridge: None,
         }
     }

@@ -1,4 +1,4 @@
-pub struct Nes2c02 {
+pub struct Ricoh2c02 {
     clocks: u32,
     ppu_ctrl: u8,
     ppu_mask: u8,
@@ -11,9 +11,9 @@ pub struct Nes2c02 {
     oam_dma: u8,
 }
 
-impl Nes2c02 {
+impl Ricoh2c02 {
     pub fn new() -> Self {
-        Nes2c02 {
+        Ricoh2c02 {
             clocks: 0,
             ppu_ctrl: 0,
             ppu_mask: 0,

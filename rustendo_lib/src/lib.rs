@@ -5,6 +5,6 @@ mod mos6502;
 mod cpu_ram;
 mod ppu_ram;
 mod cartridge;
-mod nes2c02;
+mod ricoh2c02;
 mod mappers;
 pub mod nes;
