@@ -1,17 +1,23 @@
-use crate::cartridge::Cartridge;
+use crate::cartridge::{Cartridge, MirroringType};
+use crate::ppu_ram::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct Bus {
     cartridge: Option<Rc<RefCell<Cartridge>>>,
+    ram: Ram,
 }
 
 impl Bus {
     pub fn new() -> Self {
-        Bus { cartridge: None }
+        Bus {
+            cartridge: None,
+            ram: Ram::new(MirroringType::Vertical),
+        }
     }
 
     pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
+        self.ram = Ram::new(cartridge.borrow().mirroring_type());
         self.cartridge = Some(Rc::clone(cartridge));
     }
 

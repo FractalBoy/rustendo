@@ -1,6 +1,6 @@
 use crate::cartridge::Cartridge;
 use crate::nes2c02::Nes2c02;
-use crate::ram::Ram;
+use crate::cpu_ram::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
 
