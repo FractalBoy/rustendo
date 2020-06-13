@@ -12,20 +12,27 @@ impl Bus {
     pub fn new() -> Self {
         Bus {
             cartridge: None,
-            ram: Ram::new(MirroringType::Vertical),
+            ram: Ram::new(),
         }
     }
 
     pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
-        self.ram = Ram::new(cartridge.borrow().mirroring_type());
+        self.ram
+            .set_mirroring_type(cartridge.borrow().mirroring_type());
         self.cartridge = Some(Rc::clone(cartridge));
     }
 
     pub fn ppu_read(&self, address: u16) -> u8 {
-        unimplemented!()
+        match address {
+            0x2000..=0x3EFF => self.ram.read(address),
+            _ => unimplemented!(),
+        }
     }
 
     pub fn ppu_write(&mut self, address: u16, data: u8) {
-        unimplemented!()
+        match address {
+            0x2000..=0x3EFF => self.ram.write(address, data),
+            _ => unimplemented!(),
+        }
     }
 }

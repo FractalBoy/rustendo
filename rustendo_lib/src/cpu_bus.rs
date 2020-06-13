@@ -1,6 +1,6 @@
 use crate::cartridge::Cartridge;
-use crate::nes2c02::Nes2c02;
 use crate::cpu_ram::Ram;
+use crate::nes2c02::Nes2c02;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -25,7 +25,8 @@ impl Bus {
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
         match address {
-            0x0..=0x1FFF => self.ram.write(address, data),
+            0x0000..=0x1FFF => self.ram.write(address, data),
+            0x2000..=0x3FFF => self.ppu.cpu_write(address & 0x2007, data),
             0x4020..=0xFFFF => match &self.cartridge {
                 Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
                 None => return,
@@ -37,6 +38,7 @@ impl Bus {
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
             0x0..=0x1FFF => self.ram.read(address),
+            0x2000..=0x3FFF => self.ppu.cpu_read(address & 0x2007),
             0x4020..=0xFFFF => match &self.cartridge {
                 Some(cartridge) => cartridge.borrow().cpu_read(address),
                 None => 0,
