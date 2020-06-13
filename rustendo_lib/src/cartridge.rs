@@ -27,8 +27,9 @@ pub struct Cartridge {
 
 impl Cartridge {
     pub fn new(raw: Vec<u8>) -> Self {
-        let mapper = match Cartridge::_mapper(&raw) {
-            0 => Mapper000::new(),
+        let header = Cartridge::_header(&raw);
+        let mapper = match Cartridge::_mapper(&header) {
+            0 => Mapper000::new(Cartridge::_prg_rom_size(&header), Cartridge::_chr_ram_size(&header)),
             _ => unimplemented!(),
         };
         let mapper = Box::new(mapper);
@@ -56,8 +57,12 @@ impl Cartridge {
     }
 
     fn prg_rom_size(&self) -> usize {
-        let lsb = self.header()[4] as u16;
-        let msb = ((self.header()[9] as u16) & 0xF) << 4;
+        Cartridge::_prg_rom_size(self.header())
+    }
+
+    fn _prg_rom_size(header: &[u8]) -> usize {
+        let lsb = header[4] as u16;
+        let msb = ((header[9] as u16) & 0xF) << 4;
         let size = msb | lsb;
 
         Cartridge::rom_size(size) as usize
@@ -105,12 +110,16 @@ impl Cartridge {
         }
     }
 
-    pub fn chr_ram_size(&self) -> usize {
-        let shift_count = self.header()[11] & 0x0F;
+    fn _chr_ram_size(header: &[u8]) -> usize {
+        let shift_count = header[11] & 0x0F;
         match shift_count {
             0 => 0,
             _ => 64 << shift_count,
         }
+    }
+
+    pub fn chr_ram_size(&self) -> usize {
+        Cartridge::_chr_ram_size(self.header())
     }
 
     pub fn chr_nvram_size(&self) -> usize {
@@ -191,23 +200,27 @@ impl Cartridge {
     }
 
     pub fn cpu_read(&self, address: u16) -> u8 {
-        let address = self.mapper.cpu_read(address);
-        self.raw[address as usize]
+        match self.mapper.cpu_read(address) {
+            (Some(address), _) => self.prg_rom()[address as usize],
+            (_, Some(data)) => data,
+            _ => 0,
+        }
     }
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
-        let address = self.mapper.cpu_write(address);
-        self.raw[address as usize] = data;
+        self.mapper.cpu_write(address, data);
     }
 
     pub fn ppu_read(&self, address: u16) -> u8 {
-        let address = self.mapper.ppu_read(address);
-        self.raw[address as usize]
+        match self.mapper.ppu_read(address) {
+            (Some(address), _) => self.chr_rom()[address as usize],
+            (_, Some(data)) => data,
+            _ => 0,
+        }
     }
 
     pub fn ppu_write(&mut self, address: u16, data: u8) {
-        let address = self.mapper.ppu_write(address);
-        self.raw[address as usize] = data;
+        self.mapper.ppu_write(address, data);
     }
 }
 
