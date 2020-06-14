@@ -8,17 +8,25 @@ pub struct Bus {
     pub ram: Ram,
     pub ppu: Ricoh2c02,
     cartridge: Option<Rc<RefCell<Cartridge>>>,
-    fake_ram: [u8; 0x10000],
+    // This ram is used only for testing.
+    test_ram: Option<[u8; 0x10000]>,
 }
 
 impl Bus {
     pub fn new() -> Self {
-        Bus {
+        let mut bus = Bus {
             ram: Ram::new(),
             ppu: Ricoh2c02::new(),
             cartridge: None,
-            fake_ram: [0; 0x10000],
+            test_ram: None,
+        };
+
+        // Set up some fake RAM to use for testing purposes only.
+        if cfg!(test) {
+            bus.test_ram = Some([0; 0x10000]);
         }
+
+        bus
     }
 
     pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
@@ -31,10 +39,24 @@ impl Bus {
             0x2000..=0x3FFF => self.ppu.cpu_write(address & 0x2007, data),
             0x4020..=0xFFFF => match &self.cartridge {
                 Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
-                None => self.fake_ram[address as usize] = data,
+                None => self.set_test_ram(address, data),
             },
-            _ => self.fake_ram[address as usize] = data,
+            _ => self.set_test_ram(address, data),
         };
+    }
+
+    fn set_test_ram(&mut self, address: u16, data: u8) {
+        match &mut self.test_ram {
+            Some(fake_ram) => fake_ram[address as usize] = data,
+            None => return,
+        }
+    }
+
+    fn get_test_ram(&self, address: u16) -> u8 {
+        match &self.test_ram {
+            Some(fake_ram) => fake_ram[address as usize],
+            None => 0,
+        }
     }
 
     pub fn cpu_read(&mut self, address: u16) -> u8 {
@@ -43,9 +65,9 @@ impl Bus {
             0x2000..=0x3FFF => self.ppu.cpu_read(address & 0x2007),
             0x4020..=0xFFFF => match &self.cartridge {
                 Some(cartridge) => cartridge.borrow().cpu_read(address),
-                None => self.fake_ram[address as usize],
+                None => self.get_test_ram(address),
             },
-            _ => self.fake_ram[address as usize],
+            _ => self.get_test_ram(address),
         }
     }
 }
