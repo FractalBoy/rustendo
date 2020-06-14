@@ -1,4 +1,10 @@
+use crate::ppu_bus::Bus;
+use std::cell::RefCell;
+use std::rc::Rc;
+
 pub struct Ricoh2c02 {
+    bus: Rc<RefCell<Bus>>,
+    oam: [u8; 0x100],
     clocks: u32,
     scanline: u32,
     cycle: u32,
@@ -12,14 +18,25 @@ pub struct Ricoh2c02 {
     ppu_data: u8,
     oam_dma: u8,
     palette: [(u8, u8, u8); 0x40],
+    universal_background_color: u8,
+    background_palette_0: (u8, u8, u8),
+    background_palette_1: (u8, u8, u8),
+    background_palette_2: (u8, u8, u8),
+    background_palette_3: (u8, u8, u8),
+    sprite_palette_0: (u8, u8, u8),
+    sprite_palette_1: (u8, u8, u8),
+    sprite_palette_2: (u8, u8, u8),
+    sprite_palette_3: (u8, u8, u8),
 }
 
 const CYCLES_PER_SCANLINE: u32 = 341;
 const SCANLINES_PER_FRAME: u32 = 262;
 
 impl Ricoh2c02 {
-    pub fn new() -> Self {
+    pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
         Ricoh2c02 {
+            bus: Rc::clone(bus),
+            oam: [0; 0x100],
             clocks: 0,
             cycle: 0,
             scanline: 261,
@@ -33,6 +50,15 @@ impl Ricoh2c02 {
             ppu_data: 0,
             oam_dma: 0,
             palette: Self::get_palette(),
+            universal_background_color: 0,
+            background_palette_0: (0, 0, 0),
+            background_palette_1: (0, 0, 0),
+            background_palette_2: (0, 0, 0),
+            background_palette_3: (0, 0, 0),
+            sprite_palette_0: (0, 0, 0),
+            sprite_palette_1: (0, 0, 0),
+            sprite_palette_2: (0, 0, 0),
+            sprite_palette_3: (0, 0, 0),
         }
     }
 
@@ -137,6 +163,64 @@ impl Ricoh2c02 {
             0x2006 => self.ppu_addr = data,
             0x2007 => self.ppu_data = data,
             _ => (),
+        }
+    }
+
+    pub fn ppu_read(&self, address: u16) -> u8 {
+        match address {
+            0x0000..=0x3EFF => self.bus.borrow().ppu_read(address),
+            0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C | 0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
+                self.universal_background_color
+            }
+            0x3F01..=0x3F03 => match address & 0x0003 {
+                0x0001 => self.background_palette_0.0,
+                0x0002 => self.background_palette_0.1,
+                0x0003 => self.background_palette_0.2,
+                _ => unreachable!()
+            },
+            0x3F05..=0x3F07 => match address & 0x0003 {
+                0x0001 => self.background_palette_1.0,
+                0x0002 => self.background_palette_1.1,
+                0x0003 => self.background_palette_1.2,
+                _ => unreachable!()
+            },
+            0x3F09..=0x3F0B => match address & 0x0003 {
+                0x0001 => self.background_palette_2.0,
+                0x0002 => self.background_palette_2.1,
+                0x0003 => self.background_palette_2.2,
+                _ => unreachable!()
+            },
+            0x3F0D..=0x3F0F => match address & 0x0003 {
+                0x0001 => self.background_palette_3.0,
+                0x0002 => self.background_palette_3.1,
+                0x0003 => self.background_palette_3.2,
+                _ => unreachable!()
+            },
+            0x3F11..=0x3F13 => match address & 0x0003 {
+                0x0001 => self.sprite_palette_0.0,
+                0x0002 => self.sprite_palette_0.1,
+                0x0003 => self.sprite_palette_0.2,
+                _ => unreachable!()
+            },
+            0x3F15..=0x3F17 => match address & 0x0003 {
+                0x0001 => self.sprite_palette_1.0,
+                0x0002 => self.sprite_palette_1.1,
+                0x0003 => self.sprite_palette_1.2,
+                _ => unreachable!()
+            },
+            0x3F19..=0x3F1B => match address & 0x0003 {
+                0x0001 => self.sprite_palette_2.0,
+                0x0002 => self.sprite_palette_2.1,
+                0x0003 => self.sprite_palette_2.2,
+                _ => unreachable!()
+            },
+            0x3F1D..=0x3F1F => match address & 0x0003 {
+                0x0001 => self.sprite_palette_3.0,
+                0x0002 => self.sprite_palette_3.1,
+                0x0003 => self.sprite_palette_3.2,
+                _ => unreachable!()
+            },
+            _ => 0,
         }
     }
 

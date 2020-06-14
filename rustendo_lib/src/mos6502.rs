@@ -764,6 +764,11 @@ impl Mos6502 {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.clocks = 0;
+        self.not_reset = false;
+    }
+
     fn write_address(&mut self, address_high: u8, address_low: u8) {
         self.address_bus
             .borrow_mut()
@@ -801,10 +806,18 @@ impl Mos6502 {
         if self.cycles == 0 {
             if !self.not_nmi {
                 self.interrupt(7, 0, 0xFFFB, false, false);
+                // Assume NMI should end after reset is complete
+                self.not_nmi = true;
             } else if !self.not_reset {
                 self.interrupt(6, 0, 0xFFFD, true, false);
+                // Set stack pointer to 0xFD to mimic reset
+                self.s = 0xFD;
+                // Assume that reset should end after reset is complete
+                self.not_reset = true;
             } else if !self.not_irq && !self.p.irq_disable {
                 self.interrupt(7, 0, 0xFFFF, false, false);
+                // Assume that IRQ should end after interrupt is complete
+                self.not_irq = true;
             } else {
                 // No interrupt, execute instruction like normal.
                 self.read_instruction();
@@ -1465,14 +1478,16 @@ impl Mos6502 {
 mod tests {
     use super::Mos6502;
     use crate::assembler::{self, AssemblerError};
-    use crate::cpu_bus::Bus;
+    use crate::cpu_bus::Bus as CpuBus;
+    use crate::ricoh2c02::Ricoh2c02;
+    use crate::ppu_bus::Bus as PpuBus;
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    fn run_program(program: &str) -> Bus {
+    fn run_program(program: &str) -> CpuBus {
         match assembler::run_program(program) {
-            Ok(connect) => match Rc::try_unwrap(connect) {
-                Ok(connect) => connect.into_inner(),
+            Ok(bus) => match Rc::try_unwrap(bus) {
+                Ok(bus) => bus.into_inner(),
                 Err(_) => panic!("there is more than one strong reference"),
             },
             Err(error) => {
@@ -2501,7 +2516,10 @@ mod tests {
 
     #[test]
     fn irq() {
-        let mut bus = Bus::new();
+        let ppu_bus = Rc::new(RefCell::new(PpuBus::new()));
+        let ppu = Rc::new(RefCell::new(Ricoh2c02::new(&ppu_bus)));
+        let cpu_bus = Rc::new(RefCell::new(CpuBus::new(&ppu)));
+        let cpu = Mos6502::new(&cpu_bus);
 
         let program = assembler::assemble_program(
             "
@@ -2523,16 +2541,15 @@ mod tests {
         let mut location = 0;
 
         for byte in mem {
-            bus.cpu_write(location, byte);
+            cpu_bus.borrow_mut().cpu_write(location, byte);
             location += 1;
         }
 
         // Set interrupt vector to start at RTI
-        bus.cpu_write(0xFFFF, 0x00); // Address high
-        bus.cpu_write(0xFFFE, 0x06); // Address low
+        cpu_bus.borrow_mut().cpu_write(0xFFFF, 0x00); // Address high
+        cpu_bus.borrow_mut().cpu_write(0xFFFE, 0x06); // Address low
 
-        let bus = Rc::new(RefCell::new(bus));
-        let mut cpu = Mos6502::new(&bus);
+        let mut cpu = Mos6502::new(&cpu_bus);
 
         // Do loop for a while
         for _ in 0..20 {
@@ -2547,6 +2564,6 @@ mod tests {
             while !cpu.clock() {}
         }
 
-        assert_ne!(bus.borrow_mut().cpu_read(0x00FF), 0, "data stored in 0xFF");
+        assert_ne!(cpu_bus.borrow_mut().cpu_read(0x00FF), 0, "data stored in 0xFF");
     }
 }
