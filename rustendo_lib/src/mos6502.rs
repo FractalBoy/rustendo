@@ -801,13 +801,10 @@ impl Mos6502 {
         if self.cycles == 0 {
             if !self.not_nmi {
                 self.interrupt(7, 0, 0xFFFB, false, false);
-                self.not_nmi = true;
             } else if !self.not_reset {
                 self.interrupt(6, 0, 0xFFFD, true, false);
-                self.not_reset = true;
             } else if !self.not_irq && !self.p.irq_disable {
                 self.interrupt(7, 0, 0xFFFF, false, false);
-                self.not_irq = true;
             } else {
                 // No interrupt, execute instruction like normal.
                 self.read_instruction();
