@@ -1,5 +1,7 @@
 pub struct Ricoh2c02 {
     clocks: u32,
+    scanline: u32,
+    cycle: u32,
     ppu_ctrl: u8,
     ppu_mask: u8,
     ppu_status: u8,
@@ -12,10 +14,15 @@ pub struct Ricoh2c02 {
     palette: [(u8, u8, u8); 0x40],
 }
 
+const CYCLES_PER_SCANLINE: u32 = 341;
+const SCANLINES_PER_FRAME: u32 = 262;
+
 impl Ricoh2c02 {
     pub fn new() -> Self {
         Ricoh2c02 {
             clocks: 0,
+            cycle: 0,
+            scanline: 261,
             ppu_ctrl: 0,
             ppu_mask: 0,
             ppu_status: 0,
@@ -135,11 +142,81 @@ impl Ricoh2c02 {
 
     pub fn clock(&mut self) {
         // Divide input clock by four.
-        if self.clocks % 4 != 0 {
-            self.clocks = self.clocks.wrapping_add(1);
-            return;
+        if self.clocks % 4 == 0 {
+            self.do_next_cycle();
         }
 
         self.clocks = self.clocks.wrapping_add(1);
+    }
+
+    pub fn do_next_cycle(&mut self) {
+        match self.scanline {
+            261 => {
+                // Pre-render scanline, fill shift registers with data
+                // for the first two tiles of the next scanline.
+            }
+            0..=239 => {
+                // Visible scanlines. Render both background and sprites.
+                match self.cycle {
+                    0 => {
+                        // Idle cycle.
+                    }
+                    1..=256 => {
+                        // The data for each tile is fetched during this phase.
+                        // Each memory access takes two PPU cycles to complete,
+                        // and 4 must be performed per tile:
+                        //
+                        // 1. Nametable byte
+                        // 2. Attribute table byte
+                        // 3. Pattern table tile low
+                        // 4. Pattern table tile high (+8 bytes from pattern table tile low)
+                    }
+                    257..=320 => {
+                        // The tile data for the sprites on the __next__ scanline are
+                        // fetched here:
+                        //
+                        // 1. Garbage nametable byte
+                        // 2. Garbage nametable byte
+                        // 3. Pattern table tile low
+                        // 4. Pattern table tile high (+8 bytes from pattern table tile low)
+                    }
+                    321..=336 => {
+                        // The first two tiles for the next scanline are fetched here.
+                    }
+                    337..=340 => {
+                        // Two bytes are fetched, but the purpose for this is unknown.
+                        //
+                        // 1. Nametable byte
+                        // 2. Nametable byte
+                    }
+                    _ => (),
+                }
+            }
+            240 => {
+                // Post-render scanline. The PPU just idles during this scanline.
+                // The VBlank flag isn't set until after this scanline.
+            }
+            241..=260 => {
+                // Vertical blank.
+                match self.cycle {
+                    1 => {
+                        // VBlank flag set here. VBlank NMI also occurs here.
+                    }
+                    // Idle otherwise.
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+
+        self.cycle += 1;
+
+        if self.cycle == CYCLES_PER_SCANLINE {
+            self.scanline += 1;
+            self.cycle = 0;
+        }
+        if self.scanline == SCANLINES_PER_FRAME {
+            self.scanline = 0;
+        }
     }
 }

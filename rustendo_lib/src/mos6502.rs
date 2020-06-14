@@ -714,7 +714,6 @@ pub struct Mos6502 {
     sync: bool,
     #[allow(dead_code)]
     not_reset: bool,
-    interrupt_vector: u16,
 }
 
 enum IndexRegister {
@@ -762,7 +761,6 @@ impl Mos6502 {
             not_reset: true,
             not_set_overflow: true,
             sync: false,
-            interrupt_vector: 0xFFFE,
         }
     }
 
@@ -801,21 +799,20 @@ impl Mos6502 {
         }
 
         if self.cycles == 0 {
-            self.read_instruction();
-
-            if !self.p.irq_disable && !self.not_irq {
-                self.interrupt_vector = 0xFFFE;
-                // Set instruction register to 0, the BRK instruction.
-                self.instruction_register.data = 0x00;
-            }
-
             if !self.not_nmi {
-                self.interrupt_vector = 0xFFFB;
-                // Set instruction register to 0, the BRK instruction.
-                self.instruction_register.data = 0x00;
+                self.interrupt(7, 0, 0xFFFB, false, false);
+                self.not_nmi = true;
+            } else if !self.not_reset {
+                self.interrupt(6, 0, 0xFFFD, true, false);
+                self.not_reset = true;
+            } else if !self.not_irq && !self.p.irq_disable {
+                self.interrupt(7, 0, 0xFFFF, false, false);
+                self.not_irq = true;
+            } else {
+                // No interrupt, execute instruction like normal.
+                self.read_instruction();
+                self.execute_instruction();
             }
-
-            self.execute_instruction();
         }
 
         self.cycles -= 1;
@@ -1025,7 +1022,14 @@ impl Mos6502 {
         self.pc.borrow_mut().read_high_from_data_bus();
     }
 
-    fn interrupt(&mut self, cycles: u32, bytes: u32) {
+    fn interrupt(
+        &mut self,
+        cycles: u32,
+        bytes: u32,
+        interrupt_vector: u16,
+        suppress_writes: bool,
+        brk_command: bool,
+    ) {
         self.cycles = cycles;
 
         let address = self.pc.borrow().wide();
@@ -1034,29 +1038,47 @@ impl Mos6502 {
         let high = ((address >> 4) & 0x0F) as u8;
         let low = (address & 0x0F) as u8;
 
-        self.write_address(0x01, self.s);
-        self.data_bus.borrow_mut().write(high);
-        self.write();
+        // A reset suppresses writes to memory.
+        if !suppress_writes {
+            self.write_address(0x01, self.s);
+            self.data_bus.borrow_mut().write(high);
+            self.write();
+        }
 
         self.s -= 1;
 
-        self.write_address(0x01, self.s);
-        self.data_bus.borrow_mut().write(low);
-        self.write();
+        // A reset suppresses writes to memory.
+        if !suppress_writes {
+            self.write_address(0x01, self.s);
+            self.data_bus.borrow_mut().write(low);
+            self.write();
+        }
 
         self.s -= 1;
 
-        self.write_address(0x01, self.s);
-        self.data_bus.borrow_mut().write(self.p.get());
-        self.write();
+        // A reset suppresses writes to memory.
+        if !suppress_writes {
+            self.write_address(0x01, self.s);
+            let mut p = self.p.get();
 
-        let interrupt_vector = self.interrupt_vector;
+            // The B flag should be set if this interrupt is from a BRK instruction,
+            // otherwise it should be cleared.
+            if brk_command {
+                p |= 0x10;
+            } else {
+                p &= !0x10;
+            }
+
+            self.data_bus.borrow_mut().write(p);
+            self.write();
+        }
+
         let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
         let vector_low = (interrupt_vector & 0xFF) as u8;
 
         self.write_address(vector_high, vector_low);
         self.read();
-        self.pc.borrow_mut().read_low_from_data_bus();
+        self.pc.borrow_mut().read_high_from_data_bus();
 
         let interrupt_vector = interrupt_vector.wrapping_sub(1);
         let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
@@ -1064,7 +1086,9 @@ impl Mos6502 {
 
         self.write_address(vector_high, vector_low);
         self.read();
-        self.pc.borrow_mut().read_high_from_data_bus();
+        self.pc.borrow_mut().read_low_from_data_bus();
+
+        self.p.irq_disable = true;
     }
 
     fn read_instruction(&mut self) {
@@ -1124,7 +1148,7 @@ impl Mos6502 {
             Instruction::BMI(mode, _, cycles) => self.branch(self.p.negative, mode, cycles),
             Instruction::BNE(mode, _, cycles) => self.branch(!self.p.zero, mode, cycles),
             Instruction::BPL(mode, _, cycles) => self.branch(!self.p.negative, mode, cycles),
-            Instruction::BRK(_, bytes, cycles) => self.interrupt(cycles, bytes),
+            Instruction::BRK(_, bytes, cycles) => self.interrupt(cycles, bytes, 0xFFFF, false, true),
             Instruction::BVC(mode, _, cycles) => self.branch(!self.p.overflow, mode, cycles),
             Instruction::BVS(mode, _, cycles) => self.branch(self.p.overflow, mode, cycles),
             Instruction::CLC(_, _, cycles) => {
@@ -1521,7 +1545,11 @@ mod tests {
             ",
         );
         assert_eq!(bus.cpu_read(0xFF), 0x73, "0x81 + 0x92 = 0x73 in BCD");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x01, "0x81 + 0x92 sets carry flag");
+        assert_eq!(
+            bus.cpu_read(0x01FF) & 0x01,
+            0x01,
+            "0x81 + 0x92 sets carry flag"
+        );
     }
 
     #[test]
@@ -1769,10 +1797,26 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0x01FF), 0x00, "address after BRK stored on stack");
-        assert_eq!(bus.cpu_read(0x01FE), 0x07, "address after BRK stored on stack");
-        assert_eq!(bus.cpu_read(0x01FD) & 0x02, 0x02, "zero flag stored on stack");
-        assert_eq!(bus.cpu_read(0x01FD) & 0x01, 0x01, "carry flag stored on stack");
+        assert_eq!(
+            bus.cpu_read(0x01FF),
+            0x00,
+            "address after BRK stored on stack"
+        );
+        assert_eq!(
+            bus.cpu_read(0x01FE),
+            0x07,
+            "address after BRK stored on stack"
+        );
+        assert_eq!(
+            bus.cpu_read(0x01FD) & 0x02,
+            0x02,
+            "zero flag stored on stack"
+        );
+        assert_eq!(
+            bus.cpu_read(0x01FD) & 0x01,
+            0x01,
+            "carry flag stored on stack"
+        );
     }
 
     #[test]
