@@ -8,6 +8,7 @@ pub struct Bus {
     pub ram: Ram,
     pub ppu: Ricoh2c02,
     cartridge: Option<Rc<RefCell<Cartridge>>>,
+    fake_ram: [u8; 0x10000],
 }
 
 impl Bus {
@@ -16,6 +17,7 @@ impl Bus {
             ram: Ram::new(),
             ppu: Ricoh2c02::new(),
             cartridge: None,
+            fake_ram: [0; 0x10000],
         }
     }
 
@@ -29,9 +31,9 @@ impl Bus {
             0x2000..=0x3FFF => self.ppu.cpu_write(address & 0x2007, data),
             0x4020..=0xFFFF => match &self.cartridge {
                 Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
-                None => return,
+                None => self.fake_ram[address as usize] = data,
             },
-            _ => unimplemented!(),
+            _ => self.fake_ram[address as usize] = data,
         };
     }
 
@@ -41,9 +43,9 @@ impl Bus {
             0x2000..=0x3FFF => self.ppu.cpu_read(address & 0x2007),
             0x4020..=0xFFFF => match &self.cartridge {
                 Some(cartridge) => cartridge.borrow().cpu_read(address),
-                None => 0,
+                None => self.fake_ram[address as usize],
             },
-            _ => 0,
+            _ => self.fake_ram[address as usize],
         }
     }
 }

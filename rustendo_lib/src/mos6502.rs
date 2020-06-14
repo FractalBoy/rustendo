@@ -1008,18 +1008,15 @@ impl Mos6502 {
         result
     }
 
-    fn jump(&mut self, mode: AddressingMode, cycles: u32) {
+    fn jump(&mut self, cycles: u32) {
         self.cycles = cycles;
 
-        self.do_addressing_mode(mode);
-
-        self.read();
-        self.pc.borrow_mut().read_low_from_data_bus();
-
-        self.fetch_next_byte();
-
-        self.read();
-        self.pc.borrow_mut().read_high_from_data_bus();
+        let low = self.fetch_next_byte();
+        let high = self.fetch_next_byte();
+        let pc = (high as u16) << 8 | low as u16;
+        // Subtract one to counteract the standard PC increment.
+        let pc = pc.wrapping_sub(1);
+        self.pc.borrow_mut().write(pc);
     }
 
     fn interrupt(
@@ -1148,7 +1145,9 @@ impl Mos6502 {
             Instruction::BMI(mode, _, cycles) => self.branch(self.p.negative, mode, cycles),
             Instruction::BNE(mode, _, cycles) => self.branch(!self.p.zero, mode, cycles),
             Instruction::BPL(mode, _, cycles) => self.branch(!self.p.negative, mode, cycles),
-            Instruction::BRK(_, bytes, cycles) => self.interrupt(cycles, bytes, 0xFFFF, false, true),
+            Instruction::BRK(_, bytes, cycles) => {
+                self.interrupt(cycles, bytes, 0xFFFF, false, true)
+            }
             Instruction::BVC(mode, _, cycles) => self.branch(!self.p.overflow, mode, cycles),
             Instruction::BVS(mode, _, cycles) => self.branch(self.p.overflow, mode, cycles),
             Instruction::CLC(_, _, cycles) => {
@@ -1205,8 +1204,8 @@ impl Mos6502 {
             }
             Instruction::INX(_, _, cycles) => self.x = self.increment(self.x, 1, cycles),
             Instruction::INY(_, _, cycles) => self.y = self.increment(self.y, 1, cycles),
-            Instruction::JMP(mode, _, cycles) => self.jump(mode, cycles),
-            Instruction::JSR(mode, bytes, cycles) => {
+            Instruction::JMP(_, _, cycles) => self.jump(cycles),
+            Instruction::JSR(_, bytes, cycles) => {
                 let next_address = self
                     .pc
                     .borrow()
@@ -1229,7 +1228,7 @@ impl Mos6502 {
                 self.write();
                 self.s -= 1;
 
-                self.jump(mode, cycles);
+                self.jump(cycles);
             }
             Instruction::LDA(mode, _, cycles) => {
                 self.cycles = cycles;
@@ -1467,8 +1466,10 @@ impl Mos6502 {
 
 #[cfg(test)]
 mod tests {
+    use super::Mos6502;
     use crate::assembler::{self, AssemblerError};
     use crate::cpu_bus::Bus;
+    use std::cell::RefCell;
     use std::rc::Rc;
 
     fn run_program(program: &str) -> Bus {
@@ -2239,7 +2240,7 @@ mod tests {
     fn jmp() {
         let mut bus = run_program(
             "
-            JMP $0800
+            JMP $0900
             NOP
             NOP
             LDA #$FF // These two lines should not execute
@@ -2255,7 +2256,7 @@ mod tests {
     fn jsr() {
         let mut bus = run_program(
             "
-            JSR $0800
+            JSR $0900
             LDA #$FF
             STA $FF
             LDA #$FF
@@ -2499,5 +2500,56 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
         assert_eq!(status & 0x01, 0x00, "carry bit not set");
+    }
+
+    #[test]
+    fn irq() {
+        let mut bus = Bus::new();
+
+        let program = assembler::assemble_program(
+            "
+            CLI
+            LDX #$00
+            INX
+            JMP $0300 // Jump back to INX, keep incrementing
+            STX $FF   // Should never happen unless interrupt works
+            RTI
+        ",
+        )
+        .expect("Encountered assembler error");
+
+        let mut mem: Vec<u8> = Vec::new();
+        for instruction in program.iter().cloned() {
+            mem.extend_from_slice(&instruction);
+        }
+
+        let mut location = 0;
+
+        for byte in mem {
+            bus.cpu_write(location, byte);
+            location += 1;
+        }
+
+        // Set interrupt vector to start at RTI
+        bus.cpu_write(0xFFFF, 0x00); // Address high
+        bus.cpu_write(0xFFFE, 0x06); // Address low
+
+        let bus = Rc::new(RefCell::new(bus));
+        let mut cpu = Mos6502::new(&bus);
+
+        // Do loop for a while
+        for _ in 0..20 {
+            while !cpu.clock() {}
+        }
+
+        // Interrupt
+        cpu.not_irq = false;
+
+        // Do interrupt and two instructions
+        for _ in 0..3 {
+            while !cpu.clock() {}
+        }
+
+        assert_ne!(bus.borrow_mut().cpu_read(0x00FF), 0, "data stored in 0xFF");
     }
 }

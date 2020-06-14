@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+#[derive(Debug)]
 pub enum AssemblerError {
     InvalidInstruction(u32),
     InvalidAddressingMode(u32),
@@ -12,7 +13,7 @@ pub enum AssemblerError {
     InvalidAddress(u32),
 }
 
-fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
+pub fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
     let immediate_re: Regex = Regex::new("#\\$([A-F\\d]{2})$").unwrap();
     let zero_page_re: Regex = Regex::new("\\$([A-F\\d]{2})$").unwrap();
     let zero_page_x_re: Regex = Regex::new("\\$([A-F\\d]{2})\\s*,\\s*[Xx]$").unwrap();
@@ -413,7 +414,7 @@ fn lookup_instruction(instruction: &str, addressing_mode: AddressingMode) -> Opt
             _ => None,
         },
         "JMP" => match addressing_mode {
-            AddressingMode::Absolute => Some(0x46),
+            AddressingMode::Absolute => Some(0x4C),
             AddressingMode::Indirect => Some(0x6C),
             _ => None,
         },
