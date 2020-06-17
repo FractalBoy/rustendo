@@ -1,6 +1,199 @@
 use crate::ppu_bus::Bus;
+use bitvec::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+enum IncrementMode {
+    AddOneGoingAcross = 0,
+    AddThirtyTwoGoingDown = 1,
+}
+
+enum SpriteSize {
+    EightByEight = 0,
+    EightBySixteen = 1,
+}
+
+enum PpuSelect {
+    ReadBackdrop = 0,
+    OutputColor = 1,
+}
+
+struct PpuCtrl {
+    base_nametable_address: u16,
+    increment_mode: IncrementMode,
+    sprite_pattern_table_address: u16,
+    background_pattern_table_address: u16,
+    sprite_size: SpriteSize,
+    ppu_select: PpuSelect,
+    nmi_enable: bool,
+}
+
+impl PpuCtrl {
+    pub fn new() -> Self {
+        PpuCtrl {
+            base_nametable_address: 0x2000,
+            increment_mode: IncrementMode::AddOneGoingAcross,
+            sprite_pattern_table_address: 0x0000,
+            background_pattern_table_address: 0x0000,
+            sprite_size: SpriteSize::EightByEight,
+            ppu_select: PpuSelect::ReadBackdrop,
+            nmi_enable: false,
+        }
+    }
+
+    pub fn set(&mut self, byte: u8) {
+        self.base_nametable_address = match byte & 0x03 {
+            0x0 => 0x2000,
+            0x1 => 0x2400,
+            0x2 => 0x2800,
+            0x3 => 0x2C00,
+            _ => unreachable!(),
+        };
+
+        self.increment_mode = if byte & 0x04 == 0x04 {
+            IncrementMode::AddThirtyTwoGoingDown
+        } else {
+            IncrementMode::AddOneGoingAcross
+        };
+
+        self.sprite_pattern_table_address = if byte & 0x08 == 0x08 { 0x1000 } else { 0x0000 };
+
+        self.background_pattern_table_address = if byte & 0x10 == 0x10 { 0x1000 } else { 0x0000 };
+
+        self.sprite_size = if byte & 0x20 == 0x20 {
+            SpriteSize::EightBySixteen
+        } else {
+            SpriteSize::EightByEight
+        };
+
+        self.ppu_select = if byte & 0x40 == 0x40 {
+            PpuSelect::OutputColor
+        } else {
+            PpuSelect::ReadBackdrop
+        };
+
+        self.nmi_enable = byte & 0x80 == 0x80;
+    }
+
+    pub fn get(&self) -> u8 {
+        let mut byte = match self.base_nametable_address {
+            0x2000 => 0x0,
+            0x2400 => 0x1,
+            0x2800 => 0x2,
+            0x2C00 => 0x3,
+            _ => unreachable!(),
+        };
+
+        byte |= match self.increment_mode {
+            IncrementMode::AddThirtyTwoGoingDown => 0x04,
+            IncrementMode::AddOneGoingAcross => 0x00,
+        };
+
+        byte |= match self.sprite_pattern_table_address {
+            0x0000 => 0x00,
+            0x1000 => 0x08,
+            _ => unreachable!(),
+        };
+
+        byte |= match self.background_pattern_table_address {
+            0x0000 => 0x00,
+            0x1000 => 0x10,
+            _ => unreachable!(),
+        };
+
+        byte |= match self.sprite_size {
+            SpriteSize::EightByEight => 0x00,
+            SpriteSize::EightBySixteen => 0x20,
+        };
+
+        byte |= match self.ppu_select {
+            PpuSelect::ReadBackdrop => 0x00,
+            PpuSelect::OutputColor => 0x40,
+        };
+
+        byte |= if self.nmi_enable { 0x80 } else { 0x00 };
+
+        byte
+    }
+}
+
+struct PpuMask {
+    greyscale: bool,
+    background_left_column_enable: bool,
+    sprite_left_column_enable: bool,
+    background_enable: bool,
+    sprite_enable: bool,
+    emphasize_red: bool,
+    emphasize_green: bool,
+    emphasize_blue: bool,
+}
+
+impl PpuMask {
+    pub fn new() -> Self {
+        PpuMask {
+            greyscale: false,
+            background_left_column_enable: false,
+            sprite_left_column_enable: false,
+            background_enable: false,
+            sprite_enable: false,
+            emphasize_red: false,
+            emphasize_green: false,
+            emphasize_blue: false,
+        }
+    }
+
+    pub fn set(&mut self, byte: u8) {
+        self.greyscale = byte & 0x01 == 0x01;
+        self.background_left_column_enable = byte & 0x02 == 0x02;
+        self.sprite_left_column_enable = byte & 0x04 == 0x04;
+        self.background_enable = byte & 0x08 == 0x08;
+        self.sprite_enable = byte & 0x10 == 0x10;
+        self.emphasize_red = byte & 0x20 == 0x20;
+        self.emphasize_green = byte & 0x40 == 0x40;
+        self.emphasize_blue = byte & 0x80 == 0x80;
+    }
+
+    pub fn get(&self) -> u8 {
+        self.greyscale as u8
+            | (self.background_left_column_enable as u8) << 1
+            | (self.sprite_left_column_enable as u8) << 2
+            | (self.background_enable as u8) << 3
+            | (self.sprite_enable as u8) << 4
+            | (self.emphasize_red as u8) << 5
+            | (self.emphasize_green as u8) << 6
+            | (self.emphasize_blue as u8) << 7
+    }
+}
+
+struct PpuStatus {
+    sprite_overflow: bool,
+    sprite_zero_hit: bool,
+    vertical_blank_started: bool,
+}
+
+impl PpuStatus {
+    pub fn new() -> Self {
+        PpuStatus {
+            sprite_overflow: false,
+            sprite_zero_hit: false,
+            vertical_blank_started: false,
+        }
+    }
+
+    pub fn set(&mut self, byte: u8) {
+        let byte = byte >> 5;
+        self.sprite_overflow = byte & 0x01 == 0x01;
+        self.sprite_zero_hit = byte & 0x02 == 0x02;
+        self.vertical_blank_started = byte & 0x04 == 0x04;
+    }
+
+    pub fn get(&self) -> u8 {
+        (self.sprite_overflow as u8
+            | (self.sprite_zero_hit as u8) << 1
+            | (self.vertical_blank_started as u8) << 2)
+            << 5
+    }
+}
 
 pub struct Ricoh2c02 {
     bus: Rc<RefCell<Bus>>,
@@ -8,9 +201,9 @@ pub struct Ricoh2c02 {
     clocks: u32,
     scanline: u32,
     cycle: u32,
-    ppu_ctrl: u8,
-    ppu_mask: u8,
-    ppu_status: u8,
+    ppu_ctrl: PpuCtrl,
+    ppu_mask: PpuMask,
+    ppu_status: PpuStatus,
     oam_addr: u8,
     oam_data: u8,
     ppu_scroll: u8,
@@ -40,9 +233,9 @@ impl Ricoh2c02 {
             clocks: 0,
             cycle: 0,
             scanline: 261,
-            ppu_ctrl: 0,
-            ppu_mask: 0,
-            ppu_status: 0,
+            ppu_ctrl: PpuCtrl::new(),
+            ppu_mask: PpuMask::new(),
+            ppu_status: PpuStatus::new(),
             oam_addr: 0,
             oam_data: 0,
             ppu_scroll: 0,
@@ -137,8 +330,8 @@ impl Ricoh2c02 {
             0x2001 => 0,
             0x2002 => {
                 // Clear bit 7
-                self.ppu_status = self.ppu_status & !0x80u8;
-                self.ppu_status
+                self.ppu_status.set(self.ppu_status.get() & !0x80u8);
+                self.ppu_status.get()
             }
             0x2003 => 0,
             0x2004 => self.oam_data,
@@ -151,9 +344,9 @@ impl Ricoh2c02 {
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
         match address {
-            0x2000 => self.ppu_ctrl = data,
-            0x2001 => self.ppu_mask = data,
-            0x2002 => self.ppu_status = data,
+            0x2000 => self.ppu_ctrl.set(data),
+            0x2001 => self.ppu_mask.set(data),
+            0x2002 => self.ppu_status.set(data),
             0x2003 => self.oam_addr = data,
             0x2004 => {
                 self.oam_addr = self.oam_addr.wrapping_add(1);
@@ -176,49 +369,49 @@ impl Ricoh2c02 {
                 0x0001 => self.background_palette_0.0,
                 0x0002 => self.background_palette_0.1,
                 0x0003 => self.background_palette_0.2,
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             0x3F05..=0x3F07 => match address & 0x0003 {
                 0x0001 => self.background_palette_1.0,
                 0x0002 => self.background_palette_1.1,
                 0x0003 => self.background_palette_1.2,
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             0x3F09..=0x3F0B => match address & 0x0003 {
                 0x0001 => self.background_palette_2.0,
                 0x0002 => self.background_palette_2.1,
                 0x0003 => self.background_palette_2.2,
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             0x3F0D..=0x3F0F => match address & 0x0003 {
                 0x0001 => self.background_palette_3.0,
                 0x0002 => self.background_palette_3.1,
                 0x0003 => self.background_palette_3.2,
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             0x3F11..=0x3F13 => match address & 0x0003 {
                 0x0001 => self.sprite_palette_0.0,
                 0x0002 => self.sprite_palette_0.1,
                 0x0003 => self.sprite_palette_0.2,
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             0x3F15..=0x3F17 => match address & 0x0003 {
                 0x0001 => self.sprite_palette_1.0,
                 0x0002 => self.sprite_palette_1.1,
                 0x0003 => self.sprite_palette_1.2,
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             0x3F19..=0x3F1B => match address & 0x0003 {
                 0x0001 => self.sprite_palette_2.0,
                 0x0002 => self.sprite_palette_2.1,
                 0x0003 => self.sprite_palette_2.2,
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             0x3F1D..=0x3F1F => match address & 0x0003 {
                 0x0001 => self.sprite_palette_3.0,
                 0x0002 => self.sprite_palette_3.1,
                 0x0003 => self.sprite_palette_3.2,
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             _ => 0,
         }
