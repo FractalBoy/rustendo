@@ -1,12 +1,17 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <title>Rustendo</title>
-  </head>
-  <body>
-    <canvas id="rustendo-canvas" width="256" height="240"></canvas>
-    <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
-    <script src="./bootstrap.js"></script>
-  </body>
+
+<head>
+  <meta charset="utf-8">
+  <title>Rustendo</title>
+</head>
+
+<body>
+  <input type="file" id="cartridge-file" accept="application/octet-stream" style="display: none;">
+  <button id="load-cartridge-button">Load Cartridge</button>
+  <canvas id="rustendo-canvas" width="256" height="240"></canvas>
+  <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
+  <script src="./bootstrap.js"></script>
+</body>
+
 </html>

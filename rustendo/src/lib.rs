@@ -1,4 +1,5 @@
 use js_sys::Array;
+use rustendo_lib::cartridge::Cartridge;
 use rustendo_lib::nes::Nes;
 use std::cell::RefCell;
 use std::f64;
@@ -25,11 +26,30 @@ fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) {
         .expect("should register `requestAnimationFrame` OK");
 }
 
+static mut STOP_ANIMATION: bool = false;
+
+fn continue_animation() -> bool {
+    unsafe { !STOP_ANIMATION }
+}
+
 #[wasm_bindgen]
-pub fn render() {
+pub fn stop_animation() {
+    unsafe { STOP_ANIMATION = true };
+}
+
+#[wasm_bindgen]
+pub fn startup() {
     utils::set_panic_hook();
+}
+
+#[wasm_bindgen]
+pub fn render(byte_array: js_sys::Uint8Array) {
+    unsafe { STOP_ANIMATION = false };
 
     let nes = Nes::new();
+    let vec = byte_array.to_vec();
+    let cartridge = Cartridge::new(vec);
+    nes.load_cartridge(cartridge);
 
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document.get_element_by_id("rustendo-canvas").unwrap();
@@ -54,7 +74,9 @@ pub fn render() {
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp| {
         web_sys::console::log(&Array::of1(&JsValue::from_f64(timestamp - prev_timestamp)));
         draw(&context, &canvas, &mut nes1.borrow_mut());
-        request_animation_frame(f.borrow().as_ref().unwrap());
+        if continue_animation() {
+            request_animation_frame(f.borrow().as_ref().unwrap());
+        }
         prev_timestamp = timestamp;
     }) as Box<dyn FnMut(f64)>));
 
@@ -100,15 +122,4 @@ fn set_color_at_coord(
     data[red_index + 1] = color.1;
     data[red_index + 2] = color.2;
     data[red_index + 3] = 0xFF;
-}
-
-trait DrawPixel {
-    fn draw_pixel(&self, x: f64, y: f64, color: &str);
-}
-
-impl DrawPixel for web_sys::CanvasRenderingContext2d {
-    fn draw_pixel(&self, x: f64, y: f64, color: &str) {
-        self.set_fill_style(&JsValue::from_str(color));
-        self.fill_rect(x, y, 1.0, 1.0);
-    }
 }

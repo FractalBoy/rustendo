@@ -4,7 +4,7 @@ mod ppu_bus;
 mod mos6502;
 mod cpu_ram;
 mod ppu_ram;
-mod cartridge;
+pub mod cartridge;
 mod ricoh2c02;
 mod mappers;
 pub mod nes;
