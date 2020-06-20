@@ -25,9 +25,10 @@ impl Mapper for Mapper000 {
             0x8000..=0xBFFF => (Some(address & 0x7FFF), None),
             0xC000..=0xFFFF => match self.prg_rom_size {
                 // If the size is 16 KiB, mirror
-                0..=0x3FFF => (Some(address & 0xBFFF), None),
+                0x4000 => self.cpu_read(address & 0xBFFF),
                 // If the size is 32 KiB, continue previous range
-                _ => (Some(address & 0x7FFF), None),
+                0x8000 => (Some(address & 0x7FFF), None),
+                _ => unreachable!()
             },
             _ => (None, None),
         }

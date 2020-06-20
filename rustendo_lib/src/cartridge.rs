@@ -278,13 +278,29 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    #[test]
-    fn format() {
+    fn get_cartridge() -> Cartridge {
         let current_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let nes_test = current_dir.parent().unwrap().join("nestest.nes");
         let buffer = fs::read(nes_test).unwrap();
 
-        let cartridge = Cartridge::new(buffer);
+        Cartridge::new(buffer)
+    }
+
+    #[test]
+    fn format() {
+        let cartridge = get_cartridge();
         assert_eq!(cartridge.format(), CartridgeFormat::INes, "format is iNES");
+    }
+
+    #[test]
+    fn size() {
+        let cartridge = get_cartridge();
+        assert_eq!(cartridge.prg_rom_size(), 16384);
+    }
+
+    #[test]
+    fn mapper() {
+        let cartridge = get_cartridge();
+        assert_eq!(cartridge.mapper(), 0);
     }
 }
