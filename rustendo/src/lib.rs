@@ -27,6 +27,8 @@ fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) {
 
 #[wasm_bindgen]
 pub fn render() {
+    let mut nes = Nes::new();
+
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document.get_element_by_id("rustendo-canvas").unwrap();
     let canvas: HtmlCanvasElement = canvas
@@ -43,19 +45,24 @@ pub fn render() {
 
     let f = Rc::new(RefCell::new(None));
     let g = Rc::clone(&f);
+    let nes1 = Rc::new(RefCell::new(nes));
+    let nes2 = Rc::clone(&nes1);
 
     let mut prev_timestamp = 0.0;
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp| {
         web_sys::console::log(&Array::of1(&JsValue::from_f64(timestamp - prev_timestamp)));
-        draw(&context, &canvas);
+        draw(&context, &canvas, &mut nes1.borrow_mut());
         request_animation_frame(f.borrow().as_ref().unwrap());
         prev_timestamp = timestamp;
     }) as Box<dyn FnMut(f64)>));
 
+    nes2.borrow_mut().reset();
     request_animation_frame(g.borrow().as_ref().unwrap());
 }
 
-fn draw(context: &CanvasRenderingContext2d, canvas: &HtmlCanvasElement) {
+fn draw(context: &CanvasRenderingContext2d, canvas: &HtmlCanvasElement, nes: &mut Nes) {
+    nes.clock();
+
     let image_data = context
         .get_image_data(0.0, 0.0, canvas.width().into(), canvas.height().into())
         .expect("failed to get ImageData");
@@ -64,12 +71,7 @@ fn draw(context: &CanvasRenderingContext2d, canvas: &HtmlCanvasElement) {
 
     for y in 0..image_data.height() {
         for x in 0..image_data.width() {
-            let color = if Math::random() < 0.5 {
-                (0, 0, 0)
-            } else {
-                (255, 255, 255)
-            };
-
+            let color = nes.color_at_coord(x, y);
             set_color_at_coord(&mut data, canvas.width(), x, y, color)
         }
     }

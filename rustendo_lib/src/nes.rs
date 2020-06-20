@@ -43,6 +43,10 @@ impl Nes {
         }
     }
 
+    pub fn color_at_coord(&self, x: u32, y: u32) -> (u8, u8, u8) {
+        self.ppu.borrow().color_at_coord(x, y)
+    }
+
     pub fn reset(&mut self) {
         self.cpu.reset();
     }

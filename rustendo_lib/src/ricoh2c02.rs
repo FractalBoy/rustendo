@@ -357,6 +357,7 @@ pub struct Ricoh2c02 {
     address_latch: bool,
     odd_frame: bool,
     palette: [(u8, u8, u8); 0x40],
+    screen: [[(u8, u8, u8); 0x100]; 0xF0],
     universal_background_color: u8,
     background_palette_0: (u8, u8, u8),
     background_palette_1: (u8, u8, u8),
@@ -396,6 +397,7 @@ impl Ricoh2c02 {
             palette_attribute_2: 0,
             fine_x_scroll: 0,
             palette: Self::get_palette(),
+            screen: [[(0, 0, 0); 0x100]; 0xF0],
             universal_background_color: 0,
             background_palette_0: (0, 0, 0),
             background_palette_1: (0, 0, 0),
@@ -629,6 +631,10 @@ impl Ricoh2c02 {
         }
 
         self.clocks = self.clocks.wrapping_add(1);
+    }
+
+    pub fn color_at_coord(&self, x: u32, y: u32) -> (u8, u8, u8) {
+        self.screen[y as usize][x as usize]
     }
 
     pub fn do_next_cycle(&mut self, nmi_enable: &mut bool) {
