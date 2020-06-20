@@ -1,11 +1,13 @@
 use crate::mappers::mapper_000::Mapper000;
 use crate::mappers::Mapper;
 
+#[derive(Debug)]
 pub enum MirroringType {
     Vertical,
     Horizontal,
 }
 
+#[derive(Debug)]
 pub enum ConsoleType {
     NES,
     NintendoVsSystem,
@@ -13,11 +15,18 @@ pub enum ConsoleType {
     ExtendedConsoleType,
 }
 
+#[derive(Debug)]
 pub enum TimingMode {
     NtscNes,
     PalNes,
     MultipleRegion,
     Dendy,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CartridgeFormat {
+    INes,
+    Nes2,
 }
 
 pub struct Cartridge {
@@ -45,6 +54,17 @@ impl Cartridge {
         &raw[0..0x10]
     }
 
+    pub fn format(&self) -> CartridgeFormat {
+        Self::_format(self.header())
+    }
+
+    fn _format(header: &[u8]) -> CartridgeFormat {
+        match header[7] & 0x0C {
+            0x08 => CartridgeFormat::Nes2,
+            _ => CartridgeFormat::INes,
+        }
+    }
+
     fn rom_size(size: u16) -> u16 {
         match size & 0xF00 >> 8 {
             0xF => {
@@ -61,11 +81,16 @@ impl Cartridge {
     }
 
     fn _prg_rom_size(header: &[u8]) -> usize {
-        let lsb = header[4] as u16;
-        let msb = ((header[9] as u16) & 0xF) << 4;
-        let size = msb | lsb;
+        match Self::_format(header) {
+            CartridgeFormat::INes => ((header[4] as usize) * 0x4000),
+            CartridgeFormat::Nes2 => {
+                let lsb = header[4] as u16;
+                let msb = ((header[9] as u16) & 0xF) << 4;
+                let size = msb | lsb;
 
-        Self::rom_size(size) as usize
+                Self::rom_size(size) as usize
+            }
+        }
     }
 
     pub fn prg_rom(&self) -> &[u8] {
@@ -74,12 +99,21 @@ impl Cartridge {
         &self.raw[start..end]
     }
 
-    fn chr_rom_size(&self) -> usize {
-        let lsb = self.header()[5] as u16;
-        let msb = (self.header()[9] as u16) & 0xF0;
-        let size = msb | lsb;
+    pub fn chr_rom_size(&self) -> usize {
+        Self::_chr_rom_size(self.header())
+    }
 
-        Self::rom_size(size) as usize
+    fn _chr_rom_size(header: &[u8]) -> usize {
+        match Self::_format(header) {
+            CartridgeFormat::INes => (header[5] as usize) * 0x2000,
+            CartridgeFormat::Nes2 => {
+                let lsb = header[5] as u16;
+                let msb = (header[9] as u16) & 0xF0;
+                let size = msb | lsb;
+
+                Self::rom_size(size) as usize
+            }
+        }
     }
 
     pub fn chr_rom(&self) -> &[u8] {
@@ -95,10 +129,15 @@ impl Cartridge {
     }
 
     pub fn prg_ram_size(&self) -> usize {
-        let shift_count = self.header()[10] & 0x0F;
-        match shift_count {
-            0 => 0,
-            _ => 64 << shift_count,
+        match self.format() {
+            CartridgeFormat::INes => match self.header()[8] {
+                0 => 0x2000,
+                size => size as usize,
+            },
+            CartridgeFormat::Nes2 => match self.header()[10] & 0x0F {
+                0 => 0,
+                shift_count => 64 << shift_count,
+            },
         }
     }
 
@@ -111,10 +150,15 @@ impl Cartridge {
     }
 
     fn _chr_ram_size(header: &[u8]) -> usize {
-        let shift_count = header[11] & 0x0F;
-        match shift_count {
-            0 => 0,
-            _ => 64 << shift_count,
+        match Self::_format(header) {
+            CartridgeFormat::INes => match header[5] {
+                0 => Self::_chr_rom_size(header),
+                _ => 0,
+            },
+            CartridgeFormat::Nes2 => match header[11] & 0x0F {
+                0 => 0,
+                shift_count => 64 << shift_count,
+            },
         }
     }
 
@@ -168,7 +212,11 @@ impl Cartridge {
         let d0_3 = ((header[6] as u16) & 0xF0) >> 4;
         let d4_7 = (header[7] as u16) & 0xF0;
         let d8_11 = ((header[8] as u16) & 0x0F) << 8;
-        d8_11 | d4_7 | d0_3
+
+        match Self::_format(header) {
+            CartridgeFormat::INes => d4_7 | d0_3,
+            CartridgeFormat::Nes2 => d8_11 | d4_7 | d0_3,
+        }
     }
 
     pub fn mapper(&self) -> u16 {
@@ -226,16 +274,17 @@ impl Cartridge {
 
 #[cfg(test)]
 mod tests {
-    use super::Cartridge;
+    use super::{Cartridge, CartridgeFormat};
     use std::fs;
     use std::path::Path;
 
-    //    #[test]
-    fn it_works() {
+    #[test]
+    fn format() {
         let current_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let nes_test = current_dir.parent().unwrap().join("nestest.nes");
         let buffer = fs::read(nes_test).unwrap();
 
         let cartridge = Cartridge::new(buffer);
+        assert_eq!(cartridge.format(), CartridgeFormat::INes, "format is iNES");
     }
 }
