@@ -1,4 +1,4 @@
-use crate::cartridge::{Cartridge, MirroringType};
+use crate::cartridge::Cartridge;
 use crate::ppu_ram::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,15 +24,23 @@ impl Bus {
 
     pub fn ppu_read(&self, address: u16) -> u8 {
         match address {
+            0x0000..=0x1FFF => match &self.cartridge {
+                Some(cartridge) => cartridge.borrow().ppu_read(address),
+                None => 0,
+            },
             0x2000..=0x3EFF => self.ram.read(address),
-            _ => unimplemented!(),
+            _ => unreachable!(),
         }
     }
 
     pub fn ppu_write(&mut self, address: u16, data: u8) {
         match address {
+            0x0000..=0x1FFF => match &self.cartridge {
+                Some(cartridge) => cartridge.borrow_mut().ppu_write(address, data),
+                None => ()
+            }
             0x2000..=0x3EFF => self.ram.write(address, data),
-            _ => unimplemented!(),
+            _ => unreachable!(),
         }
     }
 }

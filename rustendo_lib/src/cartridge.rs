@@ -27,7 +27,7 @@ pub struct Cartridge {
 
 impl Cartridge {
     pub fn new(raw: Vec<u8>) -> Self {
-        let header = Cartridge::_header(&raw);
+        let header = Self::_header(&raw);
         let mapper = match Self::_mapper(&header) {
             0 => Mapper000::new(Self::_prg_rom_size(&header), Self::_chr_ram_size(&header)),
             _ => unimplemented!(),
