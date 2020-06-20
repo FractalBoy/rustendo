@@ -769,6 +769,10 @@ impl Mos6502 {
         self.not_reset = false;
     }
 
+    pub fn nmi(&mut self) {
+        self.not_nmi = false;
+    }
+
     fn write_address(&mut self, address_high: u8, address_low: u8) {
         self.address_bus
             .borrow_mut()

@@ -10,7 +10,7 @@ pub struct Nes {
     cpu_bus: Rc<RefCell<CpuBus>>,
     ppu_bus: Rc<RefCell<PpuBus>>,
     cpu: Mos6502,
-    ppu: Rc<RefCell<Ricoh2c02>>
+    ppu: Rc<RefCell<Ricoh2c02>>,
 }
 
 impl Nes {
@@ -34,8 +34,13 @@ impl Nes {
     }
 
     pub fn clock(&mut self) {
+        let mut nmi_enable = false;
+        self.ppu.borrow_mut().clock(&mut nmi_enable);
         self.cpu.clock();
-        self.ppu.borrow_mut().clock();
+
+        if nmi_enable {
+            self.cpu.nmi();
+        }
     }
 
     pub fn reset(&mut self) {

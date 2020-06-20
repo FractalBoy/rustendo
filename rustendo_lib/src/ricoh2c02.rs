@@ -226,6 +226,14 @@ impl PpuStatus {
         }
     }
 
+    pub fn set_vertical_blank_started(&mut self, data: bool) {
+        self.vertical_blank_started = data;
+    }
+
+    pub fn get_vertical_blank_started(&self) -> bool {
+        self.vertical_blank_started
+    }
+
     pub fn set(&mut self, byte: u8) {
         let byte = byte >> 5;
         self.sprite_overflow = byte & 0x01 == 0x01;
@@ -614,21 +622,22 @@ impl Ricoh2c02 {
         self.ppu_mask.get_background_enable() || self.ppu_mask.get_sprite_enable()
     }
 
-    pub fn clock(&mut self) {
+    pub fn clock(&mut self, nmi_enable: &mut bool) {
         // Divide input clock by four.
         if self.clocks % 4 == 0 {
-            self.do_next_cycle();
+            self.do_next_cycle(nmi_enable);
         }
 
         self.clocks = self.clocks.wrapping_add(1);
     }
 
-    pub fn do_next_cycle(&mut self) {
+    pub fn do_next_cycle(&mut self, nmi_enable: &mut bool) {
         match self.scanline {
             261 => {
                 // Pre-render scanline, fill shift registers with data
                 // for the first two tiles of the next scanline.
 
+                // If rendering is enabled, set VRAM to temp VRAM for cycles 280 through 304
                 if self.cycle >= 280 && self.cycle <= 304 && self.rendering_enabled() {
                     self.vram_address.set(self.temp_vram_address.get());
                 }
@@ -641,7 +650,7 @@ impl Ricoh2c02 {
                         // If it's an odd frame, go directly to the next cycle.
                         if self.odd_frame && self.rendering_enabled() {
                             self.cycle += 1;
-                            self.do_next_cycle();
+                            self.do_next_cycle(nmi_enable);
                         }
                     }
                     1..=256 => {
@@ -653,6 +662,19 @@ impl Ricoh2c02 {
                         // 2. Attribute table byte
                         // 3. Pattern table tile low
                         // 4. Pattern table tile high (+8 bytes from pattern table tile low)
+
+                        //
+                        match (self.cycle - 1) & 0x7 {
+                            0 => unimplemented!(),
+                            1 => unimplemented!(),
+                            2 => unimplemented!(),
+                            3 => unimplemented!(),
+                            4 => unimplemented!(),
+                            5 => unimplemented!(),
+                            6 => unimplemented!(),
+                            7 => unimplemented!(),
+                            _ => unreachable!(),
+                        }
                     }
                     257..=320 => {
                         // The tile data for the sprites on the __next__ scanline are
@@ -662,9 +684,31 @@ impl Ricoh2c02 {
                         // 2. Garbage nametable byte
                         // 3. Pattern table tile low
                         // 4. Pattern table tile high (+8 bytes from pattern table tile low)
+                        match (self.cycle - 1) & 0x7 {
+                            0 => unimplemented!(),
+                            1 => unimplemented!(),
+                            2 => unimplemented!(),
+                            3 => unimplemented!(),
+                            4 => unimplemented!(),
+                            5 => unimplemented!(),
+                            6 => unimplemented!(),
+                            7 => unimplemented!(),
+                            _ => unreachable!(),
+                        }
                     }
                     321..=336 => {
                         // The first two tiles for the next scanline are fetched here.
+                        match (self.cycle - 1) & 0x7 {
+                            0 => unimplemented!(),
+                            1 => unimplemented!(),
+                            2 => unimplemented!(),
+                            3 => unimplemented!(),
+                            4 => unimplemented!(),
+                            5 => unimplemented!(),
+                            6 => unimplemented!(),
+                            7 => unimplemented!(),
+                            _ => unreachable!(),
+                        }
                     }
                     337..=340 => {
                         // Two bytes are fetched, but the purpose for this is unknown.
@@ -684,6 +728,12 @@ impl Ricoh2c02 {
                 match self.cycle {
                     1 => {
                         // VBlank flag set here. VBlank NMI also occurs here.
+                        self.ppu_status.set_vertical_blank_started(true);
+
+                        if self.ppu_ctrl.get_nmi_enable() {
+                            *nmi_enable = true;
+                            self.ppu_ctrl.disable_nmi();
+                        }
                     }
                     // Idle otherwise.
                     _ => (),
