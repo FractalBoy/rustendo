@@ -180,6 +180,14 @@ impl PpuMask {
         }
     }
 
+    pub fn get_background_enable(&self) -> bool {
+        self.background_enable
+    }
+
+    pub fn get_sprite_enable(&self) -> bool {
+        self.sprite_enable
+    }
+
     pub fn set(&mut self, byte: u8) {
         self.greyscale = byte & 0x01 == 0x01;
         self.background_left_column_enable = byte & 0x02 == 0x02;
@@ -320,7 +328,8 @@ impl Register {
 
 pub struct Ricoh2c02 {
     bus: Rc<RefCell<Bus>>,
-    oam: [u8; 0x100],
+    primary_oam: [u8; 0x100],
+    secondary_oam: [u8; 0x20],
     clocks: u32,
     scanline: u32,
     cycle: u32,
@@ -328,15 +337,17 @@ pub struct Ricoh2c02 {
     ppu_mask: PpuMask,
     ppu_status: PpuStatus,
     oam_addr: u8,
-    oam_data: u8,
-    ppu_scroll: u16,
     ppu_data: u8,
-    ppu_addr: u16,
     oam_dma: u8,
     vram_address: Register,
     temp_vram_address: Register,
+    pattern_table_tile_1: u16,
+    pattern_table_tile_2: u16,
+    palette_attribute_1: u8,
+    palette_attribute_2: u8,
     fine_x_scroll: u8,
     address_latch: bool,
+    odd_frame: bool,
     palette: [(u8, u8, u8); 0x40],
     universal_background_color: u8,
     background_palette_0: (u8, u8, u8),
@@ -356,7 +367,8 @@ impl Ricoh2c02 {
     pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
         Ricoh2c02 {
             bus: Rc::clone(bus),
-            oam: [0; 0x100],
+            primary_oam: [0; 0x100],
+            secondary_oam: [0; 0x20],
             clocks: 0,
             cycle: 0,
             scanline: 261,
@@ -364,14 +376,16 @@ impl Ricoh2c02 {
             ppu_mask: PpuMask::new(),
             ppu_status: PpuStatus::new(),
             oam_addr: 0,
-            oam_data: 0,
-            ppu_scroll: 0,
             ppu_data: 0,
-            ppu_addr: 0,
             oam_dma: 0,
             address_latch: false,
+            odd_frame: false,
             vram_address: Register::new(),
             temp_vram_address: Register::new(),
+            pattern_table_tile_1: 0,
+            pattern_table_tile_2: 0,
+            palette_attribute_1: 0,
+            palette_attribute_2: 0,
             fine_x_scroll: 0,
             palette: Self::get_palette(),
             universal_background_color: 0,
@@ -464,14 +478,17 @@ impl Ricoh2c02 {
             0x2000 => 0,
             0x2001 => 0,
             0x2002 => {
+                let data = self.ppu_status.get();
                 // Clear bit 7
                 self.ppu_status.set(self.ppu_status.get() & !0x80u8);
                 // Clear address latch
                 self.address_latch = false;
-                self.ppu_status.get()
+                // Top 3 bits with lower 5 bits
+                // set to lower 5 bits of data buffer
+                data & 0xE0 | self.ppu_data & 0x1F
             }
             0x2003 => 0,
-            0x2004 => self.oam_data,
+            0x2004 => self.primary_oam[self.oam_addr as usize],
             0x2005 => 0,
             0x2006 => 0,
             0x2007 => {
@@ -499,8 +516,9 @@ impl Ricoh2c02 {
             0x2002 => self.ppu_status.set(data),
             0x2003 => self.oam_addr = data,
             0x2004 => {
+                let address = self.oam_addr;
                 self.oam_addr = self.oam_addr.wrapping_add(1);
-                self.oam_data = data
+                self.primary_oam[address as usize] = data;
             }
             0x2005 => {
                 if !self.address_latch {
@@ -592,6 +610,10 @@ impl Ricoh2c02 {
         }
     }
 
+    fn rendering_enabled(&self) -> bool {
+        self.ppu_mask.get_background_enable() || self.ppu_mask.get_sprite_enable()
+    }
+
     pub fn clock(&mut self) {
         // Divide input clock by four.
         if self.clocks % 4 == 0 {
@@ -606,12 +628,21 @@ impl Ricoh2c02 {
             261 => {
                 // Pre-render scanline, fill shift registers with data
                 // for the first two tiles of the next scanline.
+
+                if self.cycle >= 280 && self.cycle <= 304 && self.rendering_enabled() {
+                    self.vram_address.set(self.temp_vram_address.get());
+                }
             }
             0..=239 => {
                 // Visible scanlines. Render both background and sprites.
                 match self.cycle {
                     0 => {
-                        // Idle cycle.
+                        // Idle cycle, unless it's an odd frame and rendering is enabled.
+                        // If it's an odd frame, go directly to the next cycle.
+                        if self.odd_frame && self.rendering_enabled() {
+                            self.cycle += 1;
+                            self.do_next_cycle();
+                        }
                     }
                     1..=256 => {
                         // The data for each tile is fetched during this phase.
@@ -669,6 +700,7 @@ impl Ricoh2c02 {
         }
         if self.scanline == SCANLINES_PER_FRAME {
             self.scanline = 0;
+            self.odd_frame = !self.odd_frame;
         }
     }
 }
