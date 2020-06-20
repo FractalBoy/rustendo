@@ -1,18 +1,20 @@
 use crate::ppu_bus::Bus;
-use bitvec::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+#[derive(Debug, Copy, Clone)]
 enum IncrementMode {
     AddOneGoingAcross = 0,
     AddThirtyTwoGoingDown = 1,
 }
 
+#[derive(Debug, Copy, Clone)]
 enum SpriteSize {
     EightByEight = 0,
     EightBySixteen = 1,
 }
 
+#[derive(Debug, Copy, Clone)]
 enum PpuSelect {
     ReadBackdrop = 0,
     OutputColor = 1,
@@ -39,6 +41,42 @@ impl PpuCtrl {
             ppu_select: PpuSelect::ReadBackdrop,
             nmi_enable: false,
         }
+    }
+
+    pub fn get_base_nametable_address(&self) -> u16 {
+        self.base_nametable_address
+    }
+
+    pub fn get_increment_mode(&self) -> IncrementMode {
+        self.increment_mode
+    }
+
+    pub fn get_sprite_pattern_table_address(&self) -> u16 {
+        self.sprite_pattern_table_address
+    }
+
+    pub fn get_background_pattern_table_address(&self) -> u16 {
+        self.background_pattern_table_address
+    }
+
+    pub fn get_sprite_size(&self) -> SpriteSize {
+        self.sprite_size
+    }
+
+    pub fn get_ppu_select(&self) -> PpuSelect {
+        self.ppu_select
+    }
+
+    pub fn enable_nmi(&mut self) {
+        self.nmi_enable = true;
+    }
+
+    pub fn disable_nmi(&mut self) {
+        self.nmi_enable = false;
+    }
+
+    pub fn get_nmi_enable(&self) -> bool {
+        self.nmi_enable
     }
 
     pub fn set(&mut self, byte: u8) {
@@ -195,6 +233,91 @@ impl PpuStatus {
     }
 }
 
+struct Register {
+    coarse_x_scroll: u8,
+    coarse_y_scroll: u8,
+    nametable_select: u8,
+    fine_y_scroll: u8,
+}
+
+impl Register {
+    pub fn new() -> Self {
+        Register {
+            coarse_x_scroll: 0,
+            coarse_y_scroll: 0,
+            nametable_select: 0,
+            fine_y_scroll: 0,
+        }
+    }
+
+    pub fn get_coarse_x_scroll(&self) -> u8 {
+        self.coarse_x_scroll
+    }
+
+    pub fn set_coarse_x_scroll(&mut self, data: u8) {
+        self.coarse_x_scroll = (data & 0xF8) >> 3;
+    }
+
+    pub fn get_coarse_y_scroll(&self) -> u8 {
+        self.coarse_y_scroll
+    }
+
+    pub fn set_coarse_y_scroll(&mut self, data: u8) {
+        self.coarse_y_scroll = (data & 0xF8) >> 3;
+    }
+
+    pub fn get_nametable_select(&self) -> u8 {
+        self.nametable_select
+    }
+
+    pub fn get_fine_y_scroll(&self) -> u8 {
+        self.fine_y_scroll
+    }
+
+    pub fn set_fine_y_scroll(&mut self, data: u8) {
+        self.fine_y_scroll = data & 0x7;
+    }
+
+    pub fn get_address_high(&self) -> u8 {
+        ((self.get() & 0x3F00) >> 8) as u8
+    }
+
+    pub fn set_address_high(&mut self, address: u8) {
+        self.set((((address as u16) & 0x3F) << 8) | (self.get() & 0xFF))
+    }
+
+    pub fn get_address_low(&self) -> u8 {
+        (self.get() & 0xFF) as u8
+    }
+
+    pub fn set_address_low(&mut self, address: u8) {
+        self.set((self.get() & 0x3F00) | ((address as u16) & 0xFF))
+    }
+
+    pub fn set(&mut self, data: u16) {
+        self.coarse_x_scroll = (data & 0x1F) as u8;
+        self.coarse_y_scroll = ((data & 0x3E0) >> 5) as u8;
+        self.nametable_select = ((data & 0xC00) >> 10) as u8;
+        self.fine_y_scroll = ((data & 0x7000) >> 12) as u8;
+    }
+
+    pub fn get(&self) -> u16 {
+        ((self.fine_y_scroll as u16) << 12)
+            | ((self.nametable_select as u16) << 10)
+            | ((self.coarse_y_scroll as u16) << 5)
+            | (self.coarse_x_scroll as u16)
+    }
+
+    pub fn increment(&mut self, increment: IncrementMode) {
+        let increment = match increment {
+            IncrementMode::AddOneGoingAcross => 1,
+            IncrementMode::AddThirtyTwoGoingDown => 32,
+        };
+
+        self.set(self.get().wrapping_add(increment));
+    }
+}
+
 pub struct Ricoh2c02 {
     bus: Rc<RefCell<Bus>>,
     oam: [u8; 0x100],
@@ -206,10 +329,14 @@ pub struct Ricoh2c02 {
     ppu_status: PpuStatus,
     oam_addr: u8,
     oam_data: u8,
-    ppu_scroll: u8,
-    ppu_addr: u8,
+    ppu_scroll: u16,
     ppu_data: u8,
+    ppu_addr: u16,
     oam_dma: u8,
+    vram_address: Register,
+    temp_vram_address: Register,
+    fine_x_scroll: u8,
+    address_latch: bool,
     palette: [(u8, u8, u8); 0x40],
     universal_background_color: u8,
     background_palette_0: (u8, u8, u8),
@@ -239,9 +366,13 @@ impl Ricoh2c02 {
             oam_addr: 0,
             oam_data: 0,
             ppu_scroll: 0,
-            ppu_addr: 0,
             ppu_data: 0,
+            ppu_addr: 0,
             oam_dma: 0,
+            address_latch: false,
+            vram_address: Register::new(),
+            temp_vram_address: Register::new(),
+            fine_x_scroll: 0,
             palette: Self::get_palette(),
             universal_background_color: 0,
             background_palette_0: (0, 0, 0),
@@ -324,6 +455,10 @@ impl Ricoh2c02 {
         ]
     }
 
+    fn set_fine_x_scroll(&mut self, data: u8) {
+        self.fine_x_scroll = data & 0x7;
+    }
+
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
             0x2000 => 0,
@@ -331,13 +466,28 @@ impl Ricoh2c02 {
             0x2002 => {
                 // Clear bit 7
                 self.ppu_status.set(self.ppu_status.get() & !0x80u8);
+                // Clear address latch
+                self.address_latch = false;
                 self.ppu_status.get()
             }
             0x2003 => 0,
             0x2004 => self.oam_data,
             0x2005 => 0,
             0x2006 => 0,
-            0x2007 => self.ppu_data,
+            0x2007 => {
+                let address = self.vram_address.get();
+                self.vram_address
+                    .increment(self.ppu_ctrl.get_increment_mode());
+                let ppu_data = self.ppu_data;
+                self.ppu_data = self.ppu_read(address);
+
+                // Palette range returns data immediately,
+                // otherwise the data from the buffer is returned
+                match address {
+                    0x3F00..=0x3FFF => self.ppu_data,
+                    _ => ppu_data,
+                }
+            }
             _ => 0,
         }
     }
@@ -352,9 +502,32 @@ impl Ricoh2c02 {
                 self.oam_addr = self.oam_addr.wrapping_add(1);
                 self.oam_data = data
             }
-            0x2005 => self.ppu_scroll = data,
-            0x2006 => self.ppu_addr = data,
-            0x2007 => self.ppu_data = data,
+            0x2005 => {
+                if !self.address_latch {
+                    self.temp_vram_address.set_coarse_x_scroll(data);
+                    self.set_fine_x_scroll(data);
+                    self.address_latch = true;
+                } else {
+                    self.temp_vram_address.set_coarse_y_scroll(data);
+                    self.temp_vram_address.set_fine_y_scroll(data);
+                    self.address_latch = false;
+                }
+            }
+            0x2006 => {
+                if !self.address_latch {
+                    self.temp_vram_address.set_address_high(data);
+                    self.address_latch = true;
+                } else {
+                    self.temp_vram_address.set_address_low(data);
+                    self.address_latch = false;
+                }
+            }
+            0x2007 => {
+                let address = self.vram_address.get();
+                self.vram_address
+                    .increment(self.ppu_ctrl.get_increment_mode());
+                self.bus.borrow_mut().ppu_write(address, data);
+            }
             _ => (),
         }
     }
@@ -413,7 +586,9 @@ impl Ricoh2c02 {
                 0x0003 => self.sprite_palette_3.2,
                 _ => unreachable!(),
             },
-            _ => 0,
+            // The remainder of memory mirrors the palette addresses
+            0x3F20..=0x3FFF => self.ppu_read(address & 0x3F1F),
+            _ => unreachable!(),
         }
     }
 
