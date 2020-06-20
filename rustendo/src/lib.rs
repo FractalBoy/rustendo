@@ -1,4 +1,4 @@
-use js_sys::{Array, Math};
+use js_sys::Array;
 use rustendo_lib::nes::Nes;
 use std::cell::RefCell;
 use std::f64;
@@ -27,7 +27,9 @@ fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) {
 
 #[wasm_bindgen]
 pub fn render() {
-    let mut nes = Nes::new();
+    utils::set_panic_hook();
+
+    let nes = Nes::new();
 
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document.get_element_by_id("rustendo-canvas").unwrap();

@@ -249,7 +249,6 @@ pub fn run_program(program: &str) -> Result<Rc<RefCell<CpuBus>>, AssemblerError>
     let ppu_bus = Rc::new(RefCell::new(PpuBus::new()));
     let ppu = Rc::new(RefCell::new(Ricoh2c02::new(&ppu_bus)));
     let cpu_bus = Rc::new(RefCell::new(CpuBus::new(&ppu)));
-    let cpu = Mos6502::new(&cpu_bus);
 
     let mut location: u16 = 0;
 
