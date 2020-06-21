@@ -282,12 +282,31 @@ impl Register {
         self.coarse_y_scroll = (data & 0xF8) >> 3;
     }
 
-    pub fn get_nametable_select(&self) -> u8 {
-        self.nametable_select
+    pub fn get_nametable_select_x(&self) -> u8 {
+        self.nametable_select & 0x0F
     }
 
-    pub fn set_nametable_select(&mut self, data: u8) {
-        self.nametable_select = data;
+    pub fn get_nametable_select_y(&self) -> u8 {
+        self.nametable_select & 0xF0
+    }
+
+    pub fn set_nametable_select_x(&mut self, data: u8) {
+        self.nametable_select = self.nametable_select & 0xF0 | data & 0x0F; 
+    }
+
+    pub fn set_nametable_select_y(&mut self, data: u8) {
+        self.nametable_select = data & 0xF0 | self.nametable_select & 0x0F;
+    }
+
+    pub fn copy_horizontal_address(&mut self, register: &Register) {
+        self.set_coarse_x_scroll(register.get_coarse_x_scroll());
+        self.set_nametable_select_x(register.get_nametable_select_x());
+    }
+
+    pub fn copy_vertical_address(&mut self, register: &Register) {
+        self.set_coarse_y_scroll(register.get_coarse_y_scroll());
+        self.set_nametable_select_y(register.get_nametable_select_y());
+        self.set_fine_y_scroll(register.get_fine_y_scroll());
     }
 
     pub fn get_fine_y_scroll(&self) -> u8 {
@@ -296,10 +315,6 @@ impl Register {
 
     pub fn set_fine_y_scroll(&mut self, data: u8) {
         self.fine_y_scroll = data & 0x7;
-    }
-
-    pub fn get_address_high(&self) -> u8 {
-        ((self.get() & 0x3F00) >> 8) as u8
     }
 
     pub fn set_address_high(&mut self, address: u8) {
@@ -346,7 +361,6 @@ pub struct Ricoh2c02 {
     bus: Rc<RefCell<Bus>>,
     primary_oam: [u8; 0x100],
     secondary_oam: [u8; 0x20],
-    clocks: u32,
     scanline: u32,
     cycle: u32,
     ppu_ctrl: PpuCtrl,
@@ -385,7 +399,6 @@ impl Ricoh2c02 {
             bus: Rc::clone(bus),
             primary_oam: [0; 0x100],
             secondary_oam: [0; 0x20],
-            clocks: 0,
             cycle: 0,
             scanline: 261,
             ppu_ctrl: PpuCtrl::new(),
@@ -696,12 +709,7 @@ impl Ricoh2c02 {
 
                         if self.cycle == 257 {
                             // Copy bits controlling horizontal position from temp VRAM to VRAM.
-                            self.vram_address
-                                .set_coarse_x_scroll(self.temp_vram_address.get_coarse_x_scroll());
-                            self.vram_address.set_nametable_select(
-                                self.vram_address.get_nametable_select() & 0xF0
-                                    | self.temp_vram_address.get_nametable_select() & 0x0F,
-                            );
+                            self.vram_address.copy_horizontal_address(&self.temp_vram_address);
                         }
 
                         match (self.cycle - 1) & 0x7 {
