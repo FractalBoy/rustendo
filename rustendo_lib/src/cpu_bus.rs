@@ -10,6 +10,7 @@ pub struct Bus {
     cartridge: Option<Rc<RefCell<Cartridge>>>,
     // This ram is used only for testing.
     test_ram: Option<[u8; 0x10000]>,
+    dma_transfer: Option<u8>,
 }
 
 impl Bus {
@@ -19,6 +20,7 @@ impl Bus {
             ppu: Rc::clone(ppu),
             cartridge: None,
             test_ram: None,
+            dma_transfer: None,
         };
 
         // Set up some fake RAM to use for testing purposes only.
@@ -29,6 +31,14 @@ impl Bus {
         bus
     }
 
+    pub fn get_dma_transfer(&self) -> Option<u8> {
+        self.dma_transfer
+    }
+
+    pub fn end_dma_transfer(&mut self) {
+        self.dma_transfer = None;
+    }
+
     pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
         self.cartridge = Some(Rc::clone(cartridge));
     }
@@ -37,9 +47,12 @@ impl Bus {
         match address {
             0x0000..=0x1FFF => self.ram.write(address, data),
             0x2000..=0x3FFF => self.ppu.borrow_mut().cpu_write(address & 0x2007, data),
-            0x4020..=0xFFFF => match &self.cartridge {
-                Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
-                None => self.set_test_ram(address, data),
+            0x4020..=0xFFFF => match address {
+                0x4014 => self.dma_transfer = Some(data),
+                _ => match &self.cartridge {
+                    Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
+                    None => self.set_test_ram(address, data),
+                },
             },
             _ => self.set_test_ram(address, data),
         };
@@ -59,7 +72,7 @@ impl Bus {
         }
     }
 
-    pub fn cpu_read(&mut self, address: u16) -> u8 {
+    pub fn cpu_read(&self, address: u16) -> u8 {
         match address {
             0x0..=0x1FFF => self.ram.read(address),
             0x2000..=0x3FFF => self.ppu.borrow_mut().cpu_read(address & 0x2007),

@@ -620,24 +620,19 @@ impl Ricoh2c02 {
         }
     }
 
-    fn rendering_enabled(&self) -> bool {
-        self.ppu_mask.get_background_enable() || self.ppu_mask.get_sprite_enable()
+    pub fn oam_dma(&mut self, address: u16, data: u8) {
+        self.primary_oam[address as usize] = data;
     }
 
-    pub fn clock(&mut self, nmi_enable: &mut bool) {
-        // Divide input clock by four.
-        if self.clocks % 4 == 0 {
-            self.do_next_cycle(nmi_enable);
-        }
-
-        self.clocks = self.clocks.wrapping_add(1);
+    fn rendering_enabled(&self) -> bool {
+        self.ppu_mask.get_background_enable() || self.ppu_mask.get_sprite_enable()
     }
 
     pub fn color_at_coord(&self, x: u32, y: u32) -> (u8, u8, u8) {
         self.screen[y as usize][x as usize]
     }
 
-    pub fn do_next_cycle(&mut self, nmi_enable: &mut bool) {
+    pub fn clock(&mut self, nmi_enable: &mut bool) {
         match self.scanline {
             261 => {
                 // Pre-render scanline, fill shift registers with data
@@ -656,7 +651,7 @@ impl Ricoh2c02 {
                         // If it's an odd frame, go directly to the next cycle.
                         if self.odd_frame && self.rendering_enabled() {
                             self.cycle += 1;
-                            self.do_next_cycle(nmi_enable);
+                            self.clock(nmi_enable);
                         }
                     }
                     1..=256 => {

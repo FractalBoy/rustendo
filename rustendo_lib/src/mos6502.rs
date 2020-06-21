@@ -687,7 +687,6 @@ pub struct Mos6502 {
     /// Program counter
     pc: Rc<RefCell<ProgramCounter>>,
     /// Stack register
-    #[allow(dead_code)]
     s: u8,
     /// Status register
     p: StatusRegister,
@@ -701,18 +700,10 @@ pub struct Mos6502 {
     bus: Rc<RefCell<Bus>>,
     /// Number of cycles remaining in current instruction
     cycles: u32,
-    /// Number of input clocks since startup.
-    clocks: u32,
-    #[allow(dead_code)]
-    ready: bool,
     not_irq: bool,
-    #[allow(dead_code)]
     not_nmi: bool,
     #[allow(dead_code)]
     not_set_overflow: bool,
-    #[allow(dead_code)]
-    sync: bool,
-    #[allow(dead_code)]
     not_reset: bool,
 }
 
@@ -754,18 +745,14 @@ impl Mos6502 {
             address_bus,
             bus: Rc::clone(bus),
             cycles: 0,
-            clocks: 0,
-            ready: false,
             not_irq: true,
             not_nmi: true,
             not_reset: true,
             not_set_overflow: true,
-            sync: false,
         }
     }
 
     pub fn reset(&mut self) {
-        self.clocks = 0;
         self.not_reset = false;
     }
 
@@ -801,12 +788,6 @@ impl Mos6502 {
     ///
     /// Returns true if the instruction is complete.
     pub fn clock(&mut self) -> bool {
-        // Divide input clock by 12.
-        if self.clocks % 12 != 0 {
-            self.clocks = self.clocks.wrapping_add(1);
-            return false;
-        }
-
         if self.cycles == 0 {
             if !self.not_nmi {
                 self.interrupt(7, 0, 0xFFFB, false, false);
@@ -830,8 +811,6 @@ impl Mos6502 {
         }
 
         self.cycles -= 1;
-        self.clocks = self.clocks.wrapping_add(1);
-
         self.cycles == 0
     }
 
@@ -1515,7 +1494,7 @@ mod tests {
 
     #[test]
     fn adc() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$01
         ADC #$01
@@ -1526,7 +1505,7 @@ mod tests {
         assert_eq!(bus.cpu_read(0xFF), 2, "0x1 + 0x1 = 0x2");
         assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x00, "carry bit cleared");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             ADC #$FF
@@ -1540,7 +1519,7 @@ mod tests {
 
     #[test]
     fn adc_bcd() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             SED
             LDA #$10
@@ -1552,7 +1531,7 @@ mod tests {
         assert_eq!(bus.cpu_read(0xFF), 0x20, "0x10 + 0x10 = 0x20 in BCD");
         assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x00, "carry bit cleared");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             SED
             LDA #$81
@@ -1571,7 +1550,7 @@ mod tests {
 
     #[test]
     fn and() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             STA $FF
@@ -1586,7 +1565,7 @@ mod tests {
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag cleared");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             AND #$80
@@ -1601,7 +1580,7 @@ mod tests {
 
     #[test]
     fn asl() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FF
         ASL
@@ -1618,7 +1597,7 @@ mod tests {
 
     #[test]
     fn bcc() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FE
         ADC #$03 // Result is 0x101, carry set
@@ -1630,7 +1609,7 @@ mod tests {
 
         assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FE
         ADC #$01 // Result is 0xFF, carry cleared
@@ -1645,7 +1624,7 @@ mod tests {
 
     #[test]
     fn bcs() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FE
         ADC #$03 // Result is 0x101, carry set
@@ -1657,7 +1636,7 @@ mod tests {
 
         assert_eq!(bus.cpu_read(0xFF), 0x01, "branch taken");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FE
         ADC #$01 // Result is 0xFF, carry cleared
@@ -1672,7 +1651,7 @@ mod tests {
 
     #[test]
     fn beq() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         SEC
         LDA #$FF
@@ -1684,7 +1663,7 @@ mod tests {
         );
 
         assert_eq!(bus.cpu_read(0xFF), 0x00, "branch taken");
-        let mut bus = run_program(
+        let bus = run_program(
             "
         SEC
         LDA #$FF
@@ -1700,7 +1679,7 @@ mod tests {
 
     #[test]
     fn bit() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$AA
         STA $FF
@@ -1718,7 +1697,7 @@ mod tests {
 
     #[test]
     fn bmi() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         SEC
         LDA #$00
@@ -1731,7 +1710,7 @@ mod tests {
 
         assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch taken");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
         SEC
         LDA #$01
@@ -1747,7 +1726,7 @@ mod tests {
 
     #[test]
     fn bne() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         SEC
         LDA #$FF
@@ -1760,7 +1739,7 @@ mod tests {
 
         assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
         SEC
         LDA #$FF
@@ -1776,7 +1755,7 @@ mod tests {
 
     #[test]
     fn bpl() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         SEC
         LDA #$00
@@ -1789,7 +1768,7 @@ mod tests {
 
         assert_eq!(bus.cpu_read(0xFF), 0x01, "branch taken");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
         SEC
         LDA #$04
@@ -1805,7 +1784,7 @@ mod tests {
 
     #[test]
     fn brk() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             SEC
             LDA #$AA
@@ -1838,7 +1817,7 @@ mod tests {
 
     #[test]
     fn bvc() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             ADC #$05 // Result is 0x04, overflow set
@@ -1850,7 +1829,7 @@ mod tests {
 
         assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$01
             ADC #$05 // Result is 0x06, overflow not set
@@ -1865,7 +1844,7 @@ mod tests {
 
     #[test]
     fn bvs() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             ADC #$05 // Result is 0x04, overflow set
@@ -1877,7 +1856,7 @@ mod tests {
 
         assert_eq!(bus.cpu_read(0xFF), 0x04, "branch taken");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$01
             ADC #$05 // Result is 0x06, overflow not set
@@ -1892,7 +1871,7 @@ mod tests {
 
     #[test]
     fn cmp() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$10
             CMP #$05
@@ -1904,7 +1883,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$10
             CMP #$10
@@ -1916,7 +1895,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$10
             CMP #$11
@@ -1931,7 +1910,7 @@ mod tests {
 
     #[test]
     fn cpx() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDX #$10
             CPX #$05
@@ -1943,7 +1922,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDX #$10
             CPX #$10
@@ -1955,7 +1934,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDX #$10
             CPX #$11
@@ -1970,7 +1949,7 @@ mod tests {
 
     #[test]
     fn cpy() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDY #$10
             CPY #$05
@@ -1982,7 +1961,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDY #$10
             CPY #$10
@@ -1994,7 +1973,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDY #$10
             CPY #$11
@@ -2009,7 +1988,7 @@ mod tests {
 
     #[test]
     fn dec() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$02
             STA $FF
@@ -2025,7 +2004,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$02
             STA $FF
@@ -2044,7 +2023,7 @@ mod tests {
 
     #[test]
     fn dex() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDX #$02
             STX $FF
@@ -2061,7 +2040,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDX #$02
             STX $FF
@@ -2081,7 +2060,7 @@ mod tests {
 
     #[test]
     fn dey() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDY #$02
             STY $FF
@@ -2098,7 +2077,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDY #$02
             STY $FF
@@ -2118,7 +2097,7 @@ mod tests {
 
     #[test]
     fn eor() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$55
             EOR #$AA
@@ -2130,7 +2109,7 @@ mod tests {
         assert_eq!(bus.cpu_read(0xFF), 0xFF, "0x55 xor 0xAA = 0xFF");
         assert_eq!(bus.cpu_read(0x01FF) & 0x80, 0x80, "negative bit set");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             EOR #$FF
@@ -2145,7 +2124,7 @@ mod tests {
 
     #[test]
     fn inc() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$02
             STA $FF
@@ -2161,7 +2140,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$02
             STA $FF
@@ -2180,7 +2159,7 @@ mod tests {
 
     #[test]
     fn inx() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDX #$02
             STX $FF
@@ -2197,7 +2176,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDX #$02
             STX $FF
@@ -2217,7 +2196,7 @@ mod tests {
 
     #[test]
     fn iny() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDY #$02
             STY $FF
@@ -2234,7 +2213,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
         assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDY #$02
             STY $FF
@@ -2254,7 +2233,7 @@ mod tests {
 
     #[test]
     fn jmp() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             JMP $0900
             NOP
@@ -2270,7 +2249,7 @@ mod tests {
 
     #[test]
     fn jsr() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             JSR $0900
             LDA #$FF
@@ -2288,7 +2267,7 @@ mod tests {
 
     #[test]
     fn lsr() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FF
         STA $FF
@@ -2303,7 +2282,7 @@ mod tests {
         assert_eq!(status & 0x02, 0x00, "zero bit unset");
         assert_eq!(status & 0x80, 0x00, "negative bit unset");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$01
             STA $FF
@@ -2321,7 +2300,7 @@ mod tests {
 
     #[test]
     fn ora() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$AA
             STA $FF
@@ -2337,7 +2316,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x80, "result negative");
         assert_eq!(status & 0x02, 0x00, "result not zero");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$00
             STA $FF
@@ -2355,7 +2334,7 @@ mod tests {
 
     #[test]
     fn pha() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             PHA
@@ -2367,7 +2346,7 @@ mod tests {
 
     #[test]
     fn pla() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FF
         PHA
@@ -2382,7 +2361,7 @@ mod tests {
 
     #[test]
     fn rol() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FF
         STA $FF
@@ -2394,7 +2373,7 @@ mod tests {
         assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x01, "carry bit set");
         assert_eq!(bus.cpu_read(0xFF), 0xFE, "correct result");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
         LDA #$FF
         STA $FF
@@ -2410,7 +2389,7 @@ mod tests {
 
     #[test]
     fn ror() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             STA $FF
@@ -2422,7 +2401,7 @@ mod tests {
         assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x01, "carry bit set");
         assert_eq!(bus.cpu_read(0xFF), 0x7F, "correct result");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             STA $FF
@@ -2438,7 +2417,7 @@ mod tests {
 
     #[test]
     fn tax() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$FF
             TAX
@@ -2453,7 +2432,7 @@ mod tests {
 
     #[test]
     fn sbc() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             LDA #$76
             SEC
@@ -2468,7 +2447,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
 
-        let mut bus = run_program(
+        let bus = run_program(
             "
             ADC #$05
             SEC
@@ -2486,7 +2465,7 @@ mod tests {
 
     #[test]
     fn sbc_bcd() {
-        let mut bus = run_program(
+        let bus = run_program(
             "
             SED
             LDA #$92
@@ -2501,7 +2480,7 @@ mod tests {
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
         assert_eq!(status & 0x01, 0x01, "carry bit set");
-        let mut bus = run_program(
+        let bus = run_program(
             "
             SED
             LDA #$25
@@ -2523,7 +2502,6 @@ mod tests {
         let ppu_bus = Rc::new(RefCell::new(PpuBus::new()));
         let ppu = Rc::new(RefCell::new(Ricoh2c02::new(&ppu_bus)));
         let cpu_bus = Rc::new(RefCell::new(CpuBus::new(&ppu)));
-        let cpu = Mos6502::new(&cpu_bus);
 
         let program = assembler::assemble_program(
             "
@@ -2568,6 +2546,6 @@ mod tests {
             while !cpu.clock() {}
         }
 
-        assert_ne!(cpu_bus.borrow_mut().cpu_read(0x00FF), 0, "data stored in 0xFF");
+        assert_ne!(cpu_bus.borrow().cpu_read(0x00FF), 0, "data stored in 0xFF");
     }
 }
