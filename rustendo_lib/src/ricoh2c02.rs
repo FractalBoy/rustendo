@@ -43,32 +43,8 @@ impl PpuCtrl {
         }
     }
 
-    pub fn get_base_nametable_address(&self) -> u16 {
-        self.base_nametable_address
-    }
-
     pub fn get_increment_mode(&self) -> IncrementMode {
         self.increment_mode
-    }
-
-    pub fn get_sprite_pattern_table_address(&self) -> u16 {
-        self.sprite_pattern_table_address
-    }
-
-    pub fn get_background_pattern_table_address(&self) -> u16 {
-        self.background_pattern_table_address
-    }
-
-    pub fn get_sprite_size(&self) -> SpriteSize {
-        self.sprite_size
-    }
-
-    pub fn get_ppu_select(&self) -> PpuSelect {
-        self.ppu_select
-    }
-
-    pub fn enable_nmi(&mut self) {
-        self.nmi_enable = true;
     }
 
     pub fn disable_nmi(&mut self) {
@@ -111,47 +87,6 @@ impl PpuCtrl {
         };
 
         self.nmi_enable = byte & 0x80 == 0x80;
-    }
-
-    pub fn get(&self) -> u8 {
-        let mut byte = match self.base_nametable_address {
-            0x2000 => 0x0,
-            0x2400 => 0x1,
-            0x2800 => 0x2,
-            0x2C00 => 0x3,
-            _ => unreachable!(),
-        };
-
-        byte |= match self.increment_mode {
-            IncrementMode::AddThirtyTwoGoingDown => 0x04,
-            IncrementMode::AddOneGoingAcross => 0x00,
-        };
-
-        byte |= match self.sprite_pattern_table_address {
-            0x0000 => 0x00,
-            0x1000 => 0x08,
-            _ => unreachable!(),
-        };
-
-        byte |= match self.background_pattern_table_address {
-            0x0000 => 0x00,
-            0x1000 => 0x10,
-            _ => unreachable!(),
-        };
-
-        byte |= match self.sprite_size {
-            SpriteSize::EightByEight => 0x00,
-            SpriteSize::EightBySixteen => 0x20,
-        };
-
-        byte |= match self.ppu_select {
-            PpuSelect::ReadBackdrop => 0x00,
-            PpuSelect::OutputColor => 0x40,
-        };
-
-        byte |= if self.nmi_enable { 0x80 } else { 0x00 };
-
-        byte
     }
 }
 
@@ -198,17 +133,6 @@ impl PpuMask {
         self.emphasize_green = byte & 0x40 == 0x40;
         self.emphasize_blue = byte & 0x80 == 0x80;
     }
-
-    pub fn get(&self) -> u8 {
-        self.greyscale as u8
-            | (self.background_left_column_enable as u8) << 1
-            | (self.sprite_left_column_enable as u8) << 2
-            | (self.background_enable as u8) << 3
-            | (self.sprite_enable as u8) << 4
-            | (self.emphasize_red as u8) << 5
-            | (self.emphasize_green as u8) << 6
-            | (self.emphasize_blue as u8) << 7
-    }
 }
 
 struct PpuStatus {
@@ -228,10 +152,6 @@ impl PpuStatus {
 
     pub fn set_vertical_blank_started(&mut self, data: bool) {
         self.vertical_blank_started = data;
-    }
-
-    pub fn get_vertical_blank_started(&self) -> bool {
-        self.vertical_blank_started
     }
 
     pub fn set(&mut self, byte: u8) {
@@ -266,51 +186,25 @@ impl Register {
         }
     }
 
-    pub fn get_coarse_x_scroll(&self) -> u8 {
-        self.coarse_x_scroll
-    }
-
     pub fn set_coarse_x_scroll(&mut self, data: u8) {
         self.coarse_x_scroll = (data & 0xF8) >> 3;
     }
 
-    pub fn get_coarse_y_scroll(&self) -> u8 {
-        self.coarse_y_scroll
-    }
-
-    pub fn set_coarse_y_scroll(&mut self, data: u8) {
+    fn set_coarse_y_scroll(&mut self, data: u8) {
         self.coarse_y_scroll = (data & 0xF8) >> 3;
     }
 
-    pub fn get_nametable_select_x(&self) -> u8 {
+    fn get_nametable_select_x(&self) -> u8 {
         self.nametable_select & 0x0F
     }
 
-    pub fn get_nametable_select_y(&self) -> u8 {
-        self.nametable_select & 0xF0
-    }
-
-    pub fn set_nametable_select_x(&mut self, data: u8) {
+    fn set_nametable_select_x(&mut self, data: u8) {
         self.nametable_select = self.nametable_select & 0xF0 | data & 0x0F; 
     }
 
-    pub fn set_nametable_select_y(&mut self, data: u8) {
-        self.nametable_select = data & 0xF0 | self.nametable_select & 0x0F;
-    }
-
     pub fn copy_horizontal_address(&mut self, register: &Register) {
-        self.set_coarse_x_scroll(register.get_coarse_x_scroll());
+        self.set_coarse_x_scroll(register.coarse_x_scroll);
         self.set_nametable_select_x(register.get_nametable_select_x());
-    }
-
-    pub fn copy_vertical_address(&mut self, register: &Register) {
-        self.set_coarse_y_scroll(register.get_coarse_y_scroll());
-        self.set_nametable_select_y(register.get_nametable_select_y());
-        self.set_fine_y_scroll(register.get_fine_y_scroll());
-    }
-
-    pub fn get_fine_y_scroll(&self) -> u8 {
-        self.fine_y_scroll
     }
 
     pub fn set_fine_y_scroll(&mut self, data: u8) {
@@ -319,10 +213,6 @@ impl Register {
 
     pub fn set_address_high(&mut self, address: u8) {
         self.set((((address as u16) & 0x3F) << 8) | (self.get() & 0xFF))
-    }
-
-    pub fn get_address_low(&self) -> u8 {
-        (self.get() & 0xFF) as u8
     }
 
     pub fn set_address_low(&mut self, address: u8) {
