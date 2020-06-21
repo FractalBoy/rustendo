@@ -286,6 +286,10 @@ impl Register {
         self.nametable_select
     }
 
+    pub fn set_nametable_select(&mut self, data: u8) {
+        self.nametable_select = data;
+    }
+
     pub fn get_fine_y_scroll(&self) -> u8 {
         self.fine_y_scroll
     }
@@ -324,6 +328,10 @@ impl Register {
             | (self.coarse_x_scroll as u16)
     }
 
+    pub fn copy(&mut self, register: &Register) {
+        self.set(register.get());
+    }
+
     pub fn increment(&mut self, increment: IncrementMode) {
         let increment = match increment {
             IncrementMode::AddOneGoingAcross => 1,
@@ -346,7 +354,6 @@ pub struct Ricoh2c02 {
     ppu_status: PpuStatus,
     oam_addr: u8,
     ppu_data: u8,
-    oam_dma: u8,
     vram_address: Register,
     temp_vram_address: Register,
     pattern_table_tile_1: u16,
@@ -386,7 +393,6 @@ impl Ricoh2c02 {
             ppu_status: PpuStatus::new(),
             oam_addr: 0,
             ppu_data: 0,
-            oam_dma: 0,
             address_latch: false,
             odd_frame: false,
             vram_address: Register::new(),
@@ -547,6 +553,7 @@ impl Ricoh2c02 {
                     self.address_latch = true;
                 } else {
                     self.temp_vram_address.set_address_low(data);
+                    self.vram_address.copy(&self.temp_vram_address);
                     self.address_latch = false;
                 }
             }
@@ -621,6 +628,7 @@ impl Ricoh2c02 {
     }
 
     pub fn oam_dma(&mut self, address: u16, data: u8) {
+        let address = (address as u8).wrapping_add(self.oam_addr);
         self.primary_oam[address as usize] = data;
     }
 
@@ -640,7 +648,7 @@ impl Ricoh2c02 {
 
                 // If rendering is enabled, set VRAM to temp VRAM for cycles 280 through 304
                 if self.cycle >= 280 && self.cycle <= 304 && self.rendering_enabled() {
-                    self.vram_address.set(self.temp_vram_address.get());
+                    self.vram_address.copy(&self.temp_vram_address);
                 }
             }
             0..=239 => {
@@ -685,6 +693,17 @@ impl Ricoh2c02 {
                         // 2. Garbage nametable byte
                         // 3. Pattern table tile low
                         // 4. Pattern table tile high (+8 bytes from pattern table tile low)
+
+                        if self.cycle == 257 {
+                            // Copy bits controlling horizontal position from temp VRAM to VRAM.
+                            self.vram_address
+                                .set_coarse_x_scroll(self.temp_vram_address.get_coarse_x_scroll());
+                            self.vram_address.set_nametable_select(
+                                self.vram_address.get_nametable_select() & 0xF0
+                                    | self.temp_vram_address.get_nametable_select() & 0x0F,
+                            );
+                        }
+
                         match (self.cycle - 1) & 0x7 {
                             0 => unimplemented!(),
                             1 => unimplemented!(),
