@@ -43,6 +43,10 @@ impl PpuCtrl {
         }
     }
 
+    pub fn get_background_pattern_table_address(&self) -> u16 {
+        self.background_pattern_table_address
+    }
+
     pub fn get_increment_mode(&self) -> IncrementMode {
         self.increment_mode
     }
@@ -186,6 +190,14 @@ impl Register {
         }
     }
 
+    pub fn get_coarse_x_scroll(&self) -> u8 {
+        self.coarse_x_scroll
+    }
+
+    pub fn get_coarse_y_scroll(&self) -> u8 {
+        self.coarse_y_scroll
+    }
+
     pub fn set_coarse_x_scroll(&mut self, data: u8) {
         self.coarse_x_scroll = (data & 0xF8) >> 3;
     }
@@ -194,12 +206,16 @@ impl Register {
         self.coarse_y_scroll = (data & 0xF8) >> 3;
     }
 
+    fn get_fine_y_scroll(&self) -> u8 {
+        self.fine_y_scroll
+    }
+
     fn get_nametable_select_x(&self) -> u8 {
         self.nametable_select & 0x0F
     }
 
     fn set_nametable_select_x(&mut self, data: u8) {
-        self.nametable_select = self.nametable_select & 0xF0 | data & 0x0F; 
+        self.nametable_select = self.nametable_select & 0xF0 | data & 0x0F;
     }
 
     pub fn copy_horizontal_address(&mut self, register: &Register) {
@@ -217,6 +233,12 @@ impl Register {
 
     pub fn set_address_low(&mut self, address: u8) {
         self.set((self.get() & 0x3F00) | ((address as u16) & 0xFF))
+    }
+
+    pub fn get_attribute_memory_offset(&self) -> u16 {
+        (self.nametable_select as u16) << 11
+            | ((self.coarse_y_scroll as u16) >> 2) << 3
+            | (self.coarse_x_scroll as u16) >> 2
     }
 
     pub fn set(&mut self, data: u16) {
@@ -260,10 +282,10 @@ pub struct Ricoh2c02 {
     ppu_data: u8,
     vram_address: Register,
     temp_vram_address: Register,
-    pattern_table_tile_1: u16,
-    pattern_table_tile_2: u16,
-    palette_attribute_1: u8,
-    palette_attribute_2: u8,
+    next_bg_tile_id: u8,
+    next_bg_tile_attr: u8,
+    next_bg_tile_msb: u16,
+    next_bg_tile_lsb: u16,
     fine_x_scroll: u8,
     address_latch: bool,
     odd_frame: bool,
@@ -300,10 +322,10 @@ impl Ricoh2c02 {
             odd_frame: false,
             vram_address: Register::new(),
             temp_vram_address: Register::new(),
-            pattern_table_tile_1: 0,
-            pattern_table_tile_2: 0,
-            palette_attribute_1: 0,
-            palette_attribute_2: 0,
+            next_bg_tile_id: 0,
+            next_bg_tile_attr: 0,
+            next_bg_tile_msb: 0,
+            next_bg_tile_lsb: 0,
             fine_x_scroll: 0,
             palette: Self::get_palette(),
             screen: [[(0, 0, 0); 0x100]; 0xF0],
@@ -543,6 +565,38 @@ impl Ricoh2c02 {
         self.screen[y as usize][x as usize]
     }
 
+    fn update_next_bg_tile_id(&mut self) {
+        self.next_bg_tile_id = self.ppu_read(0x2000 | self.vram_address.get() & 0x0FFF);
+    }
+
+    fn update_next_bg_tile_attr(&mut self) {
+        self.next_bg_tile_attr =
+            self.ppu_read(0x23C0 | self.vram_address.get_attribute_memory_offset());
+
+        if self.vram_address.get_coarse_y_scroll() & 0x02 == 0x02 {
+            self.next_bg_tile_attr >>= 4;
+        }
+        if self.vram_address.get_coarse_x_scroll() & 0x02 == 0x02 {
+            self.next_bg_tile_attr >>= 2;
+        }
+
+        self.next_bg_tile_attr &= 0x03;
+    }
+
+    fn update_next_bg_tile_lsb(&mut self) {
+        self.next_bg_tile_lsb = self.ppu_ctrl.get_background_pattern_table_address()
+            | (self.next_bg_tile_id as u16) << 4
+            | 0 << 3
+            | self.vram_address.get_fine_y_scroll() as u16;
+    }
+
+    fn update_next_bg_tile_msb(&mut self) {
+        self.next_bg_tile_msb = self.ppu_ctrl.get_background_pattern_table_address()
+            | (self.next_bg_tile_id as u16) << 4
+            | 1 << 3
+            | self.vram_address.get_fine_y_scroll() as u16;
+    }
+
     pub fn clock(&mut self, nmi_enable: &mut bool) {
         match self.scanline {
             261 => {
@@ -577,10 +631,10 @@ impl Ricoh2c02 {
 
                         //
                         match (self.cycle - 1) & 0x7 {
-                            0 => unimplemented!(),
-                            1 => unimplemented!(),
-                            2 => unimplemented!(),
-                            3 => unimplemented!(),
+                            0 => self.update_next_bg_tile_id(),
+                            1 => self.update_next_bg_tile_attr(),
+                            2 => self.update_next_bg_tile_lsb(),
+                            3 => self.update_next_bg_tile_msb(),
                             4 => unimplemented!(),
                             5 => unimplemented!(),
                             6 => unimplemented!(),
@@ -599,7 +653,8 @@ impl Ricoh2c02 {
 
                         if self.cycle == 257 {
                             // Copy bits controlling horizontal position from temp VRAM to VRAM.
-                            self.vram_address.copy_horizontal_address(&self.temp_vram_address);
+                            self.vram_address
+                                .copy_horizontal_address(&self.temp_vram_address);
                         }
 
                         match (self.cycle - 1) & 0x7 {
