@@ -688,17 +688,35 @@ impl Ricoh2c02 {
                         // 2. Attribute table byte
                         // 3. Pattern table tile low
                         // 4. Pattern table tile high (+8 bytes from pattern table tile low)
-
-                        //
                         match (self.cycle - 1) & 0x7 {
                             0 => self.update_next_bg_tile_id(),
-                            1 => self.update_next_bg_tile_attr(),
-                            2 => self.update_next_bg_tile_lsb(),
-                            3 => self.update_next_bg_tile_msb(),
-                            4 => unimplemented!(),
-                            5 => unimplemented!(),
-                            6 => unimplemented!(),
-                            7 => unimplemented!(),
+                            1 => (),
+                            2 => self.update_next_bg_tile_attr(),
+                            3 => (),
+                            4 => self.update_next_bg_tile_lsb(),
+                            5 => (),
+                            6 => self.update_next_bg_tile_msb(),
+                            7 => {
+                                // If we would scroll into the next nametable (because we exceed a width of 32 bytes)
+                                // Reset coarse X and switch to the next nametable (horizontally)
+                                //
+                                // If we're in the left nametable, this will go to the right, and vice versa
+
+                                if self.rendering_enabled() {
+                                    if self.vram_address.get_coarse_x_scroll() == 0x1F {
+                                        self.vram_address.set_coarse_x_scroll(0);
+                                        self.vram_address.set_nametable_select_x(
+                                            self.vram_address
+                                                .get_nametable_select_x()
+                                                .wrapping_add(1),
+                                        );
+                                    } else {
+                                        self.vram_address.set_coarse_x_scroll(
+                                            self.vram_address.get_coarse_x_scroll() + 1,
+                                        );
+                                    }
+                                }
+                            }
                             _ => unreachable!(),
                         }
                     }
