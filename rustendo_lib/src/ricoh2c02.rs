@@ -202,7 +202,7 @@ impl Register {
         self.coarse_x_scroll = (data & 0xF8) >> 3;
     }
 
-    fn set_coarse_y_scroll(&mut self, data: u8) {
+    pub fn set_coarse_y_scroll(&mut self, data: u8) {
         self.coarse_y_scroll = (data & 0xF8) >> 3;
     }
 
@@ -211,11 +211,11 @@ impl Register {
     }
 
     fn get_nametable_select_x(&self) -> u8 {
-        self.nametable_select & 0x0F
+        self.nametable_select & 0x01
     }
 
     fn set_nametable_select_x(&mut self, data: u8) {
-        self.nametable_select = self.nametable_select & 0xF0 | data & 0x0F;
+        self.nametable_select = self.nametable_select & 0x02 | data & 0x01;
     }
 
     pub fn copy_horizontal_address(&mut self, register: &Register) {
@@ -236,9 +236,31 @@ impl Register {
     }
 
     pub fn get_attribute_memory_offset(&self) -> u16 {
+        // The attribute table for each nametable is
+        // located at:
+        //
+        // Nametable 0: 23C0 = 0010 00 11 11 000 000
+        // Nametable 1: 27C0 = 0010 01 11 11 000 000
+        // Nametable 2: 2BC0 = 0010 10 11 11 000 000
+        // Nametable 3: 2FC0 = 0010 11 11 11 000 000
+        //                          ^^       ^^^ ^^^
+        // attribute table select --||       ||| |||
+        // y coordinate ---------------------||| |||
+        // x coordinate -------------------------|||
+        //
+        // We use the nametable select (two bits) to select
+        // the correct attribute table.
+        //
+        // Since each byte in the attribute table controls 4 bytes in the nametable,
+        // we divide the coarse x and coarse y by 4 (by shifting right twice).
+        //
         (self.nametable_select as u16) << 11
             | ((self.coarse_y_scroll as u16) >> 2) << 3
             | (self.coarse_x_scroll as u16) >> 2
+    }
+
+    pub fn get_nametable_offset(&self) -> u16 {
+        self.get() | 0x0FFF
     }
 
     pub fn set(&mut self, data: u16) {
@@ -566,21 +588,59 @@ impl Ricoh2c02 {
     }
 
     fn update_next_bg_tile_id(&mut self) {
-        self.next_bg_tile_id = self.ppu_read(0x2000 | self.vram_address.get() & 0x0FFF);
+        self.next_bg_tile_id = self.ppu_read(0x2000 | self.vram_address.get_nametable_offset());
     }
 
     fn update_next_bg_tile_attr(&mut self) {
         self.next_bg_tile_attr =
             self.ppu_read(0x23C0 | self.vram_address.get_attribute_memory_offset());
 
-        if self.vram_address.get_coarse_y_scroll() & 0x02 == 0x02 {
-            self.next_bg_tile_attr >>= 4;
-        }
-        if self.vram_address.get_coarse_x_scroll() & 0x02 == 0x02 {
-            self.next_bg_tile_attr >>= 2;
-        }
+        // The attribute tile is 1 byte and applies
+        // to a 4-byte by 4-byte region of the nametable.
+        //
+        // It's arranged like this:
+        // 7654 3210
+        // |||| ||++- Color bits 3-2 for top left quadrant of this byte
+        // |||| ++--- Color bits 3-2 for top right quadrant of this byte
+        // ||++------ Color bits 3-2 for bottom left quadrant of this byte
+        // ++-------- Color bits 3-2 for bottom right quadrant of this byte
 
-        self.next_bg_tile_attr &= 0x03;
+        let bottom_right = self.next_bg_tile_attr & 0xC0 >> 6;
+        let bottom_left = self.next_bg_tile_attr & 0x30 >> 4;
+        let top_right = self.next_bg_tile_attr & 0x0C >> 2;
+        let top_left = self.next_bg_tile_attr & 0x03;
+
+        // This is the top left of the nametable (coarse_x, coarse_y):
+        // (00,00) (01,00) | (10,00) (11,00)
+        // (00,01) (01,01) | (10,01) (11,01)
+        // ----------------|----------------
+        // (00,10) (01,10) | (10,10) (11,10)
+        // (00,01) (01,11) | (10,11) (11,11)
+        //
+        // To the bottom and right, the lower two bits
+        // of the coordinate cycle.
+        //
+        // Top half: coarse_y & 0x2 == 0x0
+        // Bottom half: coarse_y & 0x2 == 0x2
+        // Left half: coarse_x & 0x2 == 0x0
+        // Right half: coarse x & 0x2 == 0x2
+
+        let coarse_x = self.vram_address.get_coarse_x_scroll();
+        let coarse_y = self.vram_address.get_coarse_y_scroll();
+
+        self.next_bg_tile_attr = match coarse_x & 0x2 {
+            0x0 => match coarse_y & 0x2 {
+                0x0 => top_left,
+                0x2 => bottom_left,
+                _ => unreachable!(),
+            },
+            0x2 => match coarse_y & 0x2 {
+                0x0 => top_right,
+                0x2 => bottom_right,
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        };
     }
 
     fn update_next_bg_tile_lsb(&mut self) {
