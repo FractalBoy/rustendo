@@ -2,7 +2,6 @@ use crate::ppu_bus::Bus;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-
 #[derive(Debug, Copy, Clone)]
 enum IncrementMode {
     AddOneGoingAcross = 0,
@@ -842,7 +841,7 @@ impl Ricoh2c02 {
         let attr_msb = self.bg_attr_msb_shifter & mask;
         let palette = attr_msb << 1 | attr_lsb;
 
-        Self::get_palette()[(self.ppu_read(0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
+        self.palette[(self.ppu_read(0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
     }
 
     pub fn clock(&mut self, nmi_enable: &mut bool) -> bool {
