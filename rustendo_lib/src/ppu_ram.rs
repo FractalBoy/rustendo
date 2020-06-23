@@ -29,8 +29,8 @@ impl Ram {
             MirroringType::Horizontal => match address {
                 0x0000..=0x03FF => address,
                 0x0400..=0x07FF => address & 0x03FF,
-                0x0800..=0x0BFF => address,
-                0x0C00..=0x0FFF => address & 0x0BFF,
+                0x0800..=0x0BFF => address >> 1,
+                0x0C00..=0x0FFF => (address & 0x0BFF) >> 1,
                 _ => address,
             },
             MirroringType::Vertical => match address {

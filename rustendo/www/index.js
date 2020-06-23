@@ -19,7 +19,6 @@ cartridgeFile.addEventListener('change', function() {
 
     cartridge.arrayBuffer().then(function(arrayBuffer) {
         const byteArray = new Uint8Array(arrayBuffer);
-        wasm.stop_animation();
         wasm.render(byteArray);
     });
 }, false);

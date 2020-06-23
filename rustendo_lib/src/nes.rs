@@ -41,16 +41,14 @@ impl Nes {
         self.ppu_bus.borrow_mut().load_cartridge(&cartridge);
     }
 
-    pub fn clock(&mut self) {
+    pub fn clock(&mut self) -> bool {
         let mut nmi_enable = false;
 
         // PPU runs at 1/4 the master clock speed
-        if self.clocks % 4 == 0 {
-            self.ppu.borrow_mut().clock(&mut nmi_enable);
-        }
+        let frame_complete = self.ppu.borrow_mut().clock(&mut nmi_enable);
 
         // CPU runs at 1/12 the master clock speed, 3x as slow as the PPU
-        if self.clocks % 12 == 0 {
+        if self.clocks % 3 == 0 {
             let dma_transfer = self.cpu_bus.borrow().get_dma_transfer();
 
             match dma_transfer {
@@ -66,6 +64,7 @@ impl Nes {
         }
 
         self.clocks = self.clocks.wrapping_add(1);
+        frame_complete
     }
 
     fn dma_transfer(&mut self, data: u8) {

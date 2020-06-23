@@ -1,4 +1,3 @@
-use js_sys::Array;
 use rustendo_lib::cartridge::Cartridge;
 use rustendo_lib::nes::Nes;
 use std::cell::RefCell;
@@ -23,18 +22,7 @@ fn window() -> Window {
 fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) {
     window()
         .request_animation_frame(f.as_ref().unchecked_ref())
-        .expect("should register `requestAnimationFrame` OK");
-}
-
-static mut STOP_ANIMATION: bool = false;
-
-fn continue_animation() -> bool {
-    unsafe { !STOP_ANIMATION }
-}
-
-#[wasm_bindgen]
-pub fn stop_animation() {
-    unsafe { STOP_ANIMATION = true };
+        .expect("could not request animation frame");
 }
 
 #[wasm_bindgen]
@@ -44,8 +32,6 @@ pub fn startup() {
 
 #[wasm_bindgen]
 pub fn render(byte_array: js_sys::Uint8Array) {
-    unsafe { STOP_ANIMATION = false };
-
     let nes = Nes::new();
     let vec = byte_array.to_vec();
     let cartridge = Cartridge::new(vec);
@@ -72,11 +58,9 @@ pub fn render(byte_array: js_sys::Uint8Array) {
 
     let mut prev_timestamp = 0.0;
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp| {
-        web_sys::console::log(&Array::of1(&JsValue::from_f64(timestamp - prev_timestamp)));
-        draw(&context, &canvas, &mut nes1.borrow_mut());
-        if continue_animation() {
-            request_animation_frame(f.borrow().as_ref().unwrap());
-        }
+        while !nes1.borrow_mut().clock() {}
+        draw(&context, &canvas, &nes1.borrow());
+        request_animation_frame(f.borrow().as_ref().unwrap());
         prev_timestamp = timestamp;
     }) as Box<dyn FnMut(f64)>));
 
@@ -84,9 +68,7 @@ pub fn render(byte_array: js_sys::Uint8Array) {
     request_animation_frame(g.borrow().as_ref().unwrap());
 }
 
-fn draw(context: &CanvasRenderingContext2d, canvas: &HtmlCanvasElement, nes: &mut Nes) {
-    nes.clock();
-
+fn draw(context: &CanvasRenderingContext2d, canvas: &HtmlCanvasElement, nes: &Nes) {
     let image_data = context
         .get_image_data(0.0, 0.0, canvas.width().into(), canvas.height().into())
         .expect("failed to get ImageData");

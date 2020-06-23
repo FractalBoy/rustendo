@@ -2,6 +2,7 @@ use crate::ppu_bus::Bus;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+
 #[derive(Debug, Copy, Clone)]
 enum IncrementMode {
     AddOneGoingAcross = 0,
@@ -322,8 +323,12 @@ pub struct Ricoh2c02 {
     temp_vram_address: Register,
     next_bg_tile_id: u8,
     next_bg_tile_attr: u8,
-    next_bg_tile_msb: u16,
-    next_bg_tile_lsb: u16,
+    next_bg_tile_msb: u8,
+    next_bg_tile_lsb: u8,
+    bg_tile_msb_shifter: u16,
+    bg_tile_lsb_shifter: u16,
+    bg_attr_msb_shifter: u16,
+    bg_attr_lsb_shifter: u16,
     fine_x_scroll: u8,
     address_latch: bool,
     odd_frame: bool,
@@ -364,6 +369,10 @@ impl Ricoh2c02 {
             next_bg_tile_attr: 0,
             next_bg_tile_msb: 0,
             next_bg_tile_lsb: 0,
+            bg_tile_msb_shifter: 0,
+            bg_tile_lsb_shifter: 0,
+            bg_attr_msb_shifter: 0,
+            bg_attr_lsb_shifter: 0,
             fine_x_scroll: 0,
             palette: Self::get_palette(),
             screen: [[(0, 0, 0); 0x100]; 0xF0],
@@ -524,7 +533,7 @@ impl Ricoh2c02 {
                 let address = self.vram_address.get();
                 self.vram_address
                     .increment(self.ppu_ctrl.get_increment_mode());
-                self.bus.borrow_mut().ppu_write(address, data);
+                self.ppu_write(address, data);
             }
             _ => (),
         }
@@ -590,6 +599,66 @@ impl Ricoh2c02 {
         }
     }
 
+    pub fn ppu_write(&mut self, address: u16, data: u8) {
+        match address {
+            0x0000..=0x3EFF => self.bus.borrow_mut().ppu_write(address, data),
+            0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C | 0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
+                self.universal_background_color = data
+            }
+            0x3F01..=0x3F03 => match address & 0x0003 {
+                0x0001 => self.background_palette_0.0 = data,
+                0x0002 => self.background_palette_0.1 = data,
+                0x0003 => self.background_palette_0.2 = data,
+                _ => unreachable!(),
+            },
+            0x3F05..=0x3F07 => match address & 0x0003 {
+                0x0001 => self.background_palette_1.0 = data,
+                0x0002 => self.background_palette_1.1 = data,
+                0x0003 => self.background_palette_1.2 = data,
+                _ => unreachable!(),
+            },
+            0x3F09..=0x3F0B => match address & 0x0003 {
+                0x0001 => self.background_palette_2.0 = data,
+                0x0002 => self.background_palette_2.1 = data,
+                0x0003 => self.background_palette_2.2 = data,
+                _ => unreachable!(),
+            },
+            0x3F0D..=0x3F0F => match address & 0x0003 {
+                0x0001 => self.background_palette_3.0 = data,
+                0x0002 => self.background_palette_3.1 = data,
+                0x0003 => self.background_palette_3.2 = data,
+                _ => unreachable!(),
+            },
+            0x3F11..=0x3F13 => match address & 0x0003 {
+                0x0001 => self.sprite_palette_0.0 = data,
+                0x0002 => self.sprite_palette_0.1 = data,
+                0x0003 => self.sprite_palette_0.2 = data,
+                _ => unreachable!(),
+            },
+            0x3F15..=0x3F17 => match address & 0x0003 {
+                0x0001 => self.sprite_palette_1.0 = data,
+                0x0002 => self.sprite_palette_1.1 = data,
+                0x0003 => self.sprite_palette_1.2 = data,
+                _ => unreachable!(),
+            },
+            0x3F19..=0x3F1B => match address & 0x0003 {
+                0x0001 => self.sprite_palette_2.0 = data,
+                0x0002 => self.sprite_palette_2.1 = data,
+                0x0003 => self.sprite_palette_2.2 = data,
+                _ => unreachable!(),
+            },
+            0x3F1D..=0x3F1F => match address & 0x0003 {
+                0x0001 => self.sprite_palette_3.0 = data,
+                0x0002 => self.sprite_palette_3.1 = data,
+                0x0003 => self.sprite_palette_3.2 = data,
+                _ => unreachable!(),
+            },
+            // The remainder of memory mirrors the palette addresses
+            0x3F20..=0x3FFF => self.ppu_write(address & 0x3F1F, data),
+            _ => unreachable!(),
+        }
+    }
+
     pub fn oam_dma(&mut self, address: u16, data: u8) {
         let address = (address as u8).wrapping_add(self.oam_addr);
         self.primary_oam[address as usize] = data;
@@ -604,6 +673,7 @@ impl Ricoh2c02 {
     }
 
     fn update_next_bg_tile_id(&mut self) {
+        self.load_background_shifters();
         self.next_bg_tile_id = self.ppu_read(0x2000 | self.vram_address.get_nametable_offset());
     }
 
@@ -659,18 +729,34 @@ impl Ricoh2c02 {
         };
     }
 
+    //PPU addresses within the pattern tables can be decoded as follows:
+    //
+    // DCBA98 76543210
+    // ---------------
+    // 0HRRRR CCCCPTTT
+    // |||||| |||||+++- T: Fine Y offset, the row number within a tile
+    // |||||| ||||+---- P: Bit plane (0: "lower"; 1: "upper")
+    // |||||| ++++----- C: Tile column
+    // ||++++---------- R: Tile row
+    // |+-------------- H: Half of sprite table (0: "left"; 1: "right")
+    // +--------------- 0: Pattern table is at $0000-$1FFF
+    //
     fn update_next_bg_tile_lsb(&mut self) {
-        self.next_bg_tile_lsb = self.ppu_ctrl.get_background_pattern_table_address()
-            | (self.next_bg_tile_id as u16) << 4
-            | 0 << 3
-            | self.vram_address.get_fine_y_scroll() as u16;
+        self.next_bg_tile_lsb = self.ppu_read(
+            self.ppu_ctrl.get_background_pattern_table_address()
+                | (self.next_bg_tile_id as u16) << 4
+                | 0 << 3
+                | self.vram_address.get_fine_y_scroll() as u16,
+        );
     }
 
     fn update_next_bg_tile_msb(&mut self) {
-        self.next_bg_tile_msb = self.ppu_ctrl.get_background_pattern_table_address()
-            | (self.next_bg_tile_id as u16) << 4
-            | 1 << 3
-            | self.vram_address.get_fine_y_scroll() as u16;
+        self.next_bg_tile_msb = self.ppu_read(
+            self.ppu_ctrl.get_background_pattern_table_address()
+                | (self.next_bg_tile_id as u16) << 4
+                | 1 << 3
+                | self.vram_address.get_fine_y_scroll() as u16,
+        );
     }
 
     fn increment_horizontal(&mut self) {
@@ -732,7 +818,34 @@ impl Ricoh2c02 {
         }
     }
 
-    pub fn clock(&mut self, nmi_enable: &mut bool) {
+    fn load_background_shifters(&mut self) {
+        self.bg_tile_lsb_shifter = self.next_bg_tile_lsb as u16 | self.bg_tile_lsb_shifter >> 8;
+        self.bg_tile_msb_shifter = self.next_bg_tile_msb as u16 | self.bg_tile_msb_shifter >> 8;
+
+        // The background attribute shifters are actually 1 byte wide,
+        // but they are for the lower byte of the tile shifters, so we'll use
+        // 2 bytes for convenience, and shift them over 1 byte the same as the tile shifters.
+        self.bg_attr_lsb_shifter =
+            (self.next_bg_tile_attr as u16 & 0x01) * 0xFF | self.bg_attr_lsb_shifter >> 8;
+        self.bg_attr_msb_shifter =
+            (self.next_bg_tile_attr as u16 & 0x02 >> 1) * 0xFF | self.bg_attr_msb_shifter >> 8;
+    }
+
+    fn calculate_pixel(&self) -> (u8, u8, u8) {
+        let mask = 1 << self.fine_x_scroll;
+
+        let pixel_lsb = self.bg_tile_lsb_shifter & mask;
+        let pixel_msb = self.bg_tile_msb_shifter & mask;
+        let pixel = pixel_msb << 1 | pixel_lsb;
+
+        let attr_lsb = self.bg_attr_lsb_shifter & mask;
+        let attr_msb = self.bg_attr_msb_shifter & mask;
+        let palette = attr_msb << 1 | attr_lsb;
+
+        Self::get_palette()[(self.ppu_read(0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
+    }
+
+    pub fn clock(&mut self, nmi_enable: &mut bool) -> bool {
         match self.scanline {
             261 => {
                 // Pre-render scanline, fill shift registers with data
@@ -776,7 +889,7 @@ impl Ricoh2c02 {
                             _ => unreachable!(),
                         }
 
-                        // At the end of each screen, increment down one.
+                        // At the end of each scanline, increment down one.
                         if self.cycle == 256 {
                             self.increment_vertical();
                         }
@@ -812,14 +925,15 @@ impl Ricoh2c02 {
                     321..=336 => {
                         // The first two tiles for the next scanline are fetched here.
                         match (self.cycle - 1) & 0x7 {
-                            0 => unimplemented!(),
-                            1 => unimplemented!(),
-                            2 => unimplemented!(),
-                            3 => unimplemented!(),
-                            4 => unimplemented!(),
-                            5 => unimplemented!(),
-                            6 => unimplemented!(),
-                            7 => unimplemented!(),
+                            0 => self.update_next_bg_tile_id(),
+                            1 => (),
+                            2 => self.update_next_bg_tile_attr(),
+                            3 => (),
+                            4 => self.update_next_bg_tile_lsb(),
+                            5 => (),
+                            6 => self.update_next_bg_tile_msb(),
+                            // At the end of each tile, increment right one.
+                            7 => self.increment_horizontal(),
                             _ => unreachable!(),
                         }
                     }
@@ -855,15 +969,26 @@ impl Ricoh2c02 {
             _ => (),
         }
 
+        
+        if self.cycle < 256 && self.scanline < 240
+        {
+            self.screen[self.scanline as usize][self.cycle as usize] =
+                self.calculate_pixel();
+        }
+
         self.cycle += 1;
 
         if self.cycle == CYCLES_PER_SCANLINE {
             self.scanline += 1;
             self.cycle = 0;
         }
+
         if self.scanline == SCANLINES_PER_FRAME {
             self.scanline = 0;
             self.odd_frame = !self.odd_frame;
+            return true;
         }
+
+        false
     }
 }
