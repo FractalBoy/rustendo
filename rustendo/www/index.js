@@ -1,7 +1,5 @@
 import * as wasm from "rustendo";
 
-wasm.startup();
-
 const loadCartridgeButton = document.getElementById('load-cartridge-button');
 const cartridgeFile = document.getElementById('cartridge-file');
 

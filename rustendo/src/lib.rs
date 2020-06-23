@@ -9,6 +9,9 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData, Window};
 
 mod utils;
 
+const NES_WIDTH: u32 = 256;
+const NES_HEIGHT: u32 = 240;
+
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
 #[cfg(feature = "wee_alloc")]
@@ -25,9 +28,46 @@ fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) {
         .expect("could not request animation frame");
 }
 
-#[wasm_bindgen]
+fn get_viewport_size() -> (i32, i32) {
+    let document_element = window()
+        .document()
+        .expect("no document exists")
+        .document_element()
+        .unwrap();
+    (
+        document_element.client_width(),
+        document_element.client_height(),
+    )
+}
+
+#[wasm_bindgen(start)]
 pub fn startup() {
     utils::set_panic_hook();
+
+    let document = web_sys::window().unwrap().document().unwrap();
+    let canvas = document.get_element_by_id("rustendo-canvas").unwrap();
+    let canvas: HtmlCanvasElement = canvas
+        .dyn_into::<HtmlCanvasElement>()
+        .map_err(|_| ())
+        .unwrap();
+
+    let (viewport_width, viewport_height) = get_viewport_size();
+    let multiples_of_width = viewport_width as u32 / NES_WIDTH;
+    let multiples_of_height = viewport_height as u32 / NES_HEIGHT;
+    let smallest_multiple = if multiples_of_width < multiples_of_height {
+        multiples_of_width
+    } else {
+        multiples_of_height
+    };
+
+    let smallest_multiple = if smallest_multiple == 0 {
+        1
+    } else {
+        smallest_multiple
+    };
+
+    canvas.set_width(NES_WIDTH * smallest_multiple);
+    canvas.set_height(NES_HEIGHT * smallest_multiple);
 }
 
 #[wasm_bindgen]
@@ -69,33 +109,53 @@ pub fn render(byte_array: js_sys::Uint8Array) {
 }
 
 fn draw(context: &CanvasRenderingContext2d, canvas: &HtmlCanvasElement, nes: &Nes) {
-    let image_data = context
-        .get_image_data(0.0, 0.0, canvas.width().into(), canvas.height().into())
-        .expect("failed to get ImageData");
+    let renderer = window()
+        .document()
+        .unwrap()
+        .create_element(&"canvas")
+        .expect("could not create canvas")
+        .dyn_into::<HtmlCanvasElement>()
+        .map_err(|_| ())
+        .expect("");
 
-    let mut data = image_data.data();
+    renderer.set_width(NES_WIDTH);
+    renderer.set_height(NES_HEIGHT);
 
-    for y in 0..image_data.height() {
-        for x in 0..image_data.width() {
+    let renderer_context = renderer
+        .get_context("2d")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<CanvasRenderingContext2d>()
+        .unwrap();
+
+    let mut data = vec![0; (NES_WIDTH * NES_HEIGHT * 4) as usize];
+
+    for y in 0..NES_HEIGHT {
+        for x in 0..NES_WIDTH {
             let color = nes.color_at_coord(x, y);
-            set_color_at_coord(&mut data, canvas.width(), x, y, color)
+            set_color_at_coord(&mut data, NES_WIDTH, x, y, color)
         }
     }
 
-    let image_data = ImageData::new_with_u8_clamped_array(Clamped(&mut data), canvas.width())
+    let image_data = ImageData::new_with_u8_clamped_array(Clamped(&mut data), NES_WIDTH)
         .expect("could not create image data");
-    context
+
+    renderer_context
         .put_image_data(&image_data, 0.0, 0.0)
         .expect("could not put image data");
+
+    context
+        .draw_image_with_html_canvas_element_and_dw_and_dh(
+            &renderer,
+            0.0,
+            0.0,
+            canvas.width().into(),
+            canvas.height().into(),
+        )
+        .expect("could not draw canvas onto context");
 }
 
-fn set_color_at_coord(
-    data: &mut Clamped<Vec<u8>>,
-    width: u32,
-    x: u32,
-    y: u32,
-    color: (u8, u8, u8),
-) {
+fn set_color_at_coord(data: &mut Vec<u8>, width: u32, x: u32, y: u32, color: (u8, u8, u8)) {
     let x = x as usize;
     let y = y as usize;
     let width = width as usize;
