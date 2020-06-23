@@ -210,12 +210,28 @@ impl Register {
         self.fine_y_scroll
     }
 
-    fn get_nametable_select_x(&self) -> u8 {
-        self.nametable_select & 0x01
+    fn get_nametable_select_x(&self) -> bool {
+        self.nametable_select & 0x01 == 0x01
     }
 
-    fn set_nametable_select_x(&mut self, data: u8) {
-        self.nametable_select = self.nametable_select & 0x02 | data & 0x01;
+    fn set_nametable_select_x(&mut self, data: bool) {
+        self.nametable_select = (data as u8) | self.nametable_select & 0x02;
+    }
+
+    fn get_nametable_select_y(&self) -> bool {
+        self.nametable_select & 0x02 == 0x02
+    }
+
+    fn set_nametable_select_y(&mut self, data: bool) {
+        self.nametable_select = self.nametable_select & 0x01 | (data as u8) << 1
+    }
+
+    pub fn toggle_horizontal_nametable(&mut self) {
+        self.set_nametable_select_x(!self.get_nametable_select_x());
+    }
+
+    pub fn toggle_vertical_nametable(&mut self) {
+        self.set_nametable_select_y(!self.get_nametable_select_y());
     }
 
     pub fn copy_horizontal_address(&mut self, register: &Register) {
@@ -657,6 +673,65 @@ impl Ricoh2c02 {
             | self.vram_address.get_fine_y_scroll() as u16;
     }
 
+    fn increment_horizontal(&mut self) {
+        // If we would scroll into the next nametable (because we exceed a width of 32 bytes)
+        // Reset coarse X and switch to the next nametable (horizontally)
+        //
+        // If we're in the left nametable, this will go to the right, and vice versa
+
+        if !self.rendering_enabled() {
+            return;
+        }
+
+        if self.vram_address.get_coarse_x_scroll() == 0x1F {
+            self.vram_address.set_coarse_x_scroll(0);
+            self.vram_address.toggle_horizontal_nametable();
+        } else {
+            self.vram_address
+                .set_coarse_x_scroll(self.vram_address.get_coarse_x_scroll() + 1);
+        }
+    }
+
+    fn increment_vertical(&mut self) {
+        if !self.rendering_enabled() {
+            return;
+        }
+
+        if self.vram_address.get_fine_y_scroll() & 0x7 == 0x7 {
+            // Fine Y's 3 bits are full, overflow to coarse Y
+            self.vram_address.set_fine_y_scroll(0);
+
+            if self.vram_address.get_coarse_y_scroll() == 29 {
+                // Row 29 is the last row of tiles in a nametable.
+                // To wrap to the next nametable when incrementing coarse Y from 29, the vertical nametable is switched by toggling bit 11, and coarse Y wraps to row 0.Row 29 is the last row of tiles in a nametable. To wrap to the next nametable when incrementing coarse Y from 29,
+                // the vertical nametable is toggled and coarse Y wraps to row 0.
+                self.vram_address.set_coarse_y_scroll(0);
+                self.vram_address.toggle_vertical_nametable();
+            } else if self.vram_address.get_coarse_y_scroll() == 31 {
+                // Coarse Y can be set out of bounds,
+                // which will cause the PPU to read the attribute data stored there
+                // as tile data. If coarse Y is incremented from 31, it will wrap to 0,
+                // but the nametable will not switch.
+                //
+                // For this reason, a write >= 240 to $2005 may appear as a "negative"
+                // scroll value, where 1 or 2 rows of attribute data will appear
+                // before the nametable's tile data is reached.
+                //
+                // Some games use this to move the top of the nametable
+                // out of the Overscan area.
+                self.vram_address.set_coarse_y_scroll(0);
+            } else {
+                // Coarse Y not at the bounds of the nametable; just add 1.
+                self.vram_address
+                    .set_coarse_y_scroll(self.vram_address.get_coarse_y_scroll() + 1);
+            }
+        } else {
+            // Fine Y does not need to wrap; just add 1.
+            self.vram_address
+                .set_fine_y_scroll(self.vram_address.get_fine_y_scroll() + 1);
+        }
+    }
+
     pub fn clock(&mut self, nmi_enable: &mut bool) {
         match self.scanline {
             261 => {
@@ -696,28 +771,14 @@ impl Ricoh2c02 {
                             4 => self.update_next_bg_tile_lsb(),
                             5 => (),
                             6 => self.update_next_bg_tile_msb(),
-                            7 => {
-                                // If we would scroll into the next nametable (because we exceed a width of 32 bytes)
-                                // Reset coarse X and switch to the next nametable (horizontally)
-                                //
-                                // If we're in the left nametable, this will go to the right, and vice versa
-
-                                if self.rendering_enabled() {
-                                    if self.vram_address.get_coarse_x_scroll() == 0x1F {
-                                        self.vram_address.set_coarse_x_scroll(0);
-                                        self.vram_address.set_nametable_select_x(
-                                            self.vram_address
-                                                .get_nametable_select_x()
-                                                .wrapping_add(1),
-                                        );
-                                    } else {
-                                        self.vram_address.set_coarse_x_scroll(
-                                            self.vram_address.get_coarse_x_scroll() + 1,
-                                        );
-                                    }
-                                }
-                            }
+                            // At the end of each tile, increment right one.
+                            7 => self.increment_horizontal(),
                             _ => unreachable!(),
+                        }
+
+                        // At the end of each screen, increment down one.
+                        if self.cycle == 256 {
+                            self.increment_vertical();
                         }
                     }
                     257..=320 => {
@@ -736,14 +797,15 @@ impl Ricoh2c02 {
                         }
 
                         match (self.cycle - 1) & 0x7 {
-                            0 => unimplemented!(),
-                            1 => unimplemented!(),
-                            2 => unimplemented!(),
-                            3 => unimplemented!(),
-                            4 => unimplemented!(),
-                            5 => unimplemented!(),
-                            6 => unimplemented!(),
-                            7 => unimplemented!(),
+                            0 => self.update_next_bg_tile_id(),
+                            1 => (),
+                            2 => self.update_next_bg_tile_attr(),
+                            3 => (),
+                            4 => self.update_next_bg_tile_lsb(),
+                            5 => (),
+                            6 => self.update_next_bg_tile_msb(),
+                            // At the end of each tile, increment right one.
+                            7 => self.increment_horizontal(),
                             _ => unreachable!(),
                         }
                     }
