@@ -47,12 +47,10 @@ impl Bus {
         match address {
             0x0000..=0x1FFF => self.ram.write(address, data),
             0x2000..=0x3FFF => self.ppu.borrow_mut().cpu_write(address & 0x2007, data),
-            0x4020..=0xFFFF => match address {
-                0x4014 => self.dma_transfer = Some(data),
-                _ => match &self.cartridge {
-                    Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
-                    None => self.set_test_ram(address, data),
-                },
+            0x4014 => self.dma_transfer = Some(data),
+            0x4020..=0xFFFF => match &self.cartridge {
+                Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
+                None => self.set_test_ram(address, data),
             },
             _ => self.set_test_ram(address, data),
         };
