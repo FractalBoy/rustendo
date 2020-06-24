@@ -217,7 +217,7 @@ impl InstructionRegister {
             0x4 => match high_nibble {
                 0x2 => Instruction::BIT(AddressingMode::ZeroPage, 2, 3),
                 0x8 => Instruction::STY(AddressingMode::ZeroPage, 2, 3),
-                0x9 => Instruction::STY(AddressingMode::ZeroPage, 2, 4),
+                0x9 => Instruction::STY(AddressingMode::ZeroPageX, 2, 4),
                 0xA => Instruction::LDY(AddressingMode::ZeroPage, 2, 3),
                 0xB => Instruction::LDY(AddressingMode::ZeroPage, 2, 4),
                 0xC => Instruction::CPY(AddressingMode::ZeroPage, 2, 3),
