@@ -103,3 +103,27 @@ impl Nes {
         self.cpu.reset();
     }
 }
+
+#[cfg(test)]
+//mod tests {
+//    use super::Nes;
+//    use crate::cartridge::Cartridge;
+//    use std::fs;
+//    use std::path::Path;
+//
+//    #[test]
+//    fn it_works() {
+//        let current_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+//        let nes_test = current_dir.parent().unwrap().join("nestest.nes");
+//        let buffer = fs::read(nes_test).unwrap();
+//
+//        let mut nes = Nes::new();
+//        let cartridge = Cartridge::new(buffer);
+//        nes.load_cartridge(cartridge);
+//
+//        nes.reset();
+//        loop {
+//            nes.clock();
+//        }
+//    }
+//}
