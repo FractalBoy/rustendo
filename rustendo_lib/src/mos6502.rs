@@ -833,7 +833,7 @@ impl Mos6502 {
             // a carry occurred (page boundary crossed), need to add one
             // to high byte of address and use additional cycle
             self.cycles += 1;
-            address_high + 1
+            address_high.wrapping_add(1)
         } else {
             address_high
         };
