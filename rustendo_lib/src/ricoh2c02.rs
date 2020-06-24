@@ -968,11 +968,8 @@ impl Ricoh2c02 {
             _ => (),
         }
 
-        
-        if self.cycle < 256 && self.scanline < 240
-        {
-            self.screen[self.scanline as usize][self.cycle as usize] =
-                self.calculate_pixel();
+        if self.cycle < 256 && self.scanline < 240 && self.rendering_enabled() {
+            self.screen[self.scanline as usize][self.cycle as usize] = self.calculate_pixel();
         }
 
         self.cycle += 1;

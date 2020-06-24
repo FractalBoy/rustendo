@@ -1228,18 +1228,25 @@ impl Mos6502 {
 
                 self.do_addressing_mode(mode);
                 self.a.borrow_mut().read_from_bus();
+                let a = self.a.borrow().read();
+                self.p.negative = a & 0x80 == 0x80;
+                self.p.zero = a == 0;
             }
             Instruction::LDX(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
                 self.x = self.data_bus.borrow().read();
+                self.p.negative = self.x & 0x80 == 0x80;
+                self.p.zero = self.x == 0;
             }
             Instruction::LDY(mode, _, cycles) => {
                 self.cycles = cycles;
 
                 self.do_addressing_mode(mode);
                 self.y = self.data_bus.borrow().read();
+                self.p.negative = self.y & 0x80 == 0x80;
+                self.p.zero = self.y == 0;
             }
             Instruction::LSR(mode, _, cycles) => {
                 self.cycles = cycles;

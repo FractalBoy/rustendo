@@ -1,3 +1,10 @@
+#[macro_use]
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
+
 mod assembler;
 mod cpu_bus;
 mod ppu_bus;
