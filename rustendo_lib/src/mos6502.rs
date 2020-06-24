@@ -187,7 +187,7 @@ impl InstructionRegister {
                 0xD => Instruction::BNE(AddressingMode::Relative, 2, 2),
                 0xE => Instruction::CPX(AddressingMode::Immediate, 2, 2),
                 0xF => Instruction::BEQ(AddressingMode::Relative, 2, 2),
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0x1 => match high_nibble {
                 0x0 => Instruction::ORA(AddressingMode::IndirectX, 2, 6),
@@ -206,12 +206,12 @@ impl InstructionRegister {
                 0xD => Instruction::CMP(AddressingMode::IndirectY, 2, 5),
                 0xE => Instruction::SBC(AddressingMode::IndirectX, 2, 6),
                 0xF => Instruction::SBC(AddressingMode::IndirectY, 2, 5),
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0x2 => match high_nibble {
                 0xA => Instruction::LDX(AddressingMode::Immediate, 2, 2),
                 0x0..=0x9 => Instruction::KIL,
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0x3 | 0x7 | 0xB | 0xF => Instruction::KIL,
             0x4 => match high_nibble {
@@ -219,11 +219,11 @@ impl InstructionRegister {
                 0x8 => Instruction::STY(AddressingMode::ZeroPage, 2, 3),
                 0x9 => Instruction::STY(AddressingMode::ZeroPageX, 2, 4),
                 0xA => Instruction::LDY(AddressingMode::ZeroPage, 2, 3),
-                0xB => Instruction::LDY(AddressingMode::ZeroPage, 2, 4),
+                0xB => Instruction::LDY(AddressingMode::ZeroPageX, 2, 4),
                 0xC => Instruction::CPY(AddressingMode::ZeroPage, 2, 3),
                 0xE => Instruction::CPX(AddressingMode::ZeroPage, 2, 3),
                 0x0 | 0x1 | 0x3..=0x7 | 0xD | 0xF => Instruction::KIL,
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0x5 => match high_nibble {
                 0x0 => Instruction::ORA(AddressingMode::ZeroPage, 2, 3),
@@ -242,7 +242,7 @@ impl InstructionRegister {
                 0xD => Instruction::CMP(AddressingMode::ZeroPageX, 2, 4),
                 0xE => Instruction::SBC(AddressingMode::ZeroPage, 2, 3),
                 0xF => Instruction::SBC(AddressingMode::ZeroPageX, 2, 4),
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0x6 => match high_nibble {
                 0x0 => Instruction::ASL(AddressingMode::ZeroPage, 2, 5),
@@ -261,7 +261,7 @@ impl InstructionRegister {
                 0xD => Instruction::DEC(AddressingMode::ZeroPageX, 2, 6),
                 0xE => Instruction::INC(AddressingMode::ZeroPage, 2, 5),
                 0xF => Instruction::INC(AddressingMode::ZeroPageX, 2, 6),
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0x8 => match high_nibble {
                 0x0 => Instruction::PHP(AddressingMode::Implied, 1, 3),
@@ -280,7 +280,7 @@ impl InstructionRegister {
                 0xD => Instruction::CLD(AddressingMode::Implied, 1, 2),
                 0xE => Instruction::INX(AddressingMode::Implied, 1, 2),
                 0xF => Instruction::SED(AddressingMode::Implied, 1, 2),
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0x9 => match high_nibble {
                 0x0 => Instruction::ORA(AddressingMode::Immediate, 2, 2),
@@ -299,7 +299,7 @@ impl InstructionRegister {
                 0xD => Instruction::CMP(AddressingMode::AbsoluteY, 3, 4),
                 0xE => Instruction::SBC(AddressingMode::Immediate, 2, 2),
                 0xF => Instruction::SBC(AddressingMode::AbsoluteY, 3, 4),
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0xA => match high_nibble {
                 0x0 => Instruction::ASL(AddressingMode::Accumulator, 1, 2),
@@ -313,7 +313,7 @@ impl InstructionRegister {
                 0xC => Instruction::DEX(AddressingMode::Implied, 1, 2),
                 0xE => Instruction::NOP(AddressingMode::Implied, 1, 2),
                 0x1 | 0x3 | 0x5 | 0x7 | 0xD | 0xF => Instruction::KIL,
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0xC => match high_nibble {
                 0x2 => Instruction::BIT(AddressingMode::Absolute, 3, 4),
@@ -325,7 +325,7 @@ impl InstructionRegister {
                 0xC => Instruction::CPY(AddressingMode::Absolute, 3, 4),
                 0xE => Instruction::CPX(AddressingMode::Absolute, 3, 4),
                 0x0 | 0x1 | 0x3 | 0x5 | 0x7 | 0x9 | 0xD | 0xF => Instruction::KIL,
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0xD => match high_nibble {
                 0x0 => Instruction::ORA(AddressingMode::Absolute, 3, 4),
@@ -344,7 +344,7 @@ impl InstructionRegister {
                 0xD => Instruction::CMP(AddressingMode::AbsoluteX, 3, 4),
                 0xE => Instruction::SBC(AddressingMode::Absolute, 3, 4),
                 0xF => Instruction::SBC(AddressingMode::AbsoluteX, 3, 4),
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
             0xE => match high_nibble {
                 0x0 => Instruction::ASL(AddressingMode::Absolute, 3, 6),
@@ -358,14 +358,14 @@ impl InstructionRegister {
                 0x8 => Instruction::STX(AddressingMode::Absolute, 3, 4),
                 0x9 => Instruction::KIL,
                 0xA => Instruction::LDX(AddressingMode::Absolute, 3, 4),
-                0xB => Instruction::LDX(AddressingMode::AbsoluteX, 3, 4),
+                0xB => Instruction::LDX(AddressingMode::AbsoluteY, 3, 4),
                 0xC => Instruction::DEC(AddressingMode::Absolute, 3, 6),
                 0xD => Instruction::DEC(AddressingMode::AbsoluteX, 3, 7),
                 0xE => Instruction::INC(AddressingMode::Absolute, 3, 6),
                 0xF => Instruction::INC(AddressingMode::AbsoluteX, 3, 7),
-                _ => panic!("nibble should have only 4 bits"),
+                _ => unreachable!(),
             },
-            _ => panic!("nibble should have only 4 bits"),
+            _ => unreachable!(),
         }
     }
 }
@@ -1469,8 +1469,8 @@ mod tests {
     use super::Mos6502;
     use crate::assembler::{self, AssemblerError};
     use crate::cpu_bus::Bus as CpuBus;
-    use crate::ricoh2c02::Ricoh2c02;
     use crate::ppu_bus::Bus as PpuBus;
+    use crate::ricoh2c02::Ricoh2c02;
     use std::cell::RefCell;
     use std::rc::Rc;
 
