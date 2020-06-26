@@ -575,114 +575,39 @@ impl Alu {
         let accumulator_data = self.accumulator.borrow().read();
         let bus_data = self.data_bus.borrow().read();
 
-        let was_negative = accumulator_data & 0x80 == 0x80;
         let sum;
 
-        // The NES's 6502 doesn't allow decimal mode, but it does allow the flag to be set.
-        //if p.decimal_mode {
-        #[allow(dead_code)]
-        if false {
-            // Add the one's digit and the borrow.
-            let mut low = (accumulator_data & 0x0F)
-                .wrapping_add(bus_data & 0x0F)
-                .wrapping_add(p.carry as u8);
-            // Add the ten's digit (shift to one's place and mask)
-            let mut high = ((accumulator_data >> 4) & 0x0F).wrapping_add((bus_data >> 4) & 0x0F);
-            p.carry = false;
+        let bin = (accumulator_data as u16)
+            .wrapping_add(bus_data as u16)
+            .wrapping_add(p.carry as u16);
 
-            // If the one's digit is greater than nine, it's not valid decimal.
-            // Adding 6 and taking the low nibble will fix this, since it causes
-            // A -> F to wrap around back to the range 0 -> 5.
-            if low > 9 {
-                let diff = low - 10;
-                low = low - diff;
-                high = high + diff;
-            }
-            if high > 9 {
-                p.carry = true;
-                high -= 10;
-            }
+        p.carry = bin & 0x100 == 0x100;
 
-            // Rebuild the result
-            sum = (high << 4) | low;
-
-            p.zero = sum == 0;
-        } else {
-            let bin = (accumulator_data as u16)
-                .wrapping_add(bus_data as u16)
-                .wrapping_add(p.carry as u16);
-
-            p.carry = bin & 0x100 == 0x100;
-
-            sum = (bin & 0xFF) as u8;
-            p.zero = sum == 0;
-        }
+        sum = (bin & 0xFF) as u8;
+        p.zero = sum == 0;
 
         self.accumulator.borrow_mut().write(sum);
         p.negative = sum & 0x80 == 0x80;
-        p.overflow = was_negative ^ p.negative;
+        p.overflow = !(accumulator_data ^ bus_data) & (accumulator_data ^ sum) & 0x80 == 0x80;
     }
 
     pub fn subtract_with_borrow(&mut self, p: &mut StatusRegister) {
         let accumulator_data = self.accumulator.borrow().read();
         let bus_data = self.data_bus.borrow().read();
 
-        let was_negative = accumulator_data & 0x80 == 0x80;
-        let is_negative;
-        let sum;
+        let bin = (accumulator_data as u16)
+            .wrapping_add((!bus_data) as u16)
+            .wrapping_add(p.carry as u16);
 
-        if p.decimal_mode {
-            // Subtract the one's digit and the borrow.
-            let mut low = (accumulator_data & 0x0F)
-                .wrapping_sub(bus_data & 0x0F)
-                .wrapping_sub(!p.carry as u8);
-            // Subtract the ten's digit (shift to one's place and mask)
-            let mut high = ((accumulator_data >> 4) & 0x0F).wrapping_sub((bus_data >> 4) & 0x0F);
-            p.carry = true;
+        // Carry = inverse of borrow
+        p.carry = bin & 0x100 == 0x100;
 
-            // If the one's digit is negative, we need to borrow.
-            if low & 0x80 == 0x80 {
-                low = low.wrapping_add(10);
-                high = high.wrapping_sub(1);
-            }
-            // If the one's digit is greater than nine, it's not valid decimal.
-            // Adding 6 and taking the low nibble will fix this, since it causes
-            // A -> F to wrap around back to the range 0 -> 5.
-            else if low > 9 {
-                low = low.wrapping_add(6) & 0x0F;
-            }
-
-            // If the ten's digit is negative, we need to borrow from the carry bit.
-            if high & 0x80 == 0x80 {
-                high = high.wrapping_add(10);
-                p.carry = false;
-            }
-            // Wrap high digit as well, same as low
-            else if high > 9 {
-                low = low.wrapping_add(6) & 0x0F;
-            }
-
-            // Rebuild the result
-            sum = (high << 4) | low;
-
-            p.zero = sum == 0;
-            is_negative = sum & 0x80 == 0x80;
-        } else {
-            let bin = (accumulator_data as u16)
-                .wrapping_add((!bus_data) as u16)
-                .wrapping_add(p.carry as u16);
-
-            // Carry = inverse of borrow
-            p.carry = bin & 0x100 == 0x100;
-
-            sum = (bin & 0xFF) as u8;
-            p.zero = sum == 0;
-            is_negative = sum & 0x80 == 0x80;
-        }
+        let sum = (bin & 0xFF) as u8;
 
         self.accumulator.borrow_mut().write(sum);
-        p.negative = is_negative;
-        p.overflow = was_negative ^ is_negative;
+        p.zero = sum == 0;
+        p.negative = sum & 0x80 == 0x80;
+        p.overflow = (sum ^ accumulator_data) & (sum ^ bus_data) & 0x80 == 0x80;
     }
 }
 
