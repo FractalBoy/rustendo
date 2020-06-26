@@ -940,7 +940,8 @@ impl Mos6502 {
                 self.cycles += 1;
 
                 // PCH + 0 + carry -> PCH
-                let pch = pc.read_high().wrapping_add(1);
+                let increment = if offset_negative { NEGATIVE_ONE } else { 1 };
+                let pch = pc.read_high().wrapping_add(increment);
                 self.data_bus.borrow_mut().write(pch);
                 pc.read_high_from_data_bus();
             }
