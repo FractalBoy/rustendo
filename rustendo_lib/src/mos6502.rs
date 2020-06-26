@@ -520,6 +520,14 @@ pub enum Instruction {
     KIL,
 }
 
+impl std::fmt::Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut debug = format!("{:?}", self);
+        debug.replace_range(3.., "");
+        write!(f, "{}", debug)
+    }
+}
+
 struct Accumulator {
     data: u8,
     data_bus: Rc<RefCell<DataBus>>,
@@ -570,7 +578,10 @@ impl Alu {
         let was_negative = accumulator_data & 0x80 == 0x80;
         let sum;
 
-        if p.decimal_mode {
+        // The NES's 6502 doesn't allow decimal mode, but it does allow the flag to be set.
+        //if p.decimal_mode {
+        #[allow(dead_code)]
+        if false {
             // Add the one's digit and the borrow.
             let mut low = (accumulator_data & 0x0F)
                 .wrapping_add(bus_data & 0x0F)
@@ -1292,7 +1303,9 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 self.write_address(0x01, self.s);
-                self.data_bus.borrow_mut().write(self.p.get());
+                // Bit 4 is always set when pushing
+                let p = self.p.get() | 0x10;
+                self.data_bus.borrow_mut().write(p);
                 self.write();
                 self.s -= 1;
             }
@@ -1366,6 +1379,11 @@ impl Mos6502 {
                 self.write_address(0x01, self.s);
                 self.read();
                 self.pc.borrow_mut().read_high_from_data_bus();
+
+                // Subtract one from program counter to counteract
+                // standard increment
+                let pc = self.pc.borrow().wide();
+                self.pc.borrow_mut().write(pc.wrapping_sub(1));
             }
             Instruction::RTS(_, _, cycles) => {
                 self.cycles = cycles;
