@@ -65,14 +65,14 @@ impl Cartridge {
         }
     }
 
-    fn rom_size(size: u16) -> u16 {
-        match size & 0xF00 >> 8 {
-            0xF => {
+    fn rom_size(size: u16, units: u16) -> u16 {
+        match size & 0xF00 {
+            0xF00 => {
                 let multiplier = size & 0x3;
                 let exponent = (size & 0xFC) >> 2;
                 2u16.pow(exponent as u32) * (multiplier * 2 + 1)
             }
-            _ => size * 0x4000,
+            _ => size * units,
         }
     }
 
@@ -88,7 +88,7 @@ impl Cartridge {
                 let msb = ((header[9] as u16) & 0xF) << 4;
                 let size = msb | lsb;
 
-                Self::rom_size(size) as usize
+                Self::rom_size(size, 0x4000) as usize
             }
         }
     }
@@ -109,9 +109,9 @@ impl Cartridge {
             CartridgeFormat::Nes2 => {
                 let lsb = header[5] as u16;
                 let msb = (header[9] as u16) & 0xF0;
-                let size = msb | lsb;
+                let size = msb << 4 | lsb;
 
-                Self::rom_size(size) as usize
+                Self::rom_size(size, 0x2000) as usize
             }
         }
     }
@@ -152,7 +152,7 @@ impl Cartridge {
     fn _chr_ram_size(header: &[u8]) -> usize {
         match Self::_format(header) {
             CartridgeFormat::INes => match header[5] {
-                0 => Self::_chr_rom_size(header),
+                0 => 0x1FE000,
                 _ => 0,
             },
             CartridgeFormat::Nes2 => match header[11] & 0x0F {
