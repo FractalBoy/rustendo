@@ -1247,7 +1247,7 @@ impl Mos6502 {
             Instruction::PLA(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.s += 1;
+                self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 let value = self.read();
                 self.a.borrow_mut().write(value);
@@ -1257,7 +1257,7 @@ impl Mos6502 {
             Instruction::PLP(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.s += 1;
+                self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 let value = self.read();
                 self.p.set(value);
@@ -1305,17 +1305,17 @@ impl Mos6502 {
             Instruction::RTI(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.s += 1;
+                self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 let data = self.read();
                 self.p.set(data);
 
-                self.s += 1;
+                self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 self.read();
                 self.pc.borrow_mut().read_low_from_data_bus();
 
-                self.s += 1;
+                self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 self.read();
                 self.pc.borrow_mut().read_high_from_data_bus();
@@ -1328,12 +1328,12 @@ impl Mos6502 {
             Instruction::RTS(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.s += 1;
+                self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 self.read();
                 self.pc.borrow_mut().read_low_from_data_bus();
 
-                self.s += 1;
+                self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 self.read();
                 self.pc.borrow_mut().read_high_from_data_bus();
