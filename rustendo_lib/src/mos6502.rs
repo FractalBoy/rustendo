@@ -850,7 +850,7 @@ impl Mos6502 {
                     // a carry occurred (page boundary crossed), need to add one
                     // to high byte of address and use additional cycle
                     self.cycles += 1;
-                    address_high + 1
+                    address_high.wrapping_add(1)
                 } else {
                     address_high
                 };
@@ -1414,8 +1414,9 @@ impl Mos6502 {
                 self.p.zero = self.a.borrow().read() == 0x00;
             }
             Instruction::KIL => panic!(
-                "{:x} instruction not implemented",
-                self.instruction_register.data
+                "{:02X} instruction not implemented at address {:04X}",
+                self.instruction_register.data,
+                self.pc.borrow().wide()
             ),
         }
 
