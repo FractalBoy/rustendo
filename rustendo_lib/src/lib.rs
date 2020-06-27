@@ -1,7 +1,11 @@
-#[macro_use]
+#[macro_export]
 macro_rules! log {
     ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
+        if cfg!(target_arch = "wasm32") { 
+            web_sys::console::log_1(&format!( $( $t )* ).into());
+        } else {
+            println!( $( $t )* );
+        }
     }
 }
 

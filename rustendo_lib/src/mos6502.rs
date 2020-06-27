@@ -981,7 +981,7 @@ impl Mos6502 {
             self.write();
         }
 
-        self.s -= 1;
+        self.s = self.s.wrapping_sub(1);
 
         // A reset suppresses writes to memory.
         if !suppress_writes {
@@ -990,7 +990,7 @@ impl Mos6502 {
             self.write();
         }
 
-        self.s -= 1;
+        self.s = self.s.wrapping_sub(1);
 
         // A reset suppresses writes to memory.
         if !suppress_writes {
@@ -1160,12 +1160,12 @@ impl Mos6502 {
                 self.write_address(0x01, self.s);
                 self.data_bus.borrow_mut().write(next_address_high);
                 self.write();
-                self.s -= 1;
+                self.s = self.s.wrapping_sub(1);
 
                 self.write_address(0x01, self.s);
                 self.data_bus.borrow_mut().write(next_address_low);
                 self.write();
-                self.s -= 1;
+                self.s = self.s.wrapping_sub(1);
 
                 self.jump(mode, cycles);
             }
@@ -1231,7 +1231,8 @@ impl Mos6502 {
                 self.write_address(0x01, self.s);
                 self.data_bus.borrow_mut().write(self.a.borrow().read());
                 self.write();
-                self.s -= 1;
+
+                self.s = self.s.wrapping_sub(1);
             }
             Instruction::PHP(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1241,7 +1242,7 @@ impl Mos6502 {
                 let p = self.p.get() | 0x10;
                 self.data_bus.borrow_mut().write(p);
                 self.write();
-                self.s -= 1;
+                self.s = self.s.wrapping_sub(1);
             }
             Instruction::PLA(_, _, cycles) => {
                 self.cycles = cycles;
