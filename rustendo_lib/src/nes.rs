@@ -104,7 +104,7 @@ impl Nes {
     }
 }
 
-#[cfg(test)]
+//#[cfg(test)]
 //mod tests {
 //    use super::Nes;
 //    use crate::cartridge::Cartridge;
