@@ -594,7 +594,7 @@ impl Ricoh2c02 {
             },
             // The remainder of memory mirrors the palette addresses
             0x3F20..=0x3FFF => self.ppu_read(address & 0x3F1F),
-            _ => unreachable!(),
+            _ => 0,
         }
     }
 
@@ -654,7 +654,7 @@ impl Ricoh2c02 {
             },
             // The remainder of memory mirrors the palette addresses
             0x3F20..=0x3FFF => self.ppu_write(address & 0x3F1F, data),
-            _ => unreachable!(),
+            _ => (),
         }
     }
 

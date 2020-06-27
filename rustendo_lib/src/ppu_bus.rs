@@ -29,7 +29,7 @@ impl Bus {
                 None => 0,
             },
             0x2000..=0x3EFF => self.ram.read(address),
-            _ => unreachable!(),
+            _ => 0,
         }
     }
 
@@ -40,7 +40,7 @@ impl Bus {
                 None => ()
             }
             0x2000..=0x3EFF => self.ram.write(address, data),
-            _ => unreachable!(),
+            _ => ()
         }
     }
 }

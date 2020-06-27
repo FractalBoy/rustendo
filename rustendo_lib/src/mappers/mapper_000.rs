@@ -28,7 +28,7 @@ impl Mapper for Mapper000 {
                 0x4000 => self.cpu_read(address & 0xBFFF),
                 // If the size is 32 KiB, continue previous range
                 0x8000 => (Some(address & 0x7FFF), None),
-                _ => unreachable!()
+                _ => (None, None),
             },
             _ => (None, None),
         }
