@@ -962,7 +962,6 @@ impl Ricoh2c02 {
 
                         if self.ppu_ctrl.get_nmi_enable() {
                             *nmi_enable = true;
-                            self.ppu_ctrl.disable_nmi();
                         }
                     }
                     // Idle otherwise.
