@@ -102,8 +102,8 @@ struct StatusRegister {
     pub irq_disable: bool,
     pub decimal_mode: bool,
     pub brk_command: bool,
-    pub overflow: bool,
     always_one: bool,
+    pub overflow: bool,
     pub negative: bool,
 }
 
@@ -588,7 +588,7 @@ impl Alu {
 
         self.accumulator.borrow_mut().write(sum);
         p.negative = sum & 0x80 == 0x80;
-        p.overflow = !(accumulator_data ^ bus_data) & (accumulator_data ^ sum) & 0x80 == 0x80;
+        p.overflow = ((accumulator_data ^ sum) & (bus_data ^ sum) & 0x80) == 0x80
     }
 
     pub fn subtract_with_borrow(&mut self, p: &mut StatusRegister) {
@@ -1285,7 +1285,12 @@ impl Mos6502 {
                 self.p.zero = result == 0;
 
                 self.data_bus.borrow_mut().write(result);
-                self.write();
+
+                if mode == AddressingMode::Accumulator {
+                    self.a.borrow_mut().read_from_bus();
+                } else {
+                    self.write();
+                }
             }
             Instruction::RTI(_, _, cycles) => {
                 self.cycles = cycles;
