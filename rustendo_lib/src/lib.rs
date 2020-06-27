@@ -15,3 +15,4 @@ pub mod cartridge;
 mod ricoh2c02;
 mod mappers;
 pub mod nes;
+mod controller;

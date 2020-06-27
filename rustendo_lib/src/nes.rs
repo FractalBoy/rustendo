@@ -3,6 +3,7 @@ use crate::cpu_bus::Bus as CpuBus;
 use crate::mos6502::Mos6502;
 use crate::ppu_bus::Bus as PpuBus;
 use crate::ricoh2c02::Ricoh2c02;
+use crate::controller::Controller;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -33,6 +34,10 @@ impl Nes {
             dma_data: 0,
             dma_dummy: true,
         }
+    }
+
+    pub fn controller(&self) -> Rc<RefCell<Controller>> {
+        self.cpu_bus.borrow().controller()
     }
 
     pub fn load_cartridge(&self, cartridge: Cartridge) {
@@ -104,26 +109,26 @@ impl Nes {
     }
 }
 
-//#[cfg(test)]
-//mod tests {
-//    use super::Nes;
-//    use crate::cartridge::Cartridge;
-//    use std::fs;
-//    use std::path::Path;
-//
-//    #[test]
-//    fn it_works() {
-//        let current_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-//        let nes_test = current_dir.parent().unwrap().join("nestest.nes");
-//        let buffer = fs::read(nes_test).unwrap();
-//
-//        let mut nes = Nes::new();
-//        let cartridge = Cartridge::new(buffer);
-//        nes.load_cartridge(cartridge);
-//
-//        nes.reset();
-//        loop {
-//            nes.clock();
-//        }
-//    }
-//}
+// #[cfg(test)]
+// mod tests {
+//     use super::Nes;
+//     use crate::cartridge::Cartridge;
+//     use std::fs;
+//     use std::path::Path;
+
+//     #[test]
+//     fn it_works() {
+//         let current_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+//         let nes_test = current_dir.parent().unwrap().join("colors.nes");
+//         let buffer = fs::read(nes_test).unwrap();
+
+//         let mut nes = Nes::new();
+//         let cartridge = Cartridge::new(buffer);
+//         nes.load_cartridge(cartridge);
+
+//         nes.reset();
+//         loop {
+//             nes.clock();
+//         }
+//     }
+// }

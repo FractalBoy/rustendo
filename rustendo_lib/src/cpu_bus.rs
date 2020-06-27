@@ -1,4 +1,5 @@
 use crate::cartridge::Cartridge;
+use crate::controller::Controller;
 use crate::cpu_ram::Ram;
 use crate::ricoh2c02::Ricoh2c02;
 use std::cell::RefCell;
@@ -8,6 +9,7 @@ pub struct Bus {
     ram: Ram,
     ppu: Rc<RefCell<Ricoh2c02>>,
     cartridge: Option<Rc<RefCell<Cartridge>>>,
+    controller: Rc<RefCell<Controller>>,
     // This ram is used only for testing.
     test_ram: Option<[u8; 0x10000]>,
     dma_transfer: Option<u8>,
@@ -19,6 +21,7 @@ impl Bus {
             ram: Ram::new(),
             ppu: Rc::clone(ppu),
             cartridge: None,
+            controller: Rc::new(RefCell::new(Controller::new())),
             test_ram: None,
             dma_transfer: None,
         };
@@ -29,6 +32,10 @@ impl Bus {
         }
 
         bus
+    }
+
+    pub fn controller(&self) -> Rc<RefCell<Controller>> {
+        Rc::clone(&self.controller)
     }
 
     pub fn get_dma_transfer(&self) -> Option<u8> {
@@ -48,6 +55,7 @@ impl Bus {
             0x0000..=0x1FFF => self.ram.write(address, data),
             0x2000..=0x3FFF => self.ppu.borrow_mut().cpu_write(address & 0x2007, data),
             0x4014 => self.dma_transfer = Some(data),
+            0x4016 => self.controller().borrow_mut().latch(),
             0x4020..=0xFFFF => match &self.cartridge {
                 Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
                 None => self.set_test_ram(address, data),
@@ -74,6 +82,7 @@ impl Bus {
         match address {
             0x0..=0x1FFF => self.ram.read(address),
             0x2000..=0x3FFF => self.ppu.borrow_mut().cpu_read(address & 0x2007),
+            0x4016 => self.controller().borrow_mut().read_button(),
             0x4020..=0xFFFF => match &self.cartridge {
                 Some(cartridge) => cartridge.borrow().cpu_read(address),
                 None => self.get_test_ram(address),
