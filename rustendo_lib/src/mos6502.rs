@@ -1483,37 +1483,6 @@ mod tests {
     }
 
     #[test]
-    fn adc_bcd() {
-        let bus = run_program(
-            "
-            SED
-            LDA #$10
-            ADC #$10
-            STA $FF
-            PHP
-        ",
-        );
-        assert_eq!(bus.cpu_read(0xFF), 0x20, "0x10 + 0x10 = 0x20 in BCD");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x00, "carry bit cleared");
-
-        let bus = run_program(
-            "
-            SED
-            LDA #$81
-            ADC #$92
-            STA $FF
-            PHP
-            ",
-        );
-        assert_eq!(bus.cpu_read(0xFF), 0x73, "0x81 + 0x92 = 0x73 in BCD");
-        assert_eq!(
-            bus.cpu_read(0x01FF) & 0x01,
-            0x01,
-            "0x81 + 0x92 sets carry flag"
-        );
-    }
-
-    #[test]
     fn and() {
         let bus = run_program(
             "
@@ -1784,8 +1753,8 @@ mod tests {
     fn bvc() {
         let bus = run_program(
             "
-            LDA #$FF
-            ADC #$05 // Result is 0x04, overflow set
+            LDA #$80
+            ADC #$80 // Result is 0x04, overflow set
             BVC $02  // Branch should not be taken, execute next instruction
             LDA #$FF
             STA $FF  // Store 0xFF in $FF 
@@ -1797,7 +1766,7 @@ mod tests {
         let bus = run_program(
             "
             LDA #$01
-            ADC #$05 // Result is 0x06, overflow not set
+            ADC #$05 // Overflow not set
             BVC $02  // Branch should be taken, continue with STA $FF
             LDA #$FF
             STA $FF  // Store 0x06 in $FF 
@@ -1811,11 +1780,11 @@ mod tests {
     fn bvs() {
         let bus = run_program(
             "
-            LDA #$FF
-            ADC #$05 // Result is 0x04, overflow set
+            LDA #$80
+            ADC #$84 // Overflow set
             BVS $02  // Branch should be taken, continue with STA $FF
             LDA #$FF
-            STA $FF  // Store 0x04 in $FF 
+            STA $FF  // Store 0x4 in $FF 
         ",
         );
 
@@ -2426,40 +2395,6 @@ mod tests {
         assert_eq!(status & 0x01, 0x00, "borrow (carry not set)");
         assert_eq!(status & 0x80, 0x80, "negative bit set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
-    }
-
-    #[test]
-    fn sbc_bcd() {
-        let bus = run_program(
-            "
-            SED
-            LDA #$92
-            SEC
-            SBC #$25
-            STA $FF
-            PHP
-        ",
-        );
-        assert_eq!(bus.cpu_read(0xFF), 0x67);
-        let status = bus.cpu_read(0x01FF);
-        assert_eq!(status & 0x80, 0x00, "negative bit not set");
-        assert_eq!(status & 0x02, 0x00, "zero bit not set");
-        assert_eq!(status & 0x01, 0x01, "carry bit set");
-        let bus = run_program(
-            "
-            SED
-            LDA #$25
-            SEC
-            SBC #$92
-            STA $FF
-            PHP
-        ",
-        );
-        assert_eq!(bus.cpu_read(0xFF), 0x33);
-        let status = bus.cpu_read(0x01FF);
-        assert_eq!(status & 0x80, 0x00, "negative bit not set");
-        assert_eq!(status & 0x02, 0x00, "zero bit not set");
-        assert_eq!(status & 0x01, 0x00, "carry bit not set");
     }
 
     #[test]
