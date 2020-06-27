@@ -850,6 +850,10 @@ impl Ricoh2c02 {
                 // Pre-render scanline, fill shift registers with data
                 // for the first two tiles of the next scanline.
 
+                if self.cycle == 1 {
+                    self.ppu_status.set_vertical_blank_started(false);
+                }
+
                 // If rendering is enabled, set VRAM to temp VRAM for cycles 280 through 304
                 if self.cycle >= 280 && self.cycle <= 304 && self.rendering_enabled() {
                     self.vram_address.copy(&self.temp_vram_address);
