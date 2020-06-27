@@ -318,7 +318,7 @@ impl InstructionRegister {
             0xC => match high_nibble {
                 0x2 => Instruction::BIT(AddressingMode::Absolute, 3, 4),
                 0x4 => Instruction::JMP(AddressingMode::Absolute, 3, 3),
-                0x6 => Instruction::JMP(AddressingMode::Indirect, 3, 5),
+                0x6 => Instruction::JMP(AddressingMode::AbsoluteIndirect, 3, 5),
                 0x8 => Instruction::STY(AddressingMode::Absolute, 3, 4),
                 0xA => Instruction::LDY(AddressingMode::Absolute, 3, 4),
                 0xB => Instruction::LDY(AddressingMode::AbsoluteX, 3, 4),
@@ -382,6 +382,7 @@ pub enum AddressingMode {
     AbsoluteY,
     Implied,
     Relative,
+    AbsoluteIndirect,
     Indirect,
     IndirectX,
     IndirectY,
@@ -607,7 +608,7 @@ impl Alu {
         self.accumulator.borrow_mut().write(sum);
         p.zero = sum == 0;
         p.negative = sum & 0x80 == 0x80;
-        p.overflow = (sum ^ accumulator_data) & (sum ^ bus_data) & 0x80 == 0x80;
+        p.overflow = ((accumulator_data ^ sum) & (!bus_data ^ sum) & 0x80) == 0x80
     }
 }
 
@@ -759,12 +760,11 @@ impl Mos6502 {
     fn absolute_indexed_addressing(&mut self, index: IndexRegister) {
         let address_low = self.fetch_next_byte();
         let address_high = self.fetch_next_byte();
-        let register: &mut u8 = match index {
-            IndexRegister::X => &mut self.x,
-            IndexRegister::Y => &mut self.y,
+        let register: u8 = match index {
+            IndexRegister::X => self.x,
+            IndexRegister::Y => self.y,
         };
-        let (new_index, carry) = register.overflowing_add(address_low);
-        *register = new_index;
+        let (address_low, carry) = address_low.overflowing_add(register);
         let address_high = if carry {
             // a carry occurred (page boundary crossed), need to add one
             // to high byte of address and use additional cycle
@@ -785,9 +785,18 @@ impl Mos6502 {
             AddressingMode::Absolute => {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
-                self.address_bus
-                    .borrow_mut()
-                    .write(address_high, address_low);
+                self.write_address(address_high, address_low);
+                self.read();
+            }
+            AddressingMode::AbsoluteIndirect =>{
+                let address_low = self.fetch_next_byte();
+                let address_high = self.fetch_next_byte();
+
+                self.write_address(address_high, address_low);
+                let new_address_low = self.read();
+                self.write_address(address_high, address_low.wrapping_add(1));
+                let new_address_high = self.read();
+                self.write_address(new_address_high, new_address_low);
                 self.read();
             }
             AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
@@ -806,7 +815,7 @@ impl Mos6502 {
                 self.write_address(0, zero_page_offset);
                 let address_low = self.read();
 
-                self.write_address(0, zero_page_offset + 1);
+                self.write_address(0, zero_page_offset.wrapping_add(1));
                 let address_high = self.read();
 
                 self.write_address(address_high, address_low);
@@ -938,12 +947,12 @@ impl Mos6502 {
         result
     }
 
-    fn jump(&mut self, cycles: u32) {
+    fn jump(&mut self, mode: AddressingMode, cycles: u32) {
         self.cycles = cycles;
 
-        let low = self.fetch_next_byte();
-        let high = self.fetch_next_byte();
-        let pc = (high as u16) << 8 | low as u16;
+        self.do_addressing_mode(mode);
+        let pc = self.address_bus.borrow().address();
+
         // Subtract one to counteract the standard PC increment.
         let pc = pc.wrapping_sub(1);
         self.pc.borrow_mut().write(pc);
@@ -1134,8 +1143,8 @@ impl Mos6502 {
             }
             Instruction::INX(_, _, cycles) => self.x = self.increment(self.x, 1, cycles),
             Instruction::INY(_, _, cycles) => self.y = self.increment(self.y, 1, cycles),
-            Instruction::JMP(_, _, cycles) => self.jump(cycles),
-            Instruction::JSR(_, bytes, cycles) => {
+            Instruction::JMP(mode, _, cycles) => self.jump(mode, cycles),
+            Instruction::JSR(mode, bytes, cycles) => {
                 let next_address = self
                     .pc
                     .borrow()
@@ -1158,7 +1167,7 @@ impl Mos6502 {
                 self.write();
                 self.s -= 1;
 
-                self.jump(cycles);
+                self.jump(mode, cycles);
             }
             Instruction::LDA(mode, _, cycles) => {
                 self.cycles = cycles;
