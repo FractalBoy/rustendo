@@ -199,11 +199,11 @@ impl Register {
     }
 
     pub fn set_coarse_x_scroll(&mut self, data: u8) {
-        self.coarse_x_scroll = (data & 0xF8) >> 3;
+        self.coarse_x_scroll = data;
     }
 
     pub fn set_coarse_y_scroll(&mut self, data: u8) {
-        self.coarse_y_scroll = (data & 0xF8) >> 3;
+        self.coarse_y_scroll = data;
     }
 
     fn get_fine_y_scroll(&self) -> u8 {
@@ -223,7 +223,7 @@ impl Register {
     }
 
     fn set_nametable_select_y(&mut self, data: bool) {
-        self.nametable_select = self.nametable_select & 0x01 | (data as u8) << 1
+        self.nametable_select = self.nametable_select & 0x01 | (data as u8) << 1;
     }
 
     pub fn toggle_horizontal_nametable(&mut self) {
@@ -250,11 +250,11 @@ impl Register {
     }
 
     pub fn set_address_high(&mut self, address: u8) {
-        self.set((((address as u16) & 0x3F) << 8) | (self.get() & 0xFF))
+        self.set((((address as u16) & 0x3F) << 8) | (self.get() & 0xFF));
     }
 
     pub fn set_address_low(&mut self, address: u8) {
-        self.set((self.get() & 0x3F00) | ((address as u16) & 0xFF))
+        self.set((self.get() & 0x3F00) | ((address as u16) & 0xFF));
     }
 
     pub fn get_attribute_memory_offset(&self) -> u16 {
@@ -515,11 +515,11 @@ impl Ricoh2c02 {
             }
             0x2005 => {
                 if !self.address_latch {
-                    self.temp_vram_address.set_coarse_x_scroll(data);
+                    self.temp_vram_address.set_coarse_x_scroll(data >> 3);
                     self.set_fine_x_scroll(data);
                     self.address_latch = true;
                 } else {
-                    self.temp_vram_address.set_coarse_y_scroll(data);
+                    self.temp_vram_address.set_coarse_y_scroll(data >> 3);
                     self.temp_vram_address.set_fine_y_scroll(data);
                     self.address_latch = false;
                 }
@@ -794,7 +794,7 @@ impl Ricoh2c02 {
 
             if self.vram_address.get_coarse_y_scroll() == 29 {
                 // Row 29 is the last row of tiles in a nametable.
-                // To wrap to the next nametable when incrementing coarse Y from 29, the vertical nametable is switched by toggling bit 11, and coarse Y wraps to row 0.Row 29 is the last row of tiles in a nametable. To wrap to the next nametable when incrementing coarse Y from 29,
+                // To wrap to the next nametable when incrementing coarse Y from 29,
                 // the vertical nametable is toggled and coarse Y wraps to row 0.
                 self.vram_address.set_coarse_y_scroll(0);
                 self.vram_address.toggle_vertical_nametable();
@@ -913,11 +913,13 @@ impl Ricoh2c02 {
                 1..=256 | 321..=337 => self.visible_scanline(),
                 257 => {
                     self.load_background_shifters();
-                    self.vram_address
-                        .copy_horizontal_address(&self.temp_vram_address);
+                    if self.rendering_enabled() {
+                        self.vram_address
+                            .copy_horizontal_address(&self.temp_vram_address);
+                    }
                 }
                 280..=304 => {
-                    if self.scanline == 261 {
+                    if self.scanline == 261 && self.rendering_enabled() {
                         self.vram_address
                             .copy_vertical_address(&self.temp_vram_address);
                     }
