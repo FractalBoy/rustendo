@@ -18,29 +18,30 @@ impl Ram {
     }
 
     pub fn map_address(&self, address: u16) -> u16 {
-        let address = address & 0x1FFF;
         let address = match address {
             // 0x3000 - 0x3EFF mirrors back to 0x2000 - 0x2EFF
-            0x1000..=0x1EFF => return self.map_address(address & 0x0FFF),
+            0x3000..=0x3EFF => return self.map_address(address & 0x2FFF),
             _ => address,
         };
 
-        match self.mirroring {
+        let address = match self.mirroring {
             MirroringType::Horizontal => match address {
-                0x0000..=0x03FF => address,
-                0x0400..=0x07FF => address & 0x03FF,
-                0x0800..=0x0BFF => address >> 1,
-                0x0C00..=0x0FFF => (address & 0x0BFF) >> 1,
+                0x2000..=0x23FF => address,
+                0x2400..=0x27FF => address & 0x23FF,
+                0x2800..=0x2BFF => address - 0x400,
+                0x2C00..=0x2FFF => (address & 0x2BFF) - 0x400,
                 _ => address,
             },
             MirroringType::Vertical => match address {
-                0x0000..=0x03FF => address,
-                0x0400..=0x07FF => address,
-                0x0800..=0x0BFF => address & 0x07FF,
-                0x0C00..=0x0FFF => address & 0x07FF,
+                0x2000..=0x23FF => address,
+                0x2400..=0x27FF => address,
+                0x2800..=0x2BFF => address & 0x27FF,
+                0x2C00..=0x2FFF => address & 0x27FF,
                 _ => address,
             },
-        }
+        };
+
+        address & 0x1FFF
     }
 
     pub fn read(&self, address: u16) -> u8 {

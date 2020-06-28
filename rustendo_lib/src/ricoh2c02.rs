@@ -678,7 +678,6 @@ impl Ricoh2c02 {
     }
 
     fn update_next_bg_tile_id(&mut self) {
-        self.load_background_shifters();
         self.next_bg_tile_id = self.ppu_read(0x2000 | self.vram_address.get_nametable_offset());
     }
 
