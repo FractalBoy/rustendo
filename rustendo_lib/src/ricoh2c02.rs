@@ -849,13 +849,13 @@ impl Ricoh2c02 {
         let (pixel, palette) = if self.ppu_mask.get_background_enable() {
             let mask = 1 << self.fine_x_scroll;
 
-            let pixel_lsb = self.bg_tile_lsb_shifter & mask;
-            let pixel_msb = self.bg_tile_msb_shifter & mask;
-            let pixel = pixel_msb << 1 | pixel_lsb;
+            let pixel_lsb = self.bg_tile_lsb_shifter & mask == mask;
+            let pixel_msb = self.bg_tile_msb_shifter & mask == mask;
+            let pixel = (pixel_msb as u16) << 1 | pixel_lsb as u16;
 
-            let attr_lsb = self.bg_attr_lsb_shifter & mask;
-            let attr_msb = self.bg_attr_msb_shifter & mask;
-            let palette = attr_msb << 1 | attr_lsb;
+            let attr_lsb = self.bg_attr_lsb_shifter & mask == mask;
+            let attr_msb = self.bg_attr_msb_shifter & mask == mask;
+            let palette = (attr_msb as u16) << 1 | (attr_lsb as u16);
             (pixel, palette)
         } else {
             (0, 0)
@@ -894,11 +894,7 @@ impl Ricoh2c02 {
     }
 
     pub fn clock(&mut self, nmi_enable: &mut bool) -> bool {
-        if self.scanline == 0
-            && self.cycle == 0
-            && self.odd_frame
-            && self.ppu_mask.get_background_enable()
-        {
+        if self.scanline == 0 && self.cycle == 0 && self.odd_frame && self.rendering_enabled() {
             // Idle cycle, unless it's an odd frame and rendering is enabled.
             // If it's an odd frame, go directly to the next cycle.
             self.cycle = 1;
