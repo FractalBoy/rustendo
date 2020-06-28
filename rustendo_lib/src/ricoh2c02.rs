@@ -867,7 +867,9 @@ impl Ricoh2c02 {
     pub fn update_background(&mut self) {
         match (self.cycle - 1) & 0x7 {
             0 => {
-                self.update_background_shifters();
+                if self.cycle >= 9 {
+                    self.load_background_shifters();
+                }
                 self.update_next_bg_tile_id();
             }
             1 => (),
@@ -883,15 +885,11 @@ impl Ricoh2c02 {
     }
 
     fn visible_scanline(&mut self) {
+        self.update_background_shifters();
         self.update_background();
 
         if self.cycle == 256 {
             self.increment_vertical();
-        }
-
-        if self.cycle == 338 || self.cycle == 340 {
-            // Garbage nametable bytes
-            self.update_next_bg_tile_id();
         }
     }
 
@@ -912,8 +910,7 @@ impl Ricoh2c02 {
 
         match self.scanline {
             0..=239 | 261 => match self.cycle {
-                1 => self.visible_scanline(),
-                2..=256 | 321..=337 => self.visible_scanline(),
+                1..=256 | 321..=337 => self.visible_scanline(),
                 257 => {
                     self.load_background_shifters();
                     self.vram_address
@@ -925,6 +922,8 @@ impl Ricoh2c02 {
                             .copy_vertical_address(&self.temp_vram_address);
                     }
                 }
+                // Garbage nametable bytes
+                338 | 340 => self.update_next_bg_tile_id(),
                 _ => (),
             },
             240 => match self.cycle {

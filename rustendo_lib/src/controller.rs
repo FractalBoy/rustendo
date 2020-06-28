@@ -27,6 +27,12 @@ impl std::ops::BitOr<Button> for u8 {
     }
 }
 
+impl std::ops::BitOrAssign<Button> for u8 {
+    fn bitor_assign(&mut self, rhs: Button) {
+        *self = *self | rhs;
+    }
+}
+
 pub struct Controller {
     controller: u8,
     latched_controller: u8,
@@ -45,73 +51,72 @@ impl Controller {
     }
 
     pub fn press_a(&mut self) {
-        self.controller = self.controller | Button::A;
+        self.controller |= Button::A;
     }
 
     pub fn lift_a(&mut self) {
-        self.controller = self.controller & !Button::A;
+        self.controller &= !Button::A;
     }
 
     pub fn press_b(&mut self) {
-        self.controller = self.controller | Button::B;
+        self.controller |= Button::B;
     }
 
-    pub fn lift_b(&mut self) { 
-        self.controller = self.controller & !Button::B;
+    pub fn lift_b(&mut self) {
+        self.controller &= !Button::B;
     }
 
     pub fn press_select(&mut self) {
-        self.controller = self.controller | Button::Select;
+        self.controller |= Button::Select;
     }
 
     pub fn lift_select(&mut self) {
-        self.controller = self.controller & !Button::Select;
+        self.controller &= !Button::Select;
     }
 
     pub fn press_start(&mut self) {
-        self.controller = self.controller | Button::Start;
+        self.controller |= Button::Start;
     }
 
     pub fn lift_start(&mut self) {
-        self.controller = self.controller & !Button::Start;
+        self.controller &= !Button::Start;
     }
 
     pub fn press_up(&mut self) {
-        self.controller = self.controller | Button::Up;
+        self.controller |= Button::Up;
     }
 
     pub fn lift_up(&mut self) {
-        self.controller = self.controller & !Button::Up;
+        self.controller &= !Button::Up;
     }
 
     pub fn press_down(&mut self) {
-        self.controller = self.controller | Button::Down;
+        self.controller |= Button::Down;
     }
 
     pub fn lift_down(&mut self) {
-        self.controller = self.controller & !Button::Down;
+        self.controller &= !Button::Down;
     }
 
     pub fn press_left(&mut self) {
-        self.controller = self.controller | Button::Left;
+        self.controller |= Button::Left;
     }
 
     pub fn lift_left(&mut self) {
-        self.controller = self.controller & !Button::Left;
+        self.controller &= !Button::Left;
     }
 
     pub fn press_right(&mut self) {
-        self.controller = self.controller | Button::Right;
+        self.controller |= Button::Right;
     }
 
     pub fn lift_right(&mut self) {
-        self.controller = self.controller & !Button::Right;
+        self.controller &= !Button::Right;
     }
 
     pub fn read_button(&mut self) -> u8 {
         let bit = self.latched_controller & 0x01 == 0x01;
         self.latched_controller >>= 1;
-        log!("{}", !bit as u8);
         !bit as u8
     }
 }
