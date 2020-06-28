@@ -1,4 +1,5 @@
 use crate::mappers::mapper_000::Mapper000;
+use crate::mappers::mapper_001::Mapper001;
 use crate::mappers::Mapper;
 
 #[derive(Debug)]
@@ -37,11 +38,16 @@ pub struct Cartridge {
 impl Cartridge {
     pub fn new(raw: Vec<u8>) -> Self {
         let header = Self::_header(&raw);
+        //log!("{}", Self::_mapper(&header));
+        //log!("{:?} {:?}", Self::_format(&header), header);
         let mapper = match Self::_mapper(&header) {
-            0 => Mapper000::new(Self::_prg_rom_size(&header), Self::_chr_ram_size(&header)),
+            0 => Box::new(Mapper000::new(
+                Self::_prg_rom_size(&header),
+                Self::_chr_ram_size(&header),
+            )) as Box<dyn Mapper>,
+            1 => Box::new(Mapper001::new(Self::_chr_ram_size(&header))) as Box<dyn Mapper>,
             _ => unimplemented!(),
         };
-        let mapper = Box::new(mapper);
 
         Cartridge { raw, mapper }
     }

@@ -6,3 +6,4 @@ pub trait Mapper {
 }
 
 pub mod mapper_000;
+pub mod mapper_001;

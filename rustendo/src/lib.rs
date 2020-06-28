@@ -7,6 +7,10 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData, Window};
 
+// Leaving this import here to make it easier to use the macro when debugging.
+#[allow(unused_imports)]
+use rustendo_lib::log;
+
 mod utils;
 
 const NES_WIDTH: u32 = 256;
@@ -108,43 +112,47 @@ pub fn render(byte_array: js_sys::Uint8Array) {
 
     let mut prev_timestamp = 0.0;
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp| {
-        while !nes1.borrow_mut().clock() {}
-        draw(&context, &canvas, &nes1.borrow());
         request_animation_frame(f.borrow().as_ref().unwrap());
-        prev_timestamp = timestamp;
+
+        // Only draw once every 1/60th of a second.
+        if timestamp - prev_timestamp >= 1000.0 / 60.0 {
+            while !nes1.borrow_mut().clock() {}
+            draw(&context, &canvas, &nes1.borrow());
+            prev_timestamp = timestamp;
+        }
     }) as Box<dyn FnMut(f64)>));
 
     nes2.borrow_mut().reset();
 
-    let keydown_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| match event
-        .key()
-        .as_str()
-    {
-        "a" | "A" => nes2.borrow().controller().borrow_mut().press_a(),
-        "s" | "S" => nes2.borrow().controller().borrow_mut().press_b(),
-        "ArrowLeft" => nes2.borrow().controller().borrow_mut().press_left(),
-        "ArrowRight" => nes2.borrow().controller().borrow_mut().press_right(),
-        "ArrowUp" => nes2.borrow().controller().borrow_mut().press_up(),
-        "ArrowDown" => nes2.borrow().controller().borrow_mut().press_down(),
-        "x" | "X" => nes2.borrow().controller().borrow_mut().press_start(),
-        "z" | "Z" => nes2.borrow().controller().borrow_mut().press_select(),
-        _ => return,
-    }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+    let keydown_handler =
+        Closure::wrap(Box::new(
+            move |event: web_sys::KeyboardEvent| match event.key().as_str() {
+                "a" | "A" => nes2.borrow().controller().borrow_mut().press_a(),
+                "s" | "S" => nes2.borrow().controller().borrow_mut().press_b(),
+                "ArrowLeft" => nes2.borrow().controller().borrow_mut().press_left(),
+                "ArrowRight" => nes2.borrow().controller().borrow_mut().press_right(),
+                "ArrowUp" => nes2.borrow().controller().borrow_mut().press_up(),
+                "ArrowDown" => nes2.borrow().controller().borrow_mut().press_down(),
+                "x" | "X" => nes2.borrow().controller().borrow_mut().press_start(),
+                "z" | "Z" => nes2.borrow().controller().borrow_mut().press_select(),
+                _ => return,
+            },
+        ) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
 
-    let keyup_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| match event
-        .key()
-        .as_str()
-    {
-        "a" | "A" => nes3.borrow().controller().borrow_mut().lift_a(),
-        "s" | "S" => nes3.borrow().controller().borrow_mut().lift_b(),
-        "ArrowLeft" => nes3.borrow().controller().borrow_mut().lift_left(),
-        "ArrowRight" => nes3.borrow().controller().borrow_mut().lift_right(),
-        "ArrowUp" => nes3.borrow().controller().borrow_mut().lift_up(),
-        "ArrowDown" => nes3.borrow().controller().borrow_mut().lift_down(),
-        "x" | "X" => nes3.borrow().controller().borrow_mut().lift_start(),
-        "z" | "Z" => nes3.borrow().controller().borrow_mut().lift_select(),
-        _ => return,
-    }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+    let keyup_handler =
+        Closure::wrap(Box::new(
+            move |event: web_sys::KeyboardEvent| match event.key().as_str() {
+                "a" | "A" => nes3.borrow().controller().borrow_mut().lift_a(),
+                "s" | "S" => nes3.borrow().controller().borrow_mut().lift_b(),
+                "ArrowLeft" => nes3.borrow().controller().borrow_mut().lift_left(),
+                "ArrowRight" => nes3.borrow().controller().borrow_mut().lift_right(),
+                "ArrowUp" => nes3.borrow().controller().borrow_mut().lift_up(),
+                "ArrowDown" => nes3.borrow().controller().borrow_mut().lift_down(),
+                "x" | "X" => nes3.borrow().controller().borrow_mut().lift_start(),
+                "z" | "Z" => nes3.borrow().controller().borrow_mut().lift_select(),
+                _ => return,
+            },
+        ) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
 
     add_event_listener::<web_sys::KeyboardEvent>("keydown", &keydown_handler);
     add_event_listener::<web_sys::KeyboardEvent>("keyup", &keyup_handler);

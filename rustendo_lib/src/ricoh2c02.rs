@@ -239,6 +239,12 @@ impl Register {
         self.set_nametable_select_x(register.get_nametable_select_x());
     }
 
+    pub fn copy_vertical_address(&mut self, register: &Register) {
+        self.set_coarse_y_scroll(register.coarse_y_scroll);
+        self.set_fine_y_scroll(register.fine_y_scroll);
+        self.set_nametable_select_y(register.get_nametable_select_y());
+    }
+
     pub fn set_fine_y_scroll(&mut self, data: u8) {
         self.fine_y_scroll = data & 0x7;
     }
@@ -818,160 +824,124 @@ impl Ricoh2c02 {
     }
 
     fn load_background_shifters(&mut self) {
-        self.bg_tile_lsb_shifter = self.next_bg_tile_lsb as u16 | self.bg_tile_lsb_shifter >> 8;
-        self.bg_tile_msb_shifter = self.next_bg_tile_msb as u16 | self.bg_tile_msb_shifter >> 8;
+        self.bg_tile_lsb_shifter = (self.next_bg_tile_lsb as u16) << 8 | self.bg_tile_lsb_shifter;
+        self.bg_tile_msb_shifter = (self.next_bg_tile_msb as u16) << 8 | self.bg_tile_msb_shifter;
 
         // The background attribute shifters are actually 1 byte wide,
         // but they are for the lower byte of the tile shifters, so we'll use
         // 2 bytes for convenience, and shift them over 1 byte the same as the tile shifters.
         self.bg_attr_lsb_shifter =
-            (self.next_bg_tile_attr as u16 & 0x01) * 0xFF | self.bg_attr_lsb_shifter >> 8;
+            ((self.next_bg_tile_attr as u16 & 0x01) * 0xFF) << 8 | self.bg_attr_lsb_shifter;
         self.bg_attr_msb_shifter =
-            (self.next_bg_tile_attr as u16 & 0x02 >> 1) * 0xFF | self.bg_attr_msb_shifter >> 8;
+            ((self.next_bg_tile_attr as u16 & 0x02 >> 1) * 0xFF) << 8 | self.bg_attr_msb_shifter;
+    }
+
+    fn update_background_shifters(&mut self) {
+        if self.ppu_mask.get_background_enable() {
+            self.bg_tile_lsb_shifter >>= 1;
+            self.bg_tile_msb_shifter >>= 1;
+            self.bg_attr_lsb_shifter >>= 1;
+            self.bg_tile_msb_shifter >>= 1;
+        }
     }
 
     fn calculate_pixel(&self) -> (u8, u8, u8) {
-        let mask = 1 << self.fine_x_scroll;
+        let (pixel, palette) = if self.ppu_mask.get_background_enable() {
+            let mask = 1 << self.fine_x_scroll;
 
-        let pixel_lsb = self.bg_tile_lsb_shifter & mask;
-        let pixel_msb = self.bg_tile_msb_shifter & mask;
-        let pixel = pixel_msb << 1 | pixel_lsb;
+            let pixel_lsb = self.bg_tile_lsb_shifter & mask;
+            let pixel_msb = self.bg_tile_msb_shifter & mask;
+            let pixel = pixel_msb << 1 | pixel_lsb;
 
-        let attr_lsb = self.bg_attr_lsb_shifter & mask;
-        let attr_msb = self.bg_attr_msb_shifter & mask;
-        let palette = attr_msb << 1 | attr_lsb;
+            let attr_lsb = self.bg_attr_lsb_shifter & mask;
+            let attr_msb = self.bg_attr_msb_shifter & mask;
+            let palette = attr_msb << 1 | attr_lsb;
+            (pixel, palette)
+        } else {
+            (0, 0)
+        };
 
         self.palette[(self.ppu_read(0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
     }
 
+    pub fn update_background(&mut self) {
+        match (self.cycle - 1) & 0x7 {
+            0 => {
+                self.update_background_shifters();
+                self.update_next_bg_tile_id();
+            }
+            1 => (),
+            2 => self.update_next_bg_tile_attr(),
+            3 => (),
+            4 => self.update_next_bg_tile_lsb(),
+            5 => (),
+            6 => self.update_next_bg_tile_msb(),
+            // At the end of each tile, increment right one.
+            7 => self.increment_horizontal(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn visible_scanline(&mut self) {
+        self.update_background();
+
+        if self.cycle == 256 {
+            self.increment_vertical();
+        }
+
+        if self.cycle == 338 || self.cycle == 340 {
+            // Garbage nametable bytes
+            self.update_next_bg_tile_id();
+        }
+    }
+
     pub fn clock(&mut self, nmi_enable: &mut bool) -> bool {
+        if self.scanline == 0
+            && self.cycle == 0
+            && self.odd_frame
+            && self.ppu_mask.get_background_enable()
+        {
+            // Idle cycle, unless it's an odd frame and rendering is enabled.
+            // If it's an odd frame, go directly to the next cycle.
+            self.cycle = 1;
+        }
+
+        if self.scanline == 261 && self.cycle == 1 {
+            self.ppu_status.set_vertical_blank_started(false);
+        }
+
         match self.scanline {
-            261 => {
-                // Pre-render scanline, fill shift registers with data
-                // for the first two tiles of the next scanline.
-
-                if self.cycle == 1 {
-                    self.ppu_status.set_vertical_blank_started(false);
+            0..=239 | 261 => match self.cycle {
+                1 => self.visible_scanline(),
+                2..=256 | 321..=337 => self.visible_scanline(),
+                257 => {
+                    self.load_background_shifters();
+                    self.vram_address
+                        .copy_horizontal_address(&self.temp_vram_address);
                 }
-
-                // If rendering is enabled, set VRAM to temp VRAM for cycles 280 through 304
-                if self.cycle >= 280 && self.cycle <= 304 && self.rendering_enabled() {
-                    self.vram_address.copy(&self.temp_vram_address);
+                280..=304 => {
+                    if self.scanline == 261 {
+                        self.vram_address
+                            .copy_vertical_address(&self.temp_vram_address);
+                    }
                 }
-            }
-            0..=239 => {
-                // Visible scanlines. Render both background and sprites.
-                match self.cycle {
-                    0 => {
-                        // Idle cycle, unless it's an odd frame and rendering is enabled.
-                        // If it's an odd frame, go directly to the next cycle.
-                        if self.odd_frame && self.rendering_enabled() {
-                            self.cycle += 1;
-                            self.clock(nmi_enable);
-                        }
-                    }
-                    1..=256 => {
-                        // The data for each tile is fetched during this phase.
-                        // Each memory access takes two PPU cycles to complete,
-                        // and 4 must be performed per tile:
-                        //
-                        // 1. Nametable byte
-                        // 2. Attribute table byte
-                        // 3. Pattern table tile low
-                        // 4. Pattern table tile high (+8 bytes from pattern table tile low)
-                        match (self.cycle - 1) & 0x7 {
-                            0 => self.update_next_bg_tile_id(),
-                            1 => (),
-                            2 => self.update_next_bg_tile_attr(),
-                            3 => (),
-                            4 => self.update_next_bg_tile_lsb(),
-                            5 => (),
-                            6 => self.update_next_bg_tile_msb(),
-                            // At the end of each tile, increment right one.
-                            7 => self.increment_horizontal(),
-                            _ => unreachable!(),
-                        }
+                _ => (),
+            },
+            240 => match self.cycle {
+                1 => {
+                    // VBlank flag set here. VBlank NMI also occurs here.
+                    self.ppu_status.set_vertical_blank_started(true);
 
-                        // At the end of each scanline, increment down one.
-                        if self.cycle == 256 {
-                            self.increment_vertical();
-                        }
+                    if self.ppu_ctrl.get_nmi_enable() {
+                        *nmi_enable = true;
                     }
-                    257..=320 => {
-                        // The tile data for the sprites on the __next__ scanline are
-                        // fetched here:
-                        //
-                        // 1. Garbage nametable byte
-                        // 2. Garbage nametable byte
-                        // 3. Pattern table tile low
-                        // 4. Pattern table tile high (+8 bytes from pattern table tile low)
-
-                        if self.cycle == 257 {
-                            // Copy bits controlling horizontal position from temp VRAM to VRAM.
-                            self.vram_address
-                                .copy_horizontal_address(&self.temp_vram_address);
-                        }
-
-                        match (self.cycle - 1) & 0x7 {
-                            0 => self.update_next_bg_tile_id(),
-                            1 => (),
-                            2 => self.update_next_bg_tile_attr(),
-                            3 => (),
-                            4 => self.update_next_bg_tile_lsb(),
-                            5 => (),
-                            6 => self.update_next_bg_tile_msb(),
-                            // At the end of each tile, increment right one.
-                            7 => self.increment_horizontal(),
-                            _ => unreachable!(),
-                        }
-                    }
-                    321..=336 => {
-                        // The first two tiles for the next scanline are fetched here.
-                        match (self.cycle - 1) & 0x7 {
-                            0 => self.update_next_bg_tile_id(),
-                            1 => (),
-                            2 => self.update_next_bg_tile_attr(),
-                            3 => (),
-                            4 => self.update_next_bg_tile_lsb(),
-                            5 => (),
-                            6 => self.update_next_bg_tile_msb(),
-                            // At the end of each tile, increment right one.
-                            7 => self.increment_horizontal(),
-                            _ => unreachable!(),
-                        }
-                    }
-                    337..=340 => {
-                        // Two bytes are fetched, but the purpose for this is unknown.
-                        //
-                        // 1. Nametable byte
-                        // 2. Nametable byte
-                    }
-                    _ => (),
                 }
-            }
-            240 => {
-                // Post-render scanline. The PPU just idles during this scanline.
-                // The VBlank flag isn't set until after this scanline.
-            }
-            241..=260 => {
-                // Vertical blank.
-                match self.cycle {
-                    1 => {
-                        // VBlank flag set here. VBlank NMI also occurs here.
-                        self.ppu_status.set_vertical_blank_started(true);
-
-                        if self.ppu_ctrl.get_nmi_enable() {
-                            *nmi_enable = true;
-                        }
-                    }
-                    // Idle otherwise.
-                    _ => (),
-                }
-            }
+                _ => (),
+            },
             _ => (),
         }
 
-        if self.cycle < 256 && self.scanline < 240 && self.rendering_enabled() {
+        if self.cycle < 256 && self.scanline < 240 {
             self.screen[self.scanline as usize][self.cycle as usize] = self.calculate_pixel();
         }
 
