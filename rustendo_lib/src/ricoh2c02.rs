@@ -21,7 +21,7 @@ enum PpuSelect {
 }
 
 struct PpuCtrl {
-    base_nametable_address: u16,
+    nametable_select: u8,
     increment_mode: IncrementMode,
     sprite_pattern_table_address: u16,
     background_pattern_table_address: u16,
@@ -33,7 +33,7 @@ struct PpuCtrl {
 impl PpuCtrl {
     pub fn new() -> Self {
         PpuCtrl {
-            base_nametable_address: 0x2000,
+            nametable_select: 0x00,
             increment_mode: IncrementMode::AddOneGoingAcross,
             sprite_pattern_table_address: 0x0000,
             background_pattern_table_address: 0x0000,
@@ -41,6 +41,10 @@ impl PpuCtrl {
             ppu_select: PpuSelect::ReadBackdrop,
             nmi_enable: false,
         }
+    }
+
+    pub fn get_nametable_select(&self) -> u8 {
+        self.nametable_select
     }
 
     pub fn get_background_pattern_table_address(&self) -> u16 {
@@ -51,22 +55,12 @@ impl PpuCtrl {
         self.increment_mode
     }
 
-    pub fn disable_nmi(&mut self) {
-        self.nmi_enable = false;
-    }
-
     pub fn get_nmi_enable(&self) -> bool {
         self.nmi_enable
     }
 
     pub fn set(&mut self, byte: u8) {
-        self.base_nametable_address = match byte & 0x03 {
-            0x0 => 0x2000,
-            0x1 => 0x2400,
-            0x2 => 0x2800,
-            0x3 => 0x2C00,
-            _ => unreachable!(),
-        };
+        self.nametable_select = byte & 0x03;
 
         self.increment_mode = if byte & 0x04 == 0x04 {
             IncrementMode::AddThirtyTwoGoingDown
@@ -173,88 +167,79 @@ impl PpuStatus {
     }
 }
 
+enum RegisterBits {
+    CoarseX = 0b000_00_00000_11111,
+    CoarseY = 0b000_00_11111_00000,
+    NametableSelect = 0b000_11_00000_00000,
+    NametableSelectX = 0b000_01_00000_00000,
+    NametableSelectY = 0b000_10_00000_00000,
+    FineY = 0b111_00_00000_00000,
+    AddressHigh = 0b00111111_00000000,
+    AddressLow = 0b00000000_11111111,
+}
+
+#[derive(Debug)]
 struct Register {
-    coarse_x_scroll: u8,
-    coarse_y_scroll: u8,
-    nametable_select: u8,
-    fine_y_scroll: u8,
+    register: u16,
 }
 
 impl Register {
     pub fn new() -> Self {
-        Register {
-            coarse_x_scroll: 0,
-            coarse_y_scroll: 0,
-            nametable_select: 0,
-            fine_y_scroll: 0,
-        }
+        Register { register: 0 }
     }
 
-    pub fn get_coarse_x_scroll(&self) -> u8 {
-        self.coarse_x_scroll
+    pub fn get(&self) -> u16 {
+        self.register
     }
 
-    pub fn get_coarse_y_scroll(&self) -> u8 {
-        self.coarse_y_scroll
+    pub fn get_field(&self, bits: RegisterBits) -> u8 {
+        let mask = bits as u16;
+        let shift = mask.trailing_zeros();
+        (((self.register & mask) >> shift) & 0xFF) as u8
     }
 
-    pub fn set_coarse_x_scroll(&mut self, data: u8) {
-        self.coarse_x_scroll = data;
-    }
-
-    pub fn set_coarse_y_scroll(&mut self, data: u8) {
-        self.coarse_y_scroll = data;
-    }
-
-    fn get_fine_y_scroll(&self) -> u8 {
-        self.fine_y_scroll
-    }
-
-    fn get_nametable_select_x(&self) -> bool {
-        self.nametable_select & 0x01 == 0x01
-    }
-
-    fn set_nametable_select_x(&mut self, data: bool) {
-        self.nametable_select = (data as u8) | self.nametable_select & 0x02;
-    }
-
-    fn get_nametable_select_y(&self) -> bool {
-        self.nametable_select & 0x02 == 0x02
-    }
-
-    fn set_nametable_select_y(&mut self, data: bool) {
-        self.nametable_select = self.nametable_select & 0x01 | (data as u8) << 1;
+    pub fn set_field(&mut self, bits: RegisterBits, data: u8) {
+        let mask = bits as u16;
+        let shift = mask.trailing_zeros();
+        let data = (data as u16) << shift;
+        self.register |= data;
     }
 
     pub fn toggle_horizontal_nametable(&mut self) {
-        self.set_nametable_select_x(!self.get_nametable_select_x());
+        self.set_field(
+            RegisterBits::NametableSelectX,
+            !self.get_field(RegisterBits::NametableSelectX),
+        );
     }
 
     pub fn toggle_vertical_nametable(&mut self) {
-        self.set_nametable_select_y(!self.get_nametable_select_y());
+        self.set_field(
+            RegisterBits::NametableSelectY,
+            !self.get_field(RegisterBits::NametableSelectY),
+        );
     }
 
     pub fn copy_horizontal_address(&mut self, register: &Register) {
-        self.set_coarse_x_scroll(register.coarse_x_scroll);
-        self.set_nametable_select_x(register.get_nametable_select_x());
+        self.set_field(
+            RegisterBits::CoarseX,
+            register.get_field(RegisterBits::CoarseX),
+        );
+        self.set_field(
+            RegisterBits::NametableSelectX,
+            register.get_field(RegisterBits::NametableSelectX),
+        );
     }
 
     pub fn copy_vertical_address(&mut self, register: &Register) {
-        self.set_coarse_y_scroll(register.coarse_y_scroll);
-        self.set_fine_y_scroll(register.fine_y_scroll);
-        self.set_nametable_select_y(register.get_nametable_select_y());
-    }
-
-    pub fn set_fine_y_scroll(&mut self, data: u8) {
-        self.fine_y_scroll = data & 0x7;
-    }
-
-    pub fn set_address_high(&mut self, address: u8) {
-        self.set((((address as u16) & 0x3F) << 8) | (self.get() & 0xFF));
-    }
-
-    pub fn set_address_low(&mut self, address: u8) {
-        self.set((self.get() & 0x3F00) | ((address as u16) & 0xFF));
+        self.set_field(
+            RegisterBits::CoarseX,
+            register.get_field(RegisterBits::CoarseX),
+        );
+        self.set_field(
+            RegisterBits::NametableSelectX,
+            register.get_field(RegisterBits::NametableSelectX),
+        );
+        self.set_field(RegisterBits::FineY, register.get_field(RegisterBits::FineY));
     }
 
     pub fn get_attribute_memory_offset(&self) -> u16 {
@@ -276,31 +261,19 @@ impl Register {
         // Since each byte in the attribute table controls 4 bytes in the nametable,
         // we divide the coarse x and coarse y by 4 (by shifting right twice).
         //
-        (self.nametable_select as u16) << 11
-            | ((self.coarse_y_scroll as u16) >> 2) << 3
-            | (self.coarse_x_scroll as u16) >> 2
+        let nametable_select = self.get_field(RegisterBits::NametableSelect) as u16;
+        let coarse_x = (self.get_field(RegisterBits::CoarseX) as u16) >> 2;
+        let coarse_y = (self.get_field(RegisterBits::CoarseY) as u16) >> 2;
+
+        nametable_select << 11 | coarse_y << 3 | coarse_x
     }
 
     pub fn get_nametable_offset(&self) -> u16 {
-        self.get() & 0x0FFF
-    }
-
-    pub fn set(&mut self, data: u16) {
-        self.coarse_x_scroll = (data & 0x1F) as u8;
-        self.coarse_y_scroll = ((data & 0x3E0) >> 5) as u8;
-        self.nametable_select = ((data & 0xC00) >> 10) as u8;
-        self.fine_y_scroll = ((data & 0x7000) >> 12) as u8;
-    }
-
-    pub fn get(&self) -> u16 {
-        ((self.fine_y_scroll as u16) << 12)
-            | ((self.nametable_select as u16) << 10)
-            | ((self.coarse_y_scroll as u16) << 5)
-            | (self.coarse_x_scroll as u16)
+        self.register & 0x0FFF
     }
 
     pub fn copy(&mut self, register: &Register) {
-        self.set(register.get());
+        self.register = register.register
     }
 
     pub fn increment(&mut self, increment: IncrementMode) {
@@ -309,7 +282,7 @@ impl Register {
             IncrementMode::AddThirtyTwoGoingDown => 32,
         };
 
-        self.set(self.get().wrapping_add(increment));
+        self.register = self.register.wrapping_add(increment);
     }
 }
 
@@ -504,7 +477,13 @@ impl Ricoh2c02 {
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
         match address {
-            0x2000 => self.ppu_ctrl.set(data),
+            0x2000 => {
+                self.ppu_ctrl.set(data);
+                self.temp_vram_address.set_field(
+                    RegisterBits::NametableSelect,
+                    self.ppu_ctrl.get_nametable_select(),
+                );
+            }
             0x2001 => self.ppu_mask.set(data),
             0x2002 => self.ppu_status.set(data),
             0x2003 => self.oam_addr = data,
@@ -515,21 +494,25 @@ impl Ricoh2c02 {
             }
             0x2005 => {
                 if !self.address_latch {
-                    self.temp_vram_address.set_coarse_x_scroll(data >> 3);
+                    self.temp_vram_address
+                        .set_field(RegisterBits::CoarseX, data >> 3);
                     self.set_fine_x_scroll(data);
                     self.address_latch = true;
                 } else {
-                    self.temp_vram_address.set_coarse_y_scroll(data >> 3);
-                    self.temp_vram_address.set_fine_y_scroll(data);
+                    self.temp_vram_address
+                        .set_field(RegisterBits::CoarseY, data >> 3);
+                    self.temp_vram_address.set_field(RegisterBits::FineY, data);
                     self.address_latch = false;
                 }
             }
             0x2006 => {
                 if !self.address_latch {
-                    self.temp_vram_address.set_address_high(data);
+                    self.temp_vram_address
+                        .set_field(RegisterBits::AddressHigh, data);
                     self.address_latch = true;
                 } else {
-                    self.temp_vram_address.set_address_low(data);
+                    self.temp_vram_address
+                        .set_field(RegisterBits::AddressLow, data);
                     self.vram_address.copy(&self.temp_vram_address);
                     self.address_latch = false;
                 }
@@ -715,8 +698,8 @@ impl Ricoh2c02 {
         // Left half: coarse_x & 0x2 == 0x0
         // Right half: coarse x & 0x2 == 0x2
 
-        let coarse_x = self.vram_address.get_coarse_x_scroll();
-        let coarse_y = self.vram_address.get_coarse_y_scroll();
+        let coarse_x = self.vram_address.get_field(RegisterBits::CoarseX);
+        let coarse_y = self.vram_address.get_field(RegisterBits::CoarseY);
 
         self.next_bg_tile_attr = match coarse_x & 0x2 {
             0x0 => match coarse_y & 0x2 {
@@ -750,7 +733,7 @@ impl Ricoh2c02 {
             self.ppu_ctrl.get_background_pattern_table_address()
                 | (self.next_bg_tile_id as u16) << 4
                 | 0 << 3
-                | self.vram_address.get_fine_y_scroll() as u16,
+                | self.vram_address.get_field(RegisterBits::FineY) as u16,
         );
     }
 
@@ -759,7 +742,7 @@ impl Ricoh2c02 {
             self.ppu_ctrl.get_background_pattern_table_address()
                 | (self.next_bg_tile_id as u16) << 4
                 | 1 << 3
-                | self.vram_address.get_fine_y_scroll() as u16,
+                | self.vram_address.get_field(RegisterBits::FineY) as u16,
         );
     }
 
@@ -773,12 +756,14 @@ impl Ricoh2c02 {
             return;
         }
 
-        if self.vram_address.get_coarse_x_scroll() == 0x1F {
-            self.vram_address.set_coarse_x_scroll(0);
+        let coarse_x = self.vram_address.get_field(RegisterBits::CoarseX);
+
+        if coarse_x == 0x1F {
+            self.vram_address.set_field(RegisterBits::CoarseX, 0);
             self.vram_address.toggle_horizontal_nametable();
         } else {
             self.vram_address
-                .set_coarse_x_scroll(self.vram_address.get_coarse_x_scroll() + 1);
+                .set_field(RegisterBits::CoarseX, coarse_x + 1);
         }
     }
 
@@ -787,17 +772,20 @@ impl Ricoh2c02 {
             return;
         }
 
-        if self.vram_address.get_fine_y_scroll() & 0x7 == 0x7 {
-            // Fine Y's 3 bits are full, overflow to coarse Y
-            self.vram_address.set_fine_y_scroll(0);
+        let fine_y = self.vram_address.get_field(RegisterBits::FineY);
+        let coarse_y = self.vram_address.get_field(RegisterBits::CoarseY);
 
-            if self.vram_address.get_coarse_y_scroll() == 29 {
+        if fine_y & 0x7 == 0x7 {
+            // Fine Y's 3 bits are full, overflow to coarse Y
+            self.vram_address.set_field(RegisterBits::FineY, 0);
+
+            if coarse_y == 29 {
                 // Row 29 is the last row of tiles in a nametable.
                 // To wrap to the next nametable when incrementing coarse Y from 29,
                 // the vertical nametable is toggled and coarse Y wraps to row 0.
-                self.vram_address.set_coarse_y_scroll(0);
+                self.vram_address.set_field(RegisterBits::CoarseY, 0);
                 self.vram_address.toggle_vertical_nametable();
-            } else if self.vram_address.get_coarse_y_scroll() == 31 {
+            } else if coarse_y == 31 {
                 // Coarse Y can be set out of bounds,
                 // which will cause the PPU to read the attribute data stored there
                 // as tile data. If coarse Y is incremented from 31, it will wrap to 0,
@@ -809,16 +797,14 @@ impl Ricoh2c02 {
                 //
                 // Some games use this to move the top of the nametable
                 // out of the Overscan area.
-                self.vram_address.set_coarse_y_scroll(0);
+                self.vram_address.set_field(RegisterBits::CoarseY, 0);
             } else {
                 // Coarse Y not at the bounds of the nametable; just add 1.
-                self.vram_address
-                    .set_coarse_y_scroll(self.vram_address.get_coarse_y_scroll() + 1);
+                self.vram_address.set_field(RegisterBits::CoarseY, coarse_y + 1);
             }
         } else {
             // Fine Y does not need to wrap; just add 1.
-            self.vram_address
-                .set_fine_y_scroll(self.vram_address.get_fine_y_scroll() + 1);
+            self.vram_address.set_field(RegisterBits::FineY, fine_y + 1);
         }
     }
 
