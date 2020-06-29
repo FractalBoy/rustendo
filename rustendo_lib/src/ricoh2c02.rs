@@ -282,7 +282,7 @@ impl Register {
     }
 
     pub fn get_nametable_offset(&self) -> u16 {
-        self.get() | 0x0FFF
+        self.get() & 0x0FFF
     }
 
     pub fn set(&mut self, data: u16) {
