@@ -1,5 +1,7 @@
 use crate::cpu_bus::Bus;
 use std::cell::RefCell;
+use std::fmt::{Display, Error, Formatter};
+use std::ops::Deref;
 use std::rc::Rc;
 
 const NEGATIVE_ONE: u8 = !1 + 1;
@@ -96,6 +98,12 @@ impl ProgramCounter {
     }
 }
 
+impl Display for ProgramCounter {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
+        write!(formatter, "{:04X}", self.wide())
+    }
+}
+
 struct StatusRegister {
     pub carry: bool,
     pub zero: bool,
@@ -143,6 +151,24 @@ impl StatusRegister {
             | ((self.irq_disable as u8) << 2)
             | ((self.zero as u8) << 1)
             | (self.carry as u8)
+    }
+}
+
+impl Display for StatusRegister {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
+        let negative = if self.negative { "N" } else { "n" };
+        let overflow = if self.overflow { "V" } else { "v" };
+        let brk_command = if self.brk_command { "B" } else { "b" };
+        let decimal_mode = if self.decimal_mode { "D" } else { "d" };
+        let irq_disable = if self.irq_disable { "I" } else { "i" };
+        let zero = if self.zero { "Z" } else { "z" };
+        let carry = if self.carry { "C" } else { "c" };
+
+        write!(
+            formatter,
+            "{}{}U{}{}{}{}{}",
+            negative, overflow, brk_command, decimal_mode, irq_disable, zero, carry
+        )
     }
 }
 
@@ -318,7 +344,7 @@ impl InstructionRegister {
             0xC => match high_nibble {
                 0x2 => Instruction::BIT(AddressingMode::Absolute, 3, 4),
                 0x4 => Instruction::JMP(AddressingMode::Absolute, 3, 3),
-                0x6 => Instruction::JMP(AddressingMode::AbsoluteIndirect, 3, 5),
+                0x6 => Instruction::JMP(AddressingMode::Indirect, 3, 5),
                 0x8 => Instruction::STY(AddressingMode::Absolute, 3, 4),
                 0xA => Instruction::LDY(AddressingMode::Absolute, 3, 4),
                 0xB => Instruction::LDY(AddressingMode::AbsoluteX, 3, 4),
@@ -370,6 +396,12 @@ impl InstructionRegister {
     }
 }
 
+impl Display for InstructionRegister {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
+        write!(formatter, "{:02X}", self.data)
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum AddressingMode {
     Accumulator,
@@ -382,7 +414,6 @@ pub enum AddressingMode {
     AbsoluteY,
     Implied,
     Relative,
-    AbsoluteIndirect,
     Indirect,
     IndirectX,
     IndirectY,
@@ -521,7 +552,7 @@ pub enum Instruction {
     KIL,
 }
 
-impl std::fmt::Display for Instruction {
+impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut debug = format!("{:?}", self);
         debug.replace_range(3.., "");
@@ -556,6 +587,14 @@ impl Accumulator {
 
     pub fn read(&self) -> u8 {
         self.data
+    }
+}
+
+impl Deref for Accumulator {
+    type Target = u8;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
     }
 }
 
@@ -642,6 +681,7 @@ pub struct Mos6502 {
     #[allow(dead_code)]
     not_set_overflow: bool,
     not_reset: bool,
+    literal_value_re: regex::Regex,
 }
 
 enum IndexRegister {
@@ -686,6 +726,7 @@ impl Mos6502 {
             not_nmi: true,
             not_reset: true,
             not_set_overflow: true,
+            literal_value_re: regex::Regex::new("\\$[0-9A-F]{2}$").unwrap(),
         }
     }
 
@@ -757,9 +798,21 @@ impl Mos6502 {
         self.read()
     }
 
-    fn absolute_indexed_addressing(&mut self, index: IndexRegister) {
+    fn absolute_indexed_addressing(&mut self, index: IndexRegister) -> String {
         let address_low = self.fetch_next_byte();
         let address_high = self.fetch_next_byte();
+
+        let string = format!(
+            "{} ${:02X}{:02X},{}",
+            self.instruction_register.decode_instruction(),
+            address_high,
+            address_low,
+            match index {
+                IndexRegister::X => "X",
+                IndexRegister::Y => "Y",
+            }
+        );
+
         let register: u8 = match index {
             IndexRegister::X => self.x,
             IndexRegister::Y => self.y,
@@ -777,18 +830,30 @@ impl Mos6502 {
         self.address_bus
             .borrow_mut()
             .write(address_high, address_low);
-        self.read();
+        format!(
+            "{} @ ${:02X}{:02X} = #${:02X}",
+            string,
+            address_high,
+            address_low,
+            self.read()
+        )
     }
 
-    fn do_addressing_mode(&mut self, mode: AddressingMode) {
+    fn do_addressing_mode(&mut self, mode: AddressingMode, take_branch: bool) -> String {
+        let instruction = self.instruction_register.decode_instruction();
+
         match mode {
             AddressingMode::Absolute => {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
                 self.write_address(address_high, address_low);
-                self.read();
+                let data = self.read();
+                format!(
+                    "{} ${:02X}{:02X} = #${:02X}",
+                    instruction, address_high, address_low, data
+                )
             }
-            AddressingMode::AbsoluteIndirect =>{
+            AddressingMode::Indirect => {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
 
@@ -798,29 +863,23 @@ impl Mos6502 {
                 let new_address_high = self.read();
                 self.write_address(new_address_high, new_address_low);
                 self.read();
+                format!(
+                    "{} (${:02X}{:02X}) = ${:02X}{:02X}",
+                    instruction, address_high, address_low, new_address_high, new_address_low
+                )
             }
             AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
             AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
             AddressingMode::Accumulator => {
                 self.data_bus.borrow_mut().write(self.a.borrow().read());
+                format!("{}", instruction)
             }
             AddressingMode::Immediate => {
                 let value = self.fetch_next_byte();
                 self.data_bus.borrow_mut().write(value);
+                format!("{} #${:02X}", instruction, value)
             }
-            AddressingMode::Implied => return,
-            AddressingMode::Indirect => {
-                let zero_page_offset = self.fetch_next_byte();
-
-                self.write_address(0, zero_page_offset);
-                let address_low = self.read();
-
-                self.write_address(0, zero_page_offset.wrapping_add(1));
-                let address_high = self.read();
-
-                self.write_address(address_high, address_low);
-                self.read();
-            }
+            AddressingMode::Implied => format!("{}", instruction),
             AddressingMode::IndirectX => {
                 // Indexed indirect addressing with register X
                 let zero_page_offset = self.fetch_next_byte();
@@ -833,7 +892,11 @@ impl Mos6502 {
                 let address_high = self.read();
 
                 self.write_address(address_high, address_low);
-                self.read();
+                let data = self.read();
+                format!(
+                    "{} (${:02X},X) @ ${:02X}{:02X} = #${:02X}",
+                    instruction, zero_page_offset, address_high, address_low, data
+                )
             }
             AddressingMode::IndirectY => {
                 // Indirect indexed addressing with register Y
@@ -855,78 +918,98 @@ impl Mos6502 {
                     address_high
                 };
                 self.write_address(address_high, address_low);
-                self.read();
+                let data = self.read();
+                format!(
+                    "{} (${:02X}),Y @ ${:02X}{:02X} = #${:02X}",
+                    instruction, zero_page_offset, address_high, address_low, data
+                )
             }
             AddressingMode::Relative => {
                 let offset = self.fetch_next_byte();
                 let offset_negative = offset & 0x80 == 0x80;
 
                 let mut pc = self.pc.borrow_mut();
+                let string = format!("{}", instruction);
 
                 // PCL + offset -> PCL
                 let (pcl, carry) = pc.read_low().overflowing_add(offset);
-                self.data_bus.borrow_mut().write(pcl);
-                pc.read_low_from_data_bus();
+                if take_branch {
+                    self.data_bus.borrow_mut().write(pcl);
+                    pc.read_low_from_data_bus();
+                }
 
                 // If the offset was negative, we expect a carry
                 // when no page boundary is crossed
                 if offset_negative && carry {
-                    return;
+                    return format!("{} ${:02X}{:02X}", string, pc.read_high(), pcl);
                 }
 
                 // If the offset was positive, we expect no carry
                 // when no page boundary is crossed.
                 if !offset_negative && !carry {
-                    return;
+                    return format!("{} ${:02X}{:02X}", string, pc.read_high(), pcl);
                 }
 
                 // Page boundary crossed, additional cycle needed
                 // and we must calculate the new PCH.
-                self.cycles += 1;
 
                 // PCH + 0 + carry -> PCH
                 let increment = if offset_negative { NEGATIVE_ONE } else { 1 };
                 let pch = pc.read_high().wrapping_add(increment);
-                self.data_bus.borrow_mut().write(pch);
-                pc.read_high_from_data_bus();
+                if take_branch {
+                    self.cycles += 1;
+                    self.data_bus.borrow_mut().write(pch);
+                    pc.read_high_from_data_bus();
+                }
+                format!("{} ${:02X}{:02X}", string, pch, pcl)
             }
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.write_address(0, zero_page_offset);
-                self.read();
+                let data = self.read();
+                format!(
+                    "{} $00{:02X} = #${:02X}",
+                    instruction, zero_page_offset, data
+                )
             }
             AddressingMode::ZeroPageX => {
-                let zero_page_offset = self.fetch_next_byte();
-                let zero_page_offset = zero_page_offset.wrapping_add(self.x);
+                let old_zero_page_offset = self.fetch_next_byte();
+                let zero_page_offset = old_zero_page_offset.wrapping_add(self.x);
                 self.write_address(0, zero_page_offset);
-                self.read();
+                let data = self.read();
+                format!(
+                    "{} $00{:02X},X @ $00{:02X} = #${:02X}",
+                    instruction, old_zero_page_offset, zero_page_offset, data
+                )
             }
             AddressingMode::ZeroPageY => {
-                let zero_page_offset = self.fetch_next_byte();
-                let zero_page_offset = zero_page_offset.wrapping_add(self.y);
+                let old_zero_page_offset = self.fetch_next_byte();
+                let zero_page_offset = old_zero_page_offset.wrapping_add(self.y);
                 self.write_address(0, zero_page_offset);
-                self.read();
+                let data = self.read();
+                format!(
+                    "{} $00{:02X},Y @ $00{:02X} = #${:02X}",
+                    instruction, old_zero_page_offset, zero_page_offset, data
+                )
             }
         }
     }
 
-    fn branch(&mut self, branch: bool, mode: AddressingMode, cycles: u32) {
+    fn branch(&mut self, branch: bool, mode: AddressingMode, cycles: u32) -> String {
         self.cycles = cycles;
 
         if branch {
             // Branch taken, add an additional cycle.
             self.cycles += 1;
-            self.do_addressing_mode(mode);
-        } else {
-            // Branch not taken, retrieve parameter and discard
-            self.fetch_next_byte();
         }
+
+        self.do_addressing_mode(mode, branch)
     }
 
-    fn compare(&mut self, mode: AddressingMode, operand: u8, cycles: u32) {
+    fn compare(&mut self, mode: AddressingMode, operand: u8, cycles: u32) -> String {
         self.cycles = cycles;
 
-        self.do_addressing_mode(mode);
+        let string = self.do_addressing_mode(mode, false);
         let memory = self.data_bus.borrow().read();
 
         let result = operand.wrapping_sub(memory);
@@ -934,6 +1017,7 @@ impl Mos6502 {
         self.p.zero = result == 0;
         self.p.negative = result & 0x80 == 0x80;
         self.p.carry = operand >= memory;
+        string
     }
 
     fn increment(&mut self, operand: u8, by: u8, cycles: u32) -> u8 {
@@ -947,15 +1031,16 @@ impl Mos6502 {
         result
     }
 
-    fn jump(&mut self, mode: AddressingMode, cycles: u32) {
+    fn jump(&mut self, mode: AddressingMode, cycles: u32) -> String {
         self.cycles = cycles;
 
-        self.do_addressing_mode(mode);
+        let string = self.do_addressing_mode(mode, false);
         let pc = self.address_bus.borrow().address();
 
         // Subtract one to counteract the standard PC increment.
         let pc = pc.wrapping_sub(1);
         self.pc.borrow_mut().write(pc);
+        string
     }
 
     fn interrupt(
@@ -971,30 +1056,29 @@ impl Mos6502 {
         let address = self.pc.borrow().wide();
         // Store the next instruction in the stack
         let address = address.wrapping_add(bytes as u16);
-        let high = ((address >> 4) & 0x0F) as u8;
-        let low = (address & 0x0F) as u8;
+        let high = ((address & 0xFF00) >> 8) as u8;
+        let low = (address & 0x00FF) as u8;
 
         // A reset suppresses writes to memory.
         if !suppress_writes {
             self.write_address(0x01, self.s);
+            self.s = self.s.wrapping_sub(1);
             self.data_bus.borrow_mut().write(high);
             self.write();
         }
 
-        self.s = self.s.wrapping_sub(1);
-
         // A reset suppresses writes to memory.
         if !suppress_writes {
             self.write_address(0x01, self.s);
+            self.s = self.s.wrapping_sub(1);
             self.data_bus.borrow_mut().write(low);
             self.write();
         }
 
-        self.s = self.s.wrapping_sub(1);
-
         // A reset suppresses writes to memory.
         if !suppress_writes {
             self.write_address(0x01, self.s);
+            self.s = self.s.wrapping_sub(1);
             let mut p = self.p.get();
 
             // The B flag should be set if this interrupt is from a BRK instruction,
@@ -1033,17 +1117,256 @@ impl Mos6502 {
         self.instruction_register.read_from_bus();
     }
 
+    fn decompose_instruction(&self) -> (String, AddressingMode, u32, u32) {
+        let instruction = self.instruction_register.decode_instruction();
+
+        match instruction {
+            Instruction::ADC(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::AND(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::ASL(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BCC(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BCS(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BEQ(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BIT(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BMI(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BNE(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BPL(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BRK(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BVC(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::BVS(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::CLC(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::CLD(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::CLI(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::CLV(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::CMP(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::CPX(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::CPY(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::DEC(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::DEX(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::DEY(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::EOR(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::INC(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::INX(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::INY(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::JMP(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::JSR(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::LDA(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::LDX(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::LDY(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::LSR(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::NOP(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::ORA(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::PHA(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::PHP(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::PLA(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::PLP(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::ROL(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::ROR(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::RTI(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::RTS(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::SBC(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::SEC(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::SED(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::SEI(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::STA(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::STX(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::STY(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::TAX(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::TAY(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::TSX(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::TXA(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::TXS(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::TYA(mode, bytes, cycles) => {
+                (format!("{}", instruction), mode, bytes, cycles)
+            }
+            Instruction::KIL => panic!(),
+        }
+    }
+
+    fn save_state(&self) -> (u16, u16, u8) {
+        (
+            self.pc.borrow().wide(),
+            self.address_bus.borrow().address(),
+            self.data_bus.borrow().read(),
+        )
+    }
+
+    fn restore_state(&self, state: (u16, u16, u8)) {
+        self.pc.borrow_mut().write(state.0);
+        let [address_high, address_low] = state.1.to_be_bytes();
+        self.address_bus
+            .borrow_mut()
+            .write(address_high, address_low);
+        self.data_bus.borrow_mut().write(state.2);
+    }
+
+    fn fetch_next_bytes(&mut self, n: u32) -> Vec<u8> {
+        let mut bytes = vec![];
+
+        for _ in 0..n {
+            bytes.push(self.fetch_next_byte());
+        }
+
+        bytes
+    }
+
+    fn format_raw_instruction(&mut self) -> String {
+        let (_, _, bytes, _) = self.decompose_instruction();
+
+        let mut string = format!("{}", self.instruction_register);
+        let state = self.save_state();
+        let bytes = self.fetch_next_bytes(bytes - 1);
+
+        for byte in &bytes {
+            string = format!("{} {:02X}", string, byte);
+        }
+
+        for _ in 0..(3 - bytes.len()) {
+            string = format!("{}   ", string);
+        }
+
+        self.restore_state(state);
+
+        string
+    }
+
     fn execute_instruction(&mut self) {
         let instruction = self.instruction_register.decode_instruction();
-        match instruction {
+        let raw_instruction = self.format_raw_instruction();
+
+        log!(
+            "A:{:02X} X:{:02X} Y:{:02X} S:{:02X} P:{}{:indent$}${}:{}",
+            self.a.borrow().read(),
+            self.x,
+            self.y,
+            self.s,
+            self.p,
+            " ",
+            self.pc.borrow(),
+            raw_instruction,
+            indent = (0xFF - self.s) as usize
+        );
+
+        let formatted_instruction = match instruction {
             Instruction::ADC(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 self.alu.add_with_carry(&mut self.p);
+                string
             }
             Instruction::AND(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
 
                 let operand = self.data_bus.borrow().read();
                 let result = operand & self.a.borrow().read();
@@ -1052,10 +1375,11 @@ impl Mos6502 {
 
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
+                string
             }
             Instruction::ASL(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 let operand = self.data_bus.borrow().read();
                 let result = operand << 1;
                 self.data_bus.borrow_mut().write(result);
@@ -1069,41 +1393,49 @@ impl Mos6502 {
                 } else {
                     self.write();
                 }
+
+                string
             }
             Instruction::BCC(mode, _, cycles) => self.branch(!self.p.carry, mode, cycles),
             Instruction::BCS(mode, _, cycles) => self.branch(self.p.carry, mode, cycles),
             Instruction::BEQ(mode, _, cycles) => self.branch(self.p.zero, mode, cycles),
             Instruction::BIT(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 let operand = self.data_bus.borrow().read();
                 self.p.negative = operand & 0x80 == 0x80;
                 self.p.overflow = operand & 0x40 == 0x40;
                 self.p.zero = operand & self.a.borrow().read() == 0;
+                string
             }
             Instruction::BMI(mode, _, cycles) => self.branch(self.p.negative, mode, cycles),
             Instruction::BNE(mode, _, cycles) => self.branch(!self.p.zero, mode, cycles),
             Instruction::BPL(mode, _, cycles) => self.branch(!self.p.negative, mode, cycles),
             Instruction::BRK(_, bytes, cycles) => {
-                self.interrupt(cycles, bytes, 0xFFFF, false, true)
+                self.interrupt(cycles, bytes, 0xFFFF, false, true);
+                format!("{}", instruction)
             }
             Instruction::BVC(mode, _, cycles) => self.branch(!self.p.overflow, mode, cycles),
             Instruction::BVS(mode, _, cycles) => self.branch(self.p.overflow, mode, cycles),
             Instruction::CLC(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.carry = false;
+                format!("{}", instruction)
             }
             Instruction::CLD(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.decimal_mode = false;
+                format!("{}", instruction)
             }
             Instruction::CLI(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.irq_disable = false;
+                format!("{}", instruction)
             }
             Instruction::CLV(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.overflow = false;
+                format!("{}", instruction)
             }
             Instruction::CMP(mode, _, cycles) => {
                 let operand = self.a.borrow().read();
@@ -1112,19 +1444,26 @@ impl Mos6502 {
             Instruction::CPX(mode, _, cycles) => self.compare(mode, self.x, cycles),
             Instruction::CPY(mode, _, cycles) => self.compare(mode, self.y, cycles),
             Instruction::DEC(mode, _, cycles) => {
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 let memory = self.data_bus.borrow().read();
                 let result = self.increment(memory, NEGATIVE_ONE, cycles);
 
                 self.data_bus.borrow_mut().write(result);
                 self.write();
+                string
             }
-            Instruction::DEX(_, _, cycles) => self.x = self.increment(self.x, NEGATIVE_ONE, cycles),
-            Instruction::DEY(_, _, cycles) => self.y = self.increment(self.y, NEGATIVE_ONE, cycles),
+            Instruction::DEX(_, _, cycles) => {
+                self.x = self.increment(self.x, NEGATIVE_ONE, cycles);
+                format!("{}", instruction)
+            }
+            Instruction::DEY(_, _, cycles) => {
+                self.y = self.increment(self.y, NEGATIVE_ONE, cycles);
+                format!("{}", instruction)
+            }
             Instruction::EOR(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 let operand = self.data_bus.borrow().read();
 
                 let result = self.a.borrow().read() ^ operand;
@@ -1132,17 +1471,25 @@ impl Mos6502 {
 
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
+                string
             }
             Instruction::INC(mode, _, cycles) => {
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 let operand = self.data_bus.borrow().read();
 
                 let result = self.increment(operand, 1, cycles);
                 self.data_bus.borrow_mut().write(result);
                 self.write();
+                string
             }
-            Instruction::INX(_, _, cycles) => self.x = self.increment(self.x, 1, cycles),
-            Instruction::INY(_, _, cycles) => self.y = self.increment(self.y, 1, cycles),
+            Instruction::INX(_, _, cycles) => {
+                self.x = self.increment(self.x, 1, cycles);
+                format!("{}", instruction)
+            }
+            Instruction::INY(_, _, cycles) => {
+                self.y = self.increment(self.y, 1, cycles);
+                format!("{}", instruction)
+            }
             Instruction::JMP(mode, _, cycles) => self.jump(mode, cycles),
             Instruction::JSR(mode, bytes, cycles) => {
                 let next_address = self
@@ -1167,37 +1514,40 @@ impl Mos6502 {
                 self.write();
                 self.s = self.s.wrapping_sub(1);
 
-                self.jump(mode, cycles);
+                self.jump(mode, cycles)
             }
             Instruction::LDA(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 self.a.borrow_mut().read_from_bus();
                 let a = self.a.borrow().read();
                 self.p.negative = a & 0x80 == 0x80;
                 self.p.zero = a == 0;
+                string
             }
             Instruction::LDX(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 self.x = self.data_bus.borrow().read();
                 self.p.negative = self.x & 0x80 == 0x80;
                 self.p.zero = self.x == 0;
+                string
             }
             Instruction::LDY(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 self.y = self.data_bus.borrow().read();
                 self.p.negative = self.y & 0x80 == 0x80;
                 self.p.zero = self.y == 0;
+                string
             }
             Instruction::LSR(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 let operand = self.data_bus.borrow().read();
                 self.p.carry = operand & 0x01 == 0x01;
 
@@ -1211,12 +1561,16 @@ impl Mos6502 {
                 } else {
                     self.write();
                 }
+                string
             }
-            Instruction::NOP(_, _, cycles) => self.cycles = cycles,
+            Instruction::NOP(_, _, cycles) => {
+                self.cycles = cycles;
+                format!("{}", instruction)
+            }
             Instruction::ORA(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
 
                 let memory = self.data_bus.borrow_mut().read();
                 let result = self.a.borrow().read() | memory;
@@ -1224,6 +1578,7 @@ impl Mos6502 {
                 self.a.borrow_mut().write(result);
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
+                string
             }
             Instruction::PHA(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1233,6 +1588,7 @@ impl Mos6502 {
                 self.write();
 
                 self.s = self.s.wrapping_sub(1);
+                format!("{}", instruction)
             }
             Instruction::PHP(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1243,6 +1599,7 @@ impl Mos6502 {
                 self.data_bus.borrow_mut().write(p);
                 self.write();
                 self.s = self.s.wrapping_sub(1);
+                format!("{}", instruction)
             }
             Instruction::PLA(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1253,6 +1610,7 @@ impl Mos6502 {
                 self.a.borrow_mut().write(value);
                 self.p.negative = value & 0x80 == 0x80;
                 self.p.zero = value == 0;
+                format!("{}", instruction)
             }
             Instruction::PLP(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1261,11 +1619,12 @@ impl Mos6502 {
                 self.write_address(0x01, self.s);
                 let value = self.read();
                 self.p.set(value);
+                format!("{}", instruction)
             }
             Instruction::ROL(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 let operand = self.data_bus.borrow().read();
                 // Shift left and make bit 0 the carry bit
                 let result = operand << 1 | (self.p.carry as u8);
@@ -1281,11 +1640,12 @@ impl Mos6502 {
                 } else {
                     self.write();
                 }
+                string
             }
             Instruction::ROR(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 let operand = self.data_bus.borrow().read();
                 // Shift right and make bit 7 the carry bit
                 let result = operand >> 1 | ((self.p.carry as u8) << 7);
@@ -1301,6 +1661,7 @@ impl Mos6502 {
                 } else {
                     self.write();
                 }
+                string
             }
             Instruction::RTI(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1324,6 +1685,7 @@ impl Mos6502 {
                 // standard increment
                 let pc = self.pc.borrow().wide();
                 self.pc.borrow_mut().write(pc.wrapping_sub(1));
+                format!("{}", instruction)
             }
             Instruction::RTS(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1337,41 +1699,52 @@ impl Mos6502 {
                 self.write_address(0x01, self.s);
                 self.read();
                 self.pc.borrow_mut().read_high_from_data_bus();
+                format!("{}", instruction)
             }
             Instruction::SBC(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 self.alu.subtract_with_borrow(&mut self.p);
+                string
             }
             Instruction::SEC(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.carry = true;
+                format!("{}", instruction)
             }
             Instruction::SED(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.decimal_mode = true;
+                format!("{}", instruction)
             }
             Instruction::SEI(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.irq_disable = true;
+                format!("{}", instruction)
             }
             Instruction::STA(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 self.a.borrow().write_to_bus();
                 self.write();
+                let a = format!("$${:02X}", **self.a.borrow());
+                String::from(self.literal_value_re.replace(&string, a.as_str()))
             }
             Instruction::STX(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 self.data_bus.borrow_mut().write(self.x);
                 self.write();
+                let x = format!("$${:02X}", self.x);
+                String::from(self.literal_value_re.replace(&string, x.as_str()))
             }
             Instruction::STY(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                let string = self.do_addressing_mode(mode, false);
                 self.data_bus.borrow_mut().write(self.y);
                 self.write();
+                let y = format!("$${:02X}", self.y);
+                String::from(self.literal_value_re.replace(&string, y.as_str()))
             }
             Instruction::TAX(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1379,6 +1752,7 @@ impl Mos6502 {
                 self.x = self.a.borrow().read();
                 self.p.negative = self.x & 0x80 == 0x80;
                 self.p.zero = self.x == 0;
+                format!("{}", instruction)
             }
             Instruction::TAY(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1386,6 +1760,7 @@ impl Mos6502 {
                 self.y = self.a.borrow().read();
                 self.p.negative = self.y & 0x80 == 0x80;
                 self.p.zero = self.y == 0;
+                format!("{}", instruction)
             }
             Instruction::TSX(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1393,6 +1768,7 @@ impl Mos6502 {
                 self.x = self.s;
                 self.p.negative = self.x & 0x80 == 0x80;
                 self.p.zero = self.x == 0;
+                format!("{}", instruction)
             }
             Instruction::TXA(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1400,11 +1776,13 @@ impl Mos6502 {
                 self.a.borrow_mut().write(self.x);
                 self.p.negative = self.a.borrow().read() & 0x80 == 0x80;
                 self.p.zero = self.a.borrow().read() == 0x00;
+                format!("{}", instruction)
             }
             Instruction::TXS(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s = self.x;
+                format!("{}", instruction)
             }
             Instruction::TYA(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1412,14 +1790,16 @@ impl Mos6502 {
                 self.a.borrow_mut().write(self.y);
                 self.p.negative = self.a.borrow().read() & 0x80 == 0x80;
                 self.p.zero = self.a.borrow().read() == 0x00;
+                format!("{}", instruction)
             }
             Instruction::KIL => panic!(
-                "{:02X} instruction not implemented at address {:04X}",
-                self.instruction_register.data,
+                "{} instruction not implemented at address {:04X}",
+                self.instruction_register,
                 self.pc.borrow().wide()
             ),
-        }
+        };
 
+        log!(" {}\n", formatted_instruction);
         self.pc.borrow_mut().increment();
     }
 }
