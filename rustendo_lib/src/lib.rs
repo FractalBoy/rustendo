@@ -1,14 +1,11 @@
 #[macro_export]
 macro_rules! log {
     ( $( $t:tt )* ) => {
-        let debug = option_env!("DEBUG");
-        if let Some(debug) = debug {
-            if debug == "1" {
-                if cfg!(target_arch = "wasm32") {
-                    web_sys::console::log_1(&format!( $( $t )* ).into());
-                } else {
-                    print!( $( $t )* );
-                }
+        if cfg!(feature = "debug") {
+            if cfg!(target_arch = "wasm32") {
+                web_sys::console::log_1(&format!( $( $t )* ).into());
+            } else {
+                print!( $( $t )* );
             }
         }
     }
