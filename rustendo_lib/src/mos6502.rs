@@ -830,13 +830,7 @@ impl Mos6502 {
         self.address_bus
             .borrow_mut()
             .write(address_high, address_low);
-        format!(
-            "{} @ ${:02X}{:02X} = #${:02X}",
-            string,
-            address_high,
-            address_low,
-            self.read()
-        )
+        format!("{} @ ${:02X}{:02X}", string, address_high, address_low,)
     }
 
     fn do_addressing_mode(&mut self, mode: AddressingMode, take_branch: bool) -> String {
@@ -847,11 +841,7 @@ impl Mos6502 {
                 let address_low = self.fetch_next_byte();
                 let address_high = self.fetch_next_byte();
                 self.write_address(address_high, address_low);
-                let data = self.read();
-                format!(
-                    "{} ${:02X}{:02X} = #${:02X}",
-                    instruction, address_high, address_low, data
-                )
+                format!("{} ${:02X}{:02X}", instruction, address_high, address_low)
             }
             AddressingMode::Indirect => {
                 let address_low = self.fetch_next_byte();
@@ -862,7 +852,6 @@ impl Mos6502 {
                 self.write_address(address_high, address_low.wrapping_add(1));
                 let new_address_high = self.read();
                 self.write_address(new_address_high, new_address_low);
-                self.read();
                 format!(
                     "{} (${:02X}{:02X}) = ${:02X}{:02X}",
                     instruction, address_high, address_low, new_address_high, new_address_low
@@ -870,10 +859,7 @@ impl Mos6502 {
             }
             AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
             AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
-            AddressingMode::Accumulator => {
-                self.data_bus.borrow_mut().write(self.a.borrow().read());
-                format!("{}", instruction)
-            }
+            AddressingMode::Accumulator => format!("{}", instruction),
             AddressingMode::Immediate => {
                 let value = self.fetch_next_byte();
                 self.data_bus.borrow_mut().write(value);
@@ -892,10 +878,9 @@ impl Mos6502 {
                 let address_high = self.read();
 
                 self.write_address(address_high, address_low);
-                let data = self.read();
                 format!(
-                    "{} (${:02X},X) @ ${:02X}{:02X} = #${:02X}",
-                    instruction, zero_page_offset, address_high, address_low, data
+                    "{} (${:02X},X) @ ${:02X}{:02X}",
+                    instruction, zero_page_offset, address_high, address_low
                 )
             }
             AddressingMode::IndirectY => {
@@ -918,10 +903,9 @@ impl Mos6502 {
                     address_high
                 };
                 self.write_address(address_high, address_low);
-                let data = self.read();
                 format!(
-                    "{} (${:02X}),Y @ ${:02X}{:02X} = #${:02X}",
-                    instruction, zero_page_offset, address_high, address_low, data
+                    "{} (${:02X}),Y @ ${:02X}{:02X}",
+                    instruction, zero_page_offset, address_high, address_low
                 )
             }
             AddressingMode::Relative => {
@@ -966,30 +950,24 @@ impl Mos6502 {
             AddressingMode::ZeroPage => {
                 let zero_page_offset = self.fetch_next_byte();
                 self.write_address(0, zero_page_offset);
-                let data = self.read();
-                format!(
-                    "{} $00{:02X} = #${:02X}",
-                    instruction, zero_page_offset, data
-                )
+                format!("{} $00{:02X}", instruction, zero_page_offset)
             }
             AddressingMode::ZeroPageX => {
                 let old_zero_page_offset = self.fetch_next_byte();
                 let zero_page_offset = old_zero_page_offset.wrapping_add(self.x);
                 self.write_address(0, zero_page_offset);
-                let data = self.read();
                 format!(
-                    "{} $00{:02X},X @ $00{:02X} = #${:02X}",
-                    instruction, old_zero_page_offset, zero_page_offset, data
+                    "{} $00{:02X},X @ $00{:02X}",
+                    instruction, old_zero_page_offset, zero_page_offset
                 )
             }
             AddressingMode::ZeroPageY => {
                 let old_zero_page_offset = self.fetch_next_byte();
                 let zero_page_offset = old_zero_page_offset.wrapping_add(self.y);
                 self.write_address(0, zero_page_offset);
-                let data = self.read();
                 format!(
-                    "{} $00{:02X},Y @ $00{:02X} = #${:02X}",
-                    instruction, old_zero_page_offset, zero_page_offset, data
+                    "{} $00{:02X},Y @ $00{:02X}",
+                    instruction, old_zero_page_offset, zero_page_offset
                 )
             }
         }
@@ -1368,7 +1346,7 @@ impl Mos6502 {
                 self.cycles = cycles;
                 let string = self.do_addressing_mode(mode, false);
 
-                let operand = self.data_bus.borrow().read();
+                let operand = self.read();
                 let result = operand & self.a.borrow().read();
 
                 self.a.borrow_mut().write(result);
@@ -1380,7 +1358,11 @@ impl Mos6502 {
             Instruction::ASL(mode, _, cycles) => {
                 self.cycles = cycles;
                 let string = self.do_addressing_mode(mode, false);
-                let operand = self.data_bus.borrow().read();
+                let operand = if mode == AddressingMode::Accumulator {
+                    self.a.borrow().read()
+                } else {
+                    self.read()
+                };
                 let result = operand << 1;
                 self.data_bus.borrow_mut().write(result);
 
@@ -1402,7 +1384,7 @@ impl Mos6502 {
             Instruction::BIT(mode, _, cycles) => {
                 self.cycles = cycles;
                 let string = self.do_addressing_mode(mode, false);
-                let operand = self.data_bus.borrow().read();
+                let operand = self.read();
                 self.p.negative = operand & 0x80 == 0x80;
                 self.p.overflow = operand & 0x40 == 0x40;
                 self.p.zero = operand & self.a.borrow().read() == 0;
@@ -1445,7 +1427,7 @@ impl Mos6502 {
             Instruction::CPY(mode, _, cycles) => self.compare(mode, self.y, cycles),
             Instruction::DEC(mode, _, cycles) => {
                 let string = self.do_addressing_mode(mode, false);
-                let memory = self.data_bus.borrow().read();
+                let memory = self.read();
                 let result = self.increment(memory, NEGATIVE_ONE, cycles);
 
                 self.data_bus.borrow_mut().write(result);
@@ -1464,7 +1446,7 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 let string = self.do_addressing_mode(mode, false);
-                let operand = self.data_bus.borrow().read();
+                let operand = self.read();
 
                 let result = self.a.borrow().read() ^ operand;
                 self.a.borrow_mut().write(result);
@@ -1475,7 +1457,7 @@ impl Mos6502 {
             }
             Instruction::INC(mode, _, cycles) => {
                 let string = self.do_addressing_mode(mode, false);
-                let operand = self.data_bus.borrow().read();
+                let operand = self.read();
 
                 let result = self.increment(operand, 1, cycles);
                 self.data_bus.borrow_mut().write(result);
@@ -1530,7 +1512,7 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 let string = self.do_addressing_mode(mode, false);
-                self.x = self.data_bus.borrow().read();
+                self.x = self.read();
                 self.p.negative = self.x & 0x80 == 0x80;
                 self.p.zero = self.x == 0;
                 string
@@ -1539,7 +1521,7 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 let string = self.do_addressing_mode(mode, false);
-                self.y = self.data_bus.borrow().read();
+                self.y = self.read();
                 self.p.negative = self.y & 0x80 == 0x80;
                 self.p.zero = self.y == 0;
                 string
@@ -1548,7 +1530,11 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 let string = self.do_addressing_mode(mode, false);
-                let operand = self.data_bus.borrow().read();
+                let operand = if mode == AddressingMode::Accumulator {
+                    self.a.borrow().read()
+                } else {
+                    self.read()
+                };
                 self.p.carry = operand & 0x01 == 0x01;
 
                 let result = operand >> 1;
@@ -1572,7 +1558,7 @@ impl Mos6502 {
 
                 let string = self.do_addressing_mode(mode, false);
 
-                let memory = self.data_bus.borrow_mut().read();
+                let memory = self.read();
                 let result = self.a.borrow().read() | memory;
 
                 self.a.borrow_mut().write(result);
@@ -1625,7 +1611,11 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 let string = self.do_addressing_mode(mode, false);
-                let operand = self.data_bus.borrow().read();
+                let operand = if mode == AddressingMode::Accumulator {
+                    self.a.borrow().read()
+                } else {
+                    self.read()
+                };
                 // Shift left and make bit 0 the carry bit
                 let result = operand << 1 | (self.p.carry as u8);
                 // The new carry bit is the old bit 7.
@@ -1646,7 +1636,11 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 let string = self.do_addressing_mode(mode, false);
-                let operand = self.data_bus.borrow().read();
+                let operand = if mode == AddressingMode::Accumulator {
+                    self.a.borrow().read()
+                } else {
+                    self.read()
+                };
                 // Shift right and make bit 7 the carry bit
                 let result = operand >> 1 | ((self.p.carry as u8) << 7);
                 // The new carry is the old bit 0.
