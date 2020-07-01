@@ -862,7 +862,6 @@ impl Mos6502 {
             AddressingMode::Accumulator => format!("{}", instruction),
             AddressingMode::Immediate => {
                 let value = self.fetch_next_byte();
-                self.data_bus.borrow_mut().write(value);
                 format!("{} #${:02X}", instruction, value)
             }
             AddressingMode::Implied => format!("{}", instruction),
