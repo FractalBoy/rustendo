@@ -202,6 +202,9 @@ impl Register {
         let mask = bits as u16;
         let shift = mask.trailing_zeros();
         let data = (data as u16) << shift;
+        // First clear the bits
+        self.register &= !mask;
+        // Now set them (or leave them cleared)
         self.register |= data & mask;
     }
 
@@ -800,7 +803,8 @@ impl Ricoh2c02 {
                 self.vram_address.set_field(RegisterBits::CoarseY, 0);
             } else {
                 // Coarse Y not at the bounds of the nametable; just add 1.
-                self.vram_address.set_field(RegisterBits::CoarseY, coarse_y + 1);
+                self.vram_address
+                    .set_field(RegisterBits::CoarseY, coarse_y + 1);
             }
         } else {
             // Fine Y does not need to wrap; just add 1.
