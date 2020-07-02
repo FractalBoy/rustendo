@@ -202,7 +202,7 @@ impl Register {
         let mask = bits as u16;
         let shift = mask.trailing_zeros();
         let data = (data as u16) << shift;
-        self.register |= data;
+        self.register |= data & mask;
     }
 
     pub fn toggle_horizontal_nametable(&mut self) {
