@@ -1502,6 +1502,7 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 let string = self.do_addressing_mode(mode, false);
+                self.read();
                 self.a.borrow_mut().read_from_bus();
                 let a = self.a.borrow().read();
                 self.p.negative = a & 0x80 == 0x80;
@@ -1570,7 +1571,7 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 self.write_address(0x01, self.s);
-                self.data_bus.borrow_mut().write(self.a.borrow().read());
+                self.a.borrow().write_to_bus();
                 self.write();
 
                 self.s = self.s.wrapping_sub(1);
