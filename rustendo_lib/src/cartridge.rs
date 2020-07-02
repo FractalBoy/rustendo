@@ -38,8 +38,6 @@ pub struct Cartridge {
 impl Cartridge {
     pub fn new(raw: Vec<u8>) -> Self {
         let header = Self::_header(&raw);
-        //log!("{}", Self::_mapper(&header));
-        //log!("{:?} {:?}", Self::_format(&header), header);
         let mapper = match Self::_mapper(&header) {
             0 => Box::new(Mapper000::new(
                 Self::_prg_rom_size(&header),
