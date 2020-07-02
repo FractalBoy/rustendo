@@ -552,6 +552,183 @@ pub enum Instruction {
     KIL,
 }
 
+impl Instruction {
+    fn decompose_instruction(&self) -> (String, AddressingMode, u32, u32) {
+        let instruction = &self;
+        match instruction {
+            Instruction::ADC(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::AND(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::ASL(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BCC(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BCS(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BEQ(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BIT(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BMI(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BNE(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BPL(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BRK(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BVC(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::BVS(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::CLC(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::CLD(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::CLI(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::CLV(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::CMP(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::CPX(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::CPY(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::DEC(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::DEX(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::DEY(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::EOR(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::INC(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::INX(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::INY(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::JMP(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::JSR(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::LDA(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::LDX(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::LDY(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::LSR(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::NOP(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::ORA(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::PHA(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::PHP(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::PLA(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::PLP(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::ROL(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::ROR(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::RTI(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::RTS(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::SBC(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::SEC(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::SED(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::SEI(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::STA(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::STX(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::STY(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::TAX(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::TAY(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::TSX(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::TXA(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::TXS(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::TYA(mode, bytes, cycles) => {
+                (format!("{}", instruction), *mode, *bytes, *cycles)
+            }
+            Instruction::KIL => unimplemented!(),
+        }
+    }
+}
+
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut debug = format!("{:?}", self);
@@ -1094,182 +1271,6 @@ impl Mos6502 {
         self.instruction_register.read_from_bus();
     }
 
-    fn decompose_instruction(&self) -> (String, AddressingMode, u32, u32) {
-        let instruction = self.instruction_register.decode_instruction();
-
-        match instruction {
-            Instruction::ADC(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::AND(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::ASL(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BCC(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BCS(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BEQ(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BIT(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BMI(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BNE(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BPL(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BRK(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BVC(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::BVS(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::CLC(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::CLD(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::CLI(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::CLV(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::CMP(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::CPX(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::CPY(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::DEC(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::DEX(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::DEY(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::EOR(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::INC(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::INX(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::INY(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::JMP(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::JSR(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::LDA(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::LDX(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::LDY(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::LSR(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::NOP(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::ORA(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::PHA(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::PHP(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::PLA(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::PLP(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::ROL(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::ROR(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::RTI(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::RTS(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::SBC(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::SEC(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::SED(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::SEI(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::STA(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::STX(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::STY(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::TAX(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::TAY(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::TSX(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::TXA(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::TXS(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::TYA(mode, bytes, cycles) => {
-                (format!("{}", instruction), mode, bytes, cycles)
-            }
-            Instruction::KIL => panic!(),
-        }
-    }
-
     fn save_state(&self) -> (u16, u16, u8) {
         (
             self.pc.borrow().wide(),
@@ -1297,8 +1298,8 @@ impl Mos6502 {
         bytes
     }
 
-    fn format_raw_instruction(&mut self) -> String {
-        let (_, _, bytes, _) = self.decompose_instruction();
+    fn format_raw_instruction(&mut self, instruction: &Instruction) -> String {
+        let (_, _, bytes, _) = instruction.decompose_instruction();
 
         let mut string = format!("{}", self.instruction_register);
         let state = self.save_state();
@@ -1319,7 +1320,7 @@ impl Mos6502 {
 
     fn execute_instruction(&mut self) {
         let instruction = self.instruction_register.decode_instruction();
-        let raw_instruction = self.format_raw_instruction();
+        let raw_instruction = self.format_raw_instruction(&instruction);
 
         log!(
             "A:{:02X} X:{:02X} Y:{:02X} S:{:02X} P:{}{:indent$}${}:{}",
