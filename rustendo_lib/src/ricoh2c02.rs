@@ -670,7 +670,7 @@ impl Ricoh2c02 {
     fn update_next_bg_tile_attr(&mut self) {
         self.next_bg_tile_attr =
             self.ppu_read(0x23C0 | self.vram_address.get_attribute_memory_offset());
-
+        
         // The attribute tile is 1 byte and applies
         // to a 4-byte by 4-byte region of the nametable.
         //

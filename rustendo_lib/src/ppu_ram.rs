@@ -1,14 +1,14 @@
 use crate::cartridge::MirroringType;
 
 pub struct Ram {
-    ram: [u8; 0x800],
+    nametables: [[u8; 0x400]; 2],
     mirroring: MirroringType,
 }
 
 impl Ram {
     pub fn new() -> Self {
         Ram {
-            ram: [0; 0x800],
+            nametables: [[0; 0x400]; 2],
             mirroring: MirroringType::Vertical,
         }
     }
@@ -17,38 +17,34 @@ impl Ram {
         self.mirroring = mirroring;
     }
 
-    pub fn map_address(&self, address: u16) -> u16 {
-        let address = match address {
-            // 0x3000 - 0x3EFF mirrors back to 0x2000 - 0x2EFF
-            0x3000..=0x3EFF => return self.map_address(address & 0x2FFF),
-            _ => address,
-        };
+    pub fn map_address(&self, address: u16) -> (usize, usize) {
+        let address = address & 0x2FFF;
 
-        let address = match self.mirroring {
+        match self.mirroring {
             MirroringType::Horizontal => match address {
-                0x2000..=0x23FF => address,
-                0x2400..=0x27FF => address & 0x23FF,
-                0x2800..=0x2BFF => address - 0x400,
-                0x2C00..=0x2FFF => (address & 0x2BFF) - 0x400,
-                _ => address,
+                0x2000..=0x23FF => (0, (address & 0x3FF) as usize),
+                0x2400..=0x27FF => (0, (address & 0x3FF) as usize),
+                0x2800..=0x2BFF => (1, (address & 0x3FF) as usize),
+                0x2C00..=0x2FFF => (1, (address & 0x3FF) as usize),
+                _ => unreachable!(),
             },
             MirroringType::Vertical => match address {
-                0x2000..=0x23FF => address,
-                0x2400..=0x27FF => address,
-                0x2800..=0x2BFF => address & 0x27FF,
-                0x2C00..=0x2FFF => address & 0x27FF,
-                _ => address,
+                0x2000..=0x23FF => (0, (address & 0x3FF) as usize),
+                0x2400..=0x27FF => (1, (address & 0x3FF) as usize),
+                0x2800..=0x2BFF => (0, (address & 0x3FF) as usize),
+                0x2C00..=0x2FFF => (1, (address & 0x3FF) as usize),
+                _ => unreachable!(),
             },
-        };
-
-        address & 0x1FFF
+        }
     }
 
     pub fn read(&self, address: u16) -> u8 {
-        self.ram[self.map_address(address) as usize]
+        let (nametable, address) = self.map_address(address);
+        self.nametables[nametable][address]
     }
 
     pub fn write(&mut self, address: u16, data: u8) {
-        self.ram[self.map_address(address) as usize] = data;
+        let (nametable, address) = self.map_address(address);
+        self.nametables[nametable][address] = data;
     }
 }
