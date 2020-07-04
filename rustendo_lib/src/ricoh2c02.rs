@@ -813,30 +813,31 @@ impl Ricoh2c02 {
     }
 
     fn load_background_shifters(&mut self) {
-        self.bg_tile_lsb_shifter = (self.next_bg_tile_lsb as u16) << 8 | self.bg_tile_lsb_shifter;
-        self.bg_tile_msb_shifter = (self.next_bg_tile_msb as u16) << 8 | self.bg_tile_msb_shifter;
+        self.bg_tile_lsb_shifter |= self.next_bg_tile_lsb as u16;
+        self.bg_tile_msb_shifter |= self.next_bg_tile_msb as u16;
 
         // The background attribute shifters are actually 1 byte wide,
         // but they are for the lower byte of the tile shifters, so we'll use
         // 2 bytes for convenience, and shift them over 1 byte the same as the tile shifters.
-        self.bg_attr_lsb_shifter =
-            ((self.next_bg_tile_attr as u16 & 0x01) * 0xFF) << 8 | self.bg_attr_lsb_shifter;
-        self.bg_attr_msb_shifter =
-            ((self.next_bg_tile_attr as u16 & 0x02 >> 1) * 0xFF) << 8 | self.bg_attr_msb_shifter;
+        self.bg_attr_lsb_shifter |=
+            (self.next_bg_tile_attr as u16 & 0x01) * 0xFF;
+        self.bg_attr_msb_shifter |=
+            (self.next_bg_tile_attr as u16 & 0x02 >> 1) * 0xFF;
     }
 
     fn update_background_shifters(&mut self) {
         if self.ppu_mask.get_background_enable() {
-            self.bg_tile_lsb_shifter >>= 1;
-            self.bg_tile_msb_shifter >>= 1;
-            self.bg_attr_lsb_shifter >>= 1;
-            self.bg_attr_msb_shifter >>= 1;
+            self.bg_tile_lsb_shifter <<= 1;
+            self.bg_tile_msb_shifter <<= 1;
+            self.bg_attr_lsb_shifter <<= 1;
+            self.bg_attr_msb_shifter <<= 1;
         }
     }
 
     fn calculate_pixel(&self) -> (u8, u8, u8) {
         let (pixel, palette) = if self.ppu_mask.get_background_enable() {
-            let mask = 1 << self.fine_x_scroll;
+            let mask = 1u16 << self.fine_x_scroll;
+            let mask = mask << 8;
 
             let pixel_lsb = self.bg_tile_lsb_shifter & mask == mask;
             let pixel_msb = self.bg_tile_msb_shifter & mask == mask;
