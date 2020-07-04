@@ -913,7 +913,7 @@ impl Ricoh2c02 {
                 338 | 340 => self.update_next_bg_tile_id(),
                 _ => (),
             },
-            240 => match self.cycle {
+            241 => match self.cycle {
                 1 => {
                     // VBlank flag set here. VBlank NMI also occurs here.
                     self.ppu_status.set_vertical_blank_started(true);
