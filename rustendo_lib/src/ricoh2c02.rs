@@ -235,11 +235,11 @@ impl Register {
 
     pub fn copy_vertical_address(&mut self, register: &Register) {
         self.set_field(
-            RegisterBits::CoarseX,
+            RegisterBits::CoarseY,
             register.get_field(RegisterBits::CoarseX),
         );
         self.set_field(
-            RegisterBits::NametableSelectX,
+            RegisterBits::NametableSelectY,
             register.get_field(RegisterBits::NametableSelectX),
         );
         self.set_field(RegisterBits::FineY, register.get_field(RegisterBits::FineY));
