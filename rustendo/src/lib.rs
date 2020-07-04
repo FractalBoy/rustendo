@@ -104,6 +104,25 @@ pub fn render(byte_array: js_sys::Uint8Array) {
         .dyn_into::<CanvasRenderingContext2d>()
         .unwrap();
 
+    let renderer = window()
+        .document()
+        .unwrap()
+        .create_element(&"canvas")
+        .expect("could not create canvas")
+        .dyn_into::<HtmlCanvasElement>()
+        .map_err(|_| ())
+        .expect("");
+
+    renderer.set_width(NES_WIDTH);
+    renderer.set_height(NES_HEIGHT);
+
+    let renderer_context = renderer
+        .get_context("2d")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<CanvasRenderingContext2d>()
+        .unwrap();
+
     let f = Rc::new(RefCell::new(None));
     let g = Rc::clone(&f);
     let nes1 = Rc::new(RefCell::new(nes));
@@ -117,7 +136,7 @@ pub fn render(byte_array: js_sys::Uint8Array) {
         // Only draw once every 1/60th of a second.
         if timestamp - prev_timestamp >= 1000.0 / 60.0 {
             while !nes1.borrow_mut().clock() {}
-            draw(&context, &canvas, &nes1.borrow());
+            draw(&context, &canvas, &renderer_context, &renderer, &nes1.borrow());
             prev_timestamp = timestamp;
         }
     }) as Box<dyn FnMut(f64)>));
@@ -163,26 +182,13 @@ pub fn render(byte_array: js_sys::Uint8Array) {
     request_animation_frame(g.borrow().as_ref().unwrap());
 }
 
-fn draw(context: &CanvasRenderingContext2d, canvas: &HtmlCanvasElement, nes: &Nes) {
-    let renderer = window()
-        .document()
-        .unwrap()
-        .create_element(&"canvas")
-        .expect("could not create canvas")
-        .dyn_into::<HtmlCanvasElement>()
-        .map_err(|_| ())
-        .expect("");
-
-    renderer.set_width(NES_WIDTH);
-    renderer.set_height(NES_HEIGHT);
-
-    let renderer_context = renderer
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into::<CanvasRenderingContext2d>()
-        .unwrap();
-
+fn draw(
+    context: &CanvasRenderingContext2d,
+    canvas: &HtmlCanvasElement,
+    renderer_context: &CanvasRenderingContext2d,
+    renderer: &HtmlCanvasElement,
+    nes: &Nes,
+) {
     let mut data = vec![0; (NES_WIDTH * NES_HEIGHT * 4) as usize];
 
     for y in 0..NES_HEIGHT {
