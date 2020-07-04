@@ -1038,8 +1038,9 @@ impl Mos6502 {
             AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
             AddressingMode::Accumulator => format!("{}", instruction),
             AddressingMode::Immediate => {
-                let value = self.fetch_next_byte();
-                format!("{} #${:02X}", instruction, value)
+                self.pc.borrow_mut().increment();
+                self.pc.borrow().write_to_address_bus();
+                format!("{} @${:04X}", instruction, self.pc.borrow().wide())
             }
             AddressingMode::Implied => format!("{}", instruction),
             AddressingMode::IndirectX => {
@@ -1164,6 +1165,7 @@ impl Mos6502 {
         self.cycles = cycles;
 
         let string = self.do_addressing_mode(mode, false);
+        self.read();
         let memory = self.data_bus.borrow().read();
 
         let result = operand.wrapping_sub(memory);
@@ -1339,6 +1341,7 @@ impl Mos6502 {
             Instruction::ADC(mode, _, cycles) => {
                 self.cycles = cycles;
                 let string = self.do_addressing_mode(mode, false);
+                self.read();
                 self.alu.add_with_carry(&mut self.p);
                 string
             }
@@ -1699,6 +1702,7 @@ impl Mos6502 {
             Instruction::SBC(mode, _, cycles) => {
                 self.cycles = cycles;
                 let string = self.do_addressing_mode(mode, false);
+                self.read();
                 self.alu.subtract_with_borrow(&mut self.p);
                 string
             }
