@@ -100,8 +100,8 @@ impl Nes {
         }
     }
 
-    pub fn color_at_coord(&self, x: u32, y: u32) -> (u8, u8, u8) {
-        self.ppu.borrow().color_at_coord(x, y)
+    pub fn get_screen(&self) -> [[(u8, u8, u8); 0x100]; 0xF0] {
+        self.ppu.borrow().get_screen()
     }
 
     pub fn reset(&mut self) {

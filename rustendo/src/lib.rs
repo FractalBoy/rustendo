@@ -130,13 +130,29 @@ pub fn render(byte_array: js_sys::Uint8Array) {
     let nes3 = Rc::clone(&nes1);
 
     let mut prev_timestamp = 0.0;
+    let mut screen = [0; (NES_WIDTH * NES_HEIGHT * 4) as usize];
+
+    for y in 0..NES_HEIGHT {
+        for x in 0..NES_WIDTH {
+            let red_index = y * (NES_WIDTH * 4) + x * 4;
+            screen[(red_index + 3) as usize] = 0xFF;
+        }
+    }
+
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp| {
         request_animation_frame(f.borrow().as_ref().unwrap());
 
         // Only draw once every 1/60th of a second.
         if timestamp - prev_timestamp >= 1000.0 / 60.0 {
             while !nes1.borrow_mut().clock() {}
-            draw(&context, &canvas, &renderer_context, &renderer, &nes1.borrow());
+            draw(
+                &mut screen,
+                &context,
+                &canvas,
+                &renderer_context,
+                &renderer,
+                &nes1.borrow(),
+            );
             prev_timestamp = timestamp;
         }
     }) as Box<dyn FnMut(f64)>));
@@ -183,22 +199,22 @@ pub fn render(byte_array: js_sys::Uint8Array) {
 }
 
 fn draw(
+    data: &mut [u8],
     context: &CanvasRenderingContext2d,
     canvas: &HtmlCanvasElement,
     renderer_context: &CanvasRenderingContext2d,
     renderer: &HtmlCanvasElement,
     nes: &Nes,
 ) {
-    let mut data = vec![0; (NES_WIDTH * NES_HEIGHT * 4) as usize];
+    let screen = nes.get_screen();
 
     for y in 0..NES_HEIGHT {
         for x in 0..NES_WIDTH {
-            let color = nes.color_at_coord(x, y);
-            set_color_at_coord(&mut data, NES_WIDTH, x, y, color)
+            set_color_at_coord(data, x, y, screen[y as usize][x as usize])
         }
     }
 
-    let image_data = ImageData::new_with_u8_clamped_array(Clamped(&mut data), NES_WIDTH)
+    let image_data = ImageData::new_with_u8_clamped_array(Clamped(data), NES_WIDTH)
         .expect("could not create image data");
 
     renderer_context
@@ -216,13 +232,12 @@ fn draw(
         .expect("could not draw canvas onto context");
 }
 
-fn set_color_at_coord(data: &mut Vec<u8>, width: u32, x: u32, y: u32, color: (u8, u8, u8)) {
+fn set_color_at_coord(data: &mut [u8], x: u32, y: u32, color: (u8, u8, u8)) {
     let x = x as usize;
     let y = y as usize;
-    let width = width as usize;
+    let width = NES_WIDTH as usize;
     let red_index = y * (width * 4) + x * 4;
     data[red_index] = color.0;
     data[red_index + 1] = color.1;
     data[red_index + 2] = color.2;
-    data[red_index + 3] = 0xFF;
 }

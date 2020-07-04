@@ -369,6 +369,10 @@ impl Ricoh2c02 {
         }
     }
 
+    pub fn get_screen(&self) -> [[(u8, u8, u8); 0x100]; 0xF0] {
+        self.screen
+    }
+
     fn get_palette() -> [(u8, u8, u8); 0x40] {
         [
             (84, 84, 84),
@@ -657,10 +661,6 @@ impl Ricoh2c02 {
 
     fn rendering_enabled(&self) -> bool {
         self.ppu_mask.get_background_enable() || self.ppu_mask.get_sprite_enable()
-    }
-
-    pub fn color_at_coord(&self, x: u32, y: u32) -> (u8, u8, u8) {
-        self.screen[y as usize][x as usize]
     }
 
     fn update_next_bg_tile_id(&mut self) {
