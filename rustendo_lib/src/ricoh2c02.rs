@@ -830,7 +830,7 @@ impl Ricoh2c02 {
             self.bg_tile_lsb_shifter >>= 1;
             self.bg_tile_msb_shifter >>= 1;
             self.bg_attr_lsb_shifter >>= 1;
-            self.bg_tile_msb_shifter >>= 1;
+            self.bg_attr_msb_shifter >>= 1;
         }
     }
 
