@@ -734,11 +734,6 @@ impl Ricoh2c02 {
             (0, 0)
         };
 
-        println!(
-            "{:02X} {:02X}",
-            palette,
-            self.ppu_read(0x3F00 | palette << 2 | pixel)
-        );
         self.palette[(self.ppu_read(0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
     }
 
