@@ -144,15 +144,17 @@ pub fn render(byte_array: js_sys::Uint8Array) {
 
         // Only draw once every 1/60th of a second.
         while !nes1.borrow_mut().clock() {}
-        draw(
-            &mut screen,
-            &context,
-            &canvas,
-            &renderer_context,
-            &renderer,
-            &nes1.borrow(),
-        );
-        prev_timestamp = timestamp;
+        if timestamp - prev_timestamp >= 1000.0 / 60.0 {
+            draw(
+                &mut screen,
+                &context,
+                &canvas,
+                &renderer_context,
+                &renderer,
+                &nes1.borrow(),
+            );
+            prev_timestamp = timestamp;
+        }
     }) as Box<dyn FnMut(f64)>));
 
     nes2.borrow_mut().reset();

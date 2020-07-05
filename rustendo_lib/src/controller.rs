@@ -117,6 +117,6 @@ impl Controller {
     pub fn read_button(&mut self) -> u8 {
         let bit = self.latched_controller & 0x01 == 0x01;
         self.latched_controller >>= 1;
-        !bit as u8
+        bit as u8
     }
 }
