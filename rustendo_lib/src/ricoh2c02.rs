@@ -121,6 +121,10 @@ impl PpuMask {
         self.sprite_enable
     }
 
+    pub fn get_greyscale(&self) -> bool {
+        self.greyscale
+    }
+
     pub fn set(&mut self, byte: u8) {
         self.greyscale = byte & 0x01 == 0x01;
         self.background_left_column_enable = byte & 0x02 == 0x02;
@@ -315,15 +319,7 @@ pub struct Ricoh2c02 {
     odd_frame: bool,
     palette: [(u8, u8, u8); 0x40],
     screen: [[(u8, u8, u8); 0x100]; 0xF0],
-    universal_background_color: u8,
-    background_palette_0: (u8, u8, u8),
-    background_palette_1: (u8, u8, u8),
-    background_palette_2: (u8, u8, u8),
-    background_palette_3: (u8, u8, u8),
-    sprite_palette_0: (u8, u8, u8),
-    sprite_palette_1: (u8, u8, u8),
-    sprite_palette_2: (u8, u8, u8),
-    sprite_palette_3: (u8, u8, u8),
+    palette_ram: [u8; 0x20],
 }
 
 const CYCLES_PER_SCANLINE: u32 = 341;
@@ -357,15 +353,7 @@ impl Ricoh2c02 {
             fine_x_scroll: 0,
             palette: Self::get_palette(),
             screen: [[(0, 0, 0); 0x100]; 0xF0],
-            universal_background_color: 0,
-            background_palette_0: (0, 0, 0),
-            background_palette_1: (0, 0, 0),
-            background_palette_2: (0, 0, 0),
-            background_palette_3: (0, 0, 0),
-            sprite_palette_0: (0, 0, 0),
-            sprite_palette_1: (0, 0, 0),
-            sprite_palette_2: (0, 0, 0),
-            sprite_palette_3: (0, 0, 0),
+            palette_ram: [0; 0x20],
         }
     }
 
@@ -537,59 +525,16 @@ impl Ricoh2c02 {
     pub fn ppu_read(&self, address: u16) -> u8 {
         match address {
             0x0000..=0x3EFF => self.bus.borrow().ppu_read(address),
-            0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C | 0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
-                self.universal_background_color
+            0x3F00..=0x3FFF => {
+                (match address & 0x03 {
+                    0x00 => self.palette_ram[0x00],
+                    _ => self.palette_ram[(address & 0x1F) as usize],
+                }) & (if self.ppu_mask.get_greyscale() {
+                    0x30
+                } else {
+                    0xFF
+                })
             }
-            0x3F01..=0x3F03 => match address & 0x0003 {
-                0x0001 => self.background_palette_0.0,
-                0x0002 => self.background_palette_0.1,
-                0x0003 => self.background_palette_0.2,
-                _ => unreachable!(),
-            },
-            0x3F05..=0x3F07 => match address & 0x0003 {
-                0x0001 => self.background_palette_1.0,
-                0x0002 => self.background_palette_1.1,
-                0x0003 => self.background_palette_1.2,
-                _ => unreachable!(),
-            },
-            0x3F09..=0x3F0B => match address & 0x0003 {
-                0x0001 => self.background_palette_2.0,
-                0x0002 => self.background_palette_2.1,
-                0x0003 => self.background_palette_2.2,
-                _ => unreachable!(),
-            },
-            0x3F0D..=0x3F0F => match address & 0x0003 {
-                0x0001 => self.background_palette_3.0,
-                0x0002 => self.background_palette_3.1,
-                0x0003 => self.background_palette_3.2,
-                _ => unreachable!(),
-            },
-            0x3F11..=0x3F13 => match address & 0x0003 {
-                0x0001 => self.sprite_palette_0.0,
-                0x0002 => self.sprite_palette_0.1,
-                0x0003 => self.sprite_palette_0.2,
-                _ => unreachable!(),
-            },
-            0x3F15..=0x3F17 => match address & 0x0003 {
-                0x0001 => self.sprite_palette_1.0,
-                0x0002 => self.sprite_palette_1.1,
-                0x0003 => self.sprite_palette_1.2,
-                _ => unreachable!(),
-            },
-            0x3F19..=0x3F1B => match address & 0x0003 {
-                0x0001 => self.sprite_palette_2.0,
-                0x0002 => self.sprite_palette_2.1,
-                0x0003 => self.sprite_palette_2.2,
-                _ => unreachable!(),
-            },
-            0x3F1D..=0x3F1F => match address & 0x0003 {
-                0x0001 => self.sprite_palette_3.0,
-                0x0002 => self.sprite_palette_3.1,
-                0x0003 => self.sprite_palette_3.2,
-                _ => unreachable!(),
-            },
-            // The remainder of memory mirrors the palette addresses
-            0x3F20..=0x3FFF => self.ppu_read(address & 0x3F1F),
             _ => 0,
         }
     }
@@ -597,59 +542,10 @@ impl Ricoh2c02 {
     pub fn ppu_write(&mut self, address: u16, data: u8) {
         match address {
             0x0000..=0x3EFF => self.bus.borrow_mut().ppu_write(address, data),
-            0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C | 0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
-                self.universal_background_color = data
-            }
-            0x3F01..=0x3F03 => match address & 0x0003 {
-                0x0001 => self.background_palette_0.0 = data,
-                0x0002 => self.background_palette_0.1 = data,
-                0x0003 => self.background_palette_0.2 = data,
-                _ => unreachable!(),
+            0x3F00..=0x3FFF => match address & 0x03 {
+                0x00 => self.palette_ram[0x00] = data,
+                _ => self.palette_ram[(address & 0x1F) as usize] = data,
             },
-            0x3F05..=0x3F07 => match address & 0x0003 {
-                0x0001 => self.background_palette_1.0 = data,
-                0x0002 => self.background_palette_1.1 = data,
-                0x0003 => self.background_palette_1.2 = data,
-                _ => unreachable!(),
-            },
-            0x3F09..=0x3F0B => match address & 0x0003 {
-                0x0001 => self.background_palette_2.0 = data,
-                0x0002 => self.background_palette_2.1 = data,
-                0x0003 => self.background_palette_2.2 = data,
-                _ => unreachable!(),
-            },
-            0x3F0D..=0x3F0F => match address & 0x0003 {
-                0x0001 => self.background_palette_3.0 = data,
-                0x0002 => self.background_palette_3.1 = data,
-                0x0003 => self.background_palette_3.2 = data,
-                _ => unreachable!(),
-            },
-            0x3F11..=0x3F13 => match address & 0x0003 {
-                0x0001 => self.sprite_palette_0.0 = data,
-                0x0002 => self.sprite_palette_0.1 = data,
-                0x0003 => self.sprite_palette_0.2 = data,
-                _ => unreachable!(),
-            },
-            0x3F15..=0x3F17 => match address & 0x0003 {
-                0x0001 => self.sprite_palette_1.0 = data,
-                0x0002 => self.sprite_palette_1.1 = data,
-                0x0003 => self.sprite_palette_1.2 = data,
-                _ => unreachable!(),
-            },
-            0x3F19..=0x3F1B => match address & 0x0003 {
-                0x0001 => self.sprite_palette_2.0 = data,
-                0x0002 => self.sprite_palette_2.1 = data,
-                0x0003 => self.sprite_palette_2.2 = data,
-                _ => unreachable!(),
-            },
-            0x3F1D..=0x3F1F => match address & 0x0003 {
-                0x0001 => self.sprite_palette_3.0 = data,
-                0x0002 => self.sprite_palette_3.1 = data,
-                0x0003 => self.sprite_palette_3.2 = data,
-                _ => unreachable!(),
-            },
-            // The remainder of memory mirrors the palette addresses
-            0x3F20..=0x3FFF => self.ppu_write(address & 0x3F1F, data),
             _ => (),
         }
     }
@@ -670,7 +566,6 @@ impl Ricoh2c02 {
     fn update_next_bg_tile_attr(&mut self) {
         self.next_bg_tile_attr =
             self.ppu_read(0x23C0 | self.vram_address.get_attribute_memory_offset());
-        
         // The attribute tile is 1 byte and applies
         // to a 4-byte by 4-byte region of the nametable.
         //
@@ -819,10 +714,8 @@ impl Ricoh2c02 {
         // The background attribute shifters are actually 1 byte wide,
         // but they are for the lower byte of the tile shifters, so we'll use
         // 2 bytes for convenience, and shift them over 1 byte the same as the tile shifters.
-        self.bg_attr_lsb_shifter |=
-            (self.next_bg_tile_attr as u16 & 0x01) * 0xFF;
-        self.bg_attr_msb_shifter |=
-            (self.next_bg_tile_attr as u16 & 0x02 >> 1) * 0xFF;
+        self.bg_attr_lsb_shifter |= (self.next_bg_tile_attr as u16 & 0x01) * 0xFF;
+        self.bg_attr_msb_shifter |= (self.next_bg_tile_attr as u16 & 0x02 >> 1) * 0xFF;
     }
 
     fn update_background_shifters(&mut self) {
