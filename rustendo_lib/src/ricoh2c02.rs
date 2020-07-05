@@ -575,12 +575,7 @@ impl Ricoh2c02 {
         // |||| ++--- Color bits 3-2 for top right quadrant of this byte
         // ||++------ Color bits 3-2 for bottom left quadrant of this byte
         // ++-------- Color bits 3-2 for bottom right quadrant of this byte
-
-        let bottom_right = self.next_bg_tile_attr & 0xC0 >> 6;
-        let bottom_left = self.next_bg_tile_attr & 0x30 >> 4;
-        let top_right = self.next_bg_tile_attr & 0x0C >> 2;
-        let top_left = self.next_bg_tile_attr & 0x03;
-
+        //
         // This is the top left of the nametable (coarse_x, coarse_y):
         // (00,00) (01,00) | (10,00) (11,00)
         // (00,01) (01,01) | (10,01) (11,01)
@@ -588,30 +583,24 @@ impl Ricoh2c02 {
         // (00,10) (01,10) | (10,10) (11,10)
         // (00,01) (01,11) | (10,11) (11,11)
         //
-        // To the bottom and right, the lower two bits
-        // of the coordinate cycle.
-        //
-        // Top half: coarse_y & 0x2 == 0x0
-        // Bottom half: coarse_y & 0x2 == 0x2
-        // Left half: coarse_x & 0x2 == 0x0
-        // Right half: coarse x & 0x2 == 0x2
-
+        // The top half has coarse_y = 0 or 1, the bottom half has coarse_y = 2 or 3
+        // The left half has coarse_x = 0 or 1, the right half has coarse_x = 2 or 3
         let coarse_x = self.vram_address.get_field(RegisterBits::CoarseX);
         let coarse_y = self.vram_address.get_field(RegisterBits::CoarseY);
 
-        self.next_bg_tile_attr = match coarse_x & 0x2 {
-            0x0 => match coarse_y & 0x2 {
-                0x0 => top_left,
-                0x2 => bottom_left,
-                _ => unreachable!(),
-            },
-            0x2 => match coarse_y & 0x2 {
-                0x0 => top_right,
-                0x2 => bottom_right,
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        };
+        // First, get the top or bottom:
+        // * Top is lower nibble of attribute byte and coarse_y & 0x02 == 0x00
+        // * Bottom is upper nibble of attribute byte and coarse_y & 0x02 == 0x02
+        if coarse_y & 0x02 == 0x02 {
+            self.next_bg_tile_attr >>= 4;
+        }
+        // Then, get the left or right
+        // * Left is lower two bits of nibble and coarse_x & 0x02 == 0x00
+        // * Right is upper two bits of nibble and coarse_x & 0x02 == 0x00
+        if coarse_x & 0x02 == 0x02 {
+            self.next_bg_tile_attr >>= 2;
+        }
+        self.next_bg_tile_attr &= 0x03;
     }
 
     //PPU addresses within the pattern tables can be decoded as follows:
@@ -708,14 +697,16 @@ impl Ricoh2c02 {
     }
 
     fn load_background_shifters(&mut self) {
-        self.bg_tile_lsb_shifter |= self.next_bg_tile_lsb as u16;
-        self.bg_tile_msb_shifter |= self.next_bg_tile_msb as u16;
+        self.bg_tile_lsb_shifter = self.bg_tile_lsb_shifter & 0xFF00 | self.next_bg_tile_lsb as u16;
+        self.bg_tile_msb_shifter = self.bg_tile_msb_shifter & 0xFF00 | self.next_bg_tile_msb as u16;
 
         // The background attribute shifters are actually 1 byte wide,
         // but they are for the lower byte of the tile shifters, so we'll use
         // 2 bytes for convenience, and shift them over 1 byte the same as the tile shifters.
-        self.bg_attr_lsb_shifter |= (self.next_bg_tile_attr as u16 & 0x01) * 0xFF;
-        self.bg_attr_msb_shifter |= (self.next_bg_tile_attr as u16 & 0x02 >> 1) * 0xFF;
+        self.bg_attr_lsb_shifter = self.bg_attr_lsb_shifter & 0xFF00
+            | (((self.next_bg_tile_attr as u16 & 0x01 == 0x01) as u16) * 0xFF);
+        self.bg_attr_msb_shifter = self.bg_attr_msb_shifter & 0xFF00
+            | (((self.next_bg_tile_attr as u16 & 0x02 == 0x02) as u16) * 0xFF);
     }
 
     fn update_background_shifters(&mut self) {
@@ -729,8 +720,7 @@ impl Ricoh2c02 {
 
     fn calculate_pixel(&self) -> (u8, u8, u8) {
         let (pixel, palette) = if self.ppu_mask.get_background_enable() {
-            let mask = 1u16 << self.fine_x_scroll;
-            let mask = mask << 8;
+            let mask = 0x8000 >> self.fine_x_scroll;
 
             let pixel_lsb = self.bg_tile_lsb_shifter & mask == mask;
             let pixel_msb = self.bg_tile_msb_shifter & mask == mask;
@@ -744,6 +734,11 @@ impl Ricoh2c02 {
             (0, 0)
         };
 
+        println!(
+            "{:02X} {:02X}",
+            palette,
+            self.ppu_read(0x3F00 | palette << 2 | pixel)
+        );
         self.palette[(self.ppu_read(0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
     }
 
