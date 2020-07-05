@@ -143,8 +143,8 @@ pub fn render(byte_array: js_sys::Uint8Array) {
         request_animation_frame(f.borrow().as_ref().unwrap());
 
         // Only draw once every 1/60th of a second.
-        while !nes1.borrow_mut().clock() {}
         if timestamp - prev_timestamp >= 1000.0 / 60.0 {
+            while !nes1.borrow_mut().clock() {}
             draw(
                 &mut screen,
                 &context,
