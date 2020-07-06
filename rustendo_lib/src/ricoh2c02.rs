@@ -523,18 +523,18 @@ impl Ricoh2c02 {
     }
 
     pub fn ppu_read(&self, address: u16) -> u8 {
+        let palette_mask = if self.ppu_mask.get_greyscale() {
+            0x30
+        } else {
+            0xFF
+        };
+
         match address {
             0x0000..=0x3EFF => self.bus.borrow().ppu_read(address),
-            0x3F00..=0x3FFF => {
-                (match address & 0x03 {
-                    0x00 => self.palette_ram[0x00],
-                    _ => self.palette_ram[(address & 0x1F) as usize],
-                }) & (if self.ppu_mask.get_greyscale() {
-                    0x30
-                } else {
-                    0xFF
-                })
-            }
+            0x3F00..=0x3FFF => match address & 0x03 {
+                0x00 => self.palette_ram[0x00] & palette_mask,
+                _ => self.palette_ram[(address & 0x1F) as usize] & palette_mask,
+            },
             _ => 0,
         }
     }
