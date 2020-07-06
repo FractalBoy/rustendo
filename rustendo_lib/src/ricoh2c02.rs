@@ -523,6 +523,9 @@ impl Ricoh2c02 {
     }
 
     pub fn ppu_read(&self, address: u16) -> u8 {
+        // When the grayscale bit is set in the PPU mask,
+        // only the top 2 bits are used, meaning only gray colors
+        // are used: 0x00 (dark gray), 0x10 (light gray), 0x20 (white), 0x30 (white).
         let palette_mask = if self.ppu_mask.get_greyscale() {
             0x30
         } else {
