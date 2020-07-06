@@ -3,6 +3,9 @@ name = "rustendo_lib"
 version = "0.1.0"
 authors = ["Marc Reisner <reisner.marc@gmail.com>"]
 edition = "2018"
+description = "A NES emulator written in Rust"
+repository = "https://github.com/FractalBoy/rustendo"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
