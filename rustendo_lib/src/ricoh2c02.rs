@@ -534,9 +534,9 @@ impl Ricoh2c02 {
 
         match address {
             0x0000..=0x3EFF => self.bus.borrow().ppu_read(address),
-            0x3F00..=0x3FFF => match address & 0x03 {
-                0x00 => self.palette_ram[0x00] & palette_mask,
-                _ => self.palette_ram[(address & 0x1F) as usize] & palette_mask,
+            0x3F00..=0x3FFF => match address & 0x1F {
+                0x10 | 0x14 | 0x18 | 0x1C => self.palette_ram[(address & 0x0F) as usize],
+                address => self.palette_ram[address as usize],
             },
             _ => 0,
         }
@@ -545,9 +545,9 @@ impl Ricoh2c02 {
     pub fn ppu_write(&mut self, address: u16, data: u8) {
         match address {
             0x0000..=0x3EFF => self.bus.borrow_mut().ppu_write(address, data),
-            0x3F00..=0x3FFF => match address & 0x03 {
-                0x00 => self.palette_ram[0x00] = data,
-                _ => self.palette_ram[(address & 0x1F) as usize] = data,
+            0x3F00..=0x3FFF => match address & 0x1F {
+                0x10 | 0x14 | 0x18 | 0x1C => self.palette_ram[(address & 0x0F) as usize] = data,
+                address => self.palette_ram[address as usize] = data,
             },
             _ => (),
         }
