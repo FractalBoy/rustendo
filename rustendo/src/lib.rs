@@ -1,3 +1,4 @@
+use js_sys::Uint8Array;
 use rustendo_lib::cartridge::Cartridge;
 use rustendo_lib::nes::Nes;
 use std::cell::RefCell;
@@ -5,7 +6,9 @@ use std::f64;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{Clamped, JsCast};
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData, Window};
+use web_sys::{
+    CanvasRenderingContext2d, Event, HtmlCanvasElement, ImageData, KeyboardEvent, Window,
+};
 
 // Leaving this import here to make it easier to use the macro when debugging.
 #[allow(unused_imports)]
@@ -29,24 +32,20 @@ fn window() -> Window {
 fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) {
     window()
         .request_animation_frame(f.as_ref().unchecked_ref())
-        .expect("could not request animation frame");
+        .unwrap();
 }
 
 fn add_event_listener<T>(event: &str, f: &Closure<dyn FnMut(T)>)
 where
-    T: AsRef<web_sys::Event>,
+    T: AsRef<Event>,
 {
     window()
         .add_event_listener_with_callback(event, f.as_ref().unchecked_ref())
-        .expect("could not create event listener");
+        .unwrap();
 }
 
 fn get_viewport_size() -> (i32, i32) {
-    let document_element = window()
-        .document()
-        .expect("no document exists")
-        .document_element()
-        .unwrap();
+    let document_element = window().document().unwrap().document_element().unwrap();
     (
         document_element.client_width(),
         document_element.client_height(),
@@ -56,13 +55,11 @@ fn get_viewport_size() -> (i32, i32) {
 #[wasm_bindgen(start)]
 pub fn startup() {
     utils::set_panic_hook();
+    setup_canvas();
+}
 
-    let document = web_sys::window().unwrap().document().unwrap();
-    let canvas = document.get_element_by_id("rustendo-canvas").unwrap();
-    let canvas: HtmlCanvasElement = canvas
-        .dyn_into::<HtmlCanvasElement>()
-        .map_err(|_| ())
-        .unwrap();
+fn setup_canvas() {
+    let canvas = get_canvas();
 
     let (viewport_width, viewport_height) = get_viewport_size();
     let multiples_of_width = viewport_width as u32 / NES_WIDTH;
@@ -83,119 +80,145 @@ pub fn startup() {
     canvas.set_height(NES_HEIGHT * smallest_multiple);
 }
 
+fn get_canvas() -> HtmlCanvasElement {
+    let document = web_sys::window().unwrap().document().unwrap();
+    let canvas = document.get_element_by_id("rustendo-canvas").unwrap();
+    canvas
+        .dyn_into::<HtmlCanvasElement>()
+        .map_err(|_| ())
+        .unwrap()
+}
+
+fn get_canvas_rendering_context(canvas: &HtmlCanvasElement) -> CanvasRenderingContext2d {
+    canvas
+        .get_context("2d")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<CanvasRenderingContext2d>()
+        .unwrap()
+}
+
+fn create_canvas_and_rendering_context() -> (HtmlCanvasElement, CanvasRenderingContext2d) {
+    let canvas = window()
+        .document()
+        .unwrap()
+        .create_element(&"canvas")
+        .unwrap()
+        .dyn_into::<HtmlCanvasElement>()
+        .map_err(|_| ())
+        .unwrap();
+
+    canvas.set_width(NES_WIDTH);
+    canvas.set_height(NES_HEIGHT);
+
+    let context = get_canvas_rendering_context(&canvas);
+
+    (canvas, context)
+}
+
 #[wasm_bindgen]
-pub fn render(byte_array: js_sys::Uint8Array) {
+pub fn render(byte_array: Uint8Array) {
+    let nes = load_cartridge(byte_array);
+    let nes = Rc::new(RefCell::new(nes));
+
+    setup_keydown_handler(&nes);
+    setup_keyup_handler(&nes);
+    setup_animation(&nes);
+}
+
+fn load_cartridge(byte_array: Uint8Array) -> Nes {
     let nes = Nes::new();
+
     let vec = byte_array.to_vec();
     let cartridge = Cartridge::new(vec);
     nes.load_cartridge(cartridge);
 
-    let document = web_sys::window().unwrap().document().unwrap();
-    let canvas = document.get_element_by_id("rustendo-canvas").unwrap();
-    let canvas: HtmlCanvasElement = canvas
-        .dyn_into::<HtmlCanvasElement>()
-        .map_err(|_| ())
-        .unwrap();
+    nes
+}
 
-    let context = canvas
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into::<CanvasRenderingContext2d>()
-        .unwrap();
-
-    let renderer = window()
-        .document()
-        .unwrap()
-        .create_element(&"canvas")
-        .expect("could not create canvas")
-        .dyn_into::<HtmlCanvasElement>()
-        .map_err(|_| ())
-        .expect("");
-
-    renderer.set_width(NES_WIDTH);
-    renderer.set_height(NES_HEIGHT);
-
-    let renderer_context = renderer
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into::<CanvasRenderingContext2d>()
-        .unwrap();
-
-    let f = Rc::new(RefCell::new(None));
-    let g = Rc::clone(&f);
-    let nes1 = Rc::new(RefCell::new(nes));
-    let nes2 = Rc::clone(&nes1);
-    let nes3 = Rc::clone(&nes1);
+fn setup_animation(nes: &Rc<RefCell<Nes>>) {
+    let canvas = get_canvas();
+    let context = get_canvas_rendering_context(&canvas);
+    let (renderer, renderer_context) = create_canvas_and_rendering_context();
+    let moved_nes = Rc::clone(nes);
+    let nes = Rc::clone(&moved_nes);
 
     let mut prev_timestamp = 0.0;
     let mut screen = [0; (NES_WIDTH * NES_HEIGHT * 4) as usize];
 
-    for y in 0..NES_HEIGHT {
-        for x in 0..NES_WIDTH {
-            let red_index = y * (NES_WIDTH * 4) + x * 4;
-            screen[(red_index + 3) as usize] = 0xFF;
-        }
-    }
+    let moved_closure = Rc::new(RefCell::new(None));
+    let closure = Rc::clone(&moved_closure);
 
-    *g.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp| {
-        request_animation_frame(f.borrow().as_ref().unwrap());
+    *closure.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp| {
+        request_animation_frame(moved_closure.borrow().as_ref().unwrap());
 
         // Only draw once every 1/60th of a second.
         if timestamp - prev_timestamp >= 1000.0 / 60.0 {
-            while !nes1.borrow_mut().clock() {}
+            while !moved_nes.borrow_mut().clock() {}
             draw(
                 &mut screen,
                 &context,
                 &canvas,
                 &renderer_context,
                 &renderer,
-                &nes1.borrow(),
+                &moved_nes.borrow(),
             );
             prev_timestamp = timestamp;
         }
     }) as Box<dyn FnMut(f64)>));
 
-    nes2.borrow_mut().reset();
+    nes.borrow_mut().reset();
+    request_animation_frame(closure.borrow().as_ref().unwrap());
+}
 
-    let keydown_handler =
-        Closure::wrap(Box::new(
-            move |event: web_sys::KeyboardEvent| match event.key().as_str() {
-                "a" | "A" => nes2.borrow().controller().borrow_mut().press_a(),
-                "s" | "S" => nes2.borrow().controller().borrow_mut().press_b(),
-                "ArrowLeft" => nes2.borrow().controller().borrow_mut().press_left(),
-                "ArrowRight" => nes2.borrow().controller().borrow_mut().press_right(),
-                "ArrowUp" => nes2.borrow().controller().borrow_mut().press_up(),
-                "ArrowDown" => nes2.borrow().controller().borrow_mut().press_down(),
-                "x" | "X" => nes2.borrow().controller().borrow_mut().press_start(),
-                "z" | "Z" => nes2.borrow().controller().borrow_mut().press_select(),
-                _ => return,
-            },
-        ) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+fn setup_keydown_handler(nes: &Rc<RefCell<Nes>>) {
+    let nes = Rc::clone(nes);
 
-    let keyup_handler =
-        Closure::wrap(Box::new(
-            move |event: web_sys::KeyboardEvent| match event.key().as_str() {
-                "a" | "A" => nes3.borrow().controller().borrow_mut().lift_a(),
-                "s" | "S" => nes3.borrow().controller().borrow_mut().lift_b(),
-                "ArrowLeft" => nes3.borrow().controller().borrow_mut().lift_left(),
-                "ArrowRight" => nes3.borrow().controller().borrow_mut().lift_right(),
-                "ArrowUp" => nes3.borrow().controller().borrow_mut().lift_up(),
-                "ArrowDown" => nes3.borrow().controller().borrow_mut().lift_down(),
-                "x" | "X" => nes3.borrow().controller().borrow_mut().lift_start(),
-                "z" | "Z" => nes3.borrow().controller().borrow_mut().lift_select(),
-                _ => return,
-            },
-        ) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+    let keydown_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+        let nes = nes.borrow();
+        let controller = nes.controller();
+        let mut controller = controller.borrow_mut();
 
-    add_event_listener::<web_sys::KeyboardEvent>("keydown", &keydown_handler);
-    add_event_listener::<web_sys::KeyboardEvent>("keyup", &keyup_handler);
+        match event.key().as_str() {
+            "a" | "A" => controller.press_a(),
+            "s" | "S" => controller.press_b(),
+            "ArrowLeft" => controller.press_left(),
+            "ArrowRight" => controller.press_right(),
+            "ArrowUp" => controller.press_up(),
+            "ArrowDown" => controller.press_down(),
+            "x" | "X" => controller.press_start(),
+            "z" | "Z" => controller.press_select(),
+            _ => return,
+        };
+    }) as Box<dyn FnMut(KeyboardEvent)>);
 
+    add_event_listener::<KeyboardEvent>("keydown", &keydown_handler);
     keydown_handler.forget();
-    keyup_handler.forget();
+}
 
-    request_animation_frame(g.borrow().as_ref().unwrap());
+fn setup_keyup_handler(nes: &Rc<RefCell<Nes>>) {
+    let nes = Rc::clone(nes);
+
+    let keyup_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+        let nes = nes.borrow();
+        let controller = nes.controller();
+        let mut controller = controller.borrow_mut();
+
+        match event.key().as_str() {
+            "a" | "A" => controller.lift_a(),
+            "s" | "S" => controller.lift_b(),
+            "ArrowLeft" => controller.lift_left(),
+            "ArrowRight" => controller.lift_right(),
+            "ArrowUp" => controller.lift_up(),
+            "ArrowDown" => controller.lift_down(),
+            "x" | "X" => controller.lift_start(),
+            "z" | "Z" => controller.lift_select(),
+            _ => return,
+        };
+    }) as Box<dyn FnMut(KeyboardEvent)>);
+
+    add_event_listener::<KeyboardEvent>("keyup", &keyup_handler);
+    keyup_handler.forget();
 }
 
 fn draw(
@@ -237,7 +260,9 @@ fn set_color_at_coord(data: &mut [u8], x: u32, y: u32, color: (u8, u8, u8)) {
     let y = y as usize;
     let width = NES_WIDTH as usize;
     let red_index = y * (width * 4) + x * 4;
+
     data[red_index] = color.0;
     data[red_index + 1] = color.1;
     data[red_index + 2] = color.2;
+    data[red_index + 3] = 0xFF;
 }
