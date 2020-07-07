@@ -253,7 +253,7 @@ impl Cartridge {
 
     pub fn cpu_read(&self, address: u16) -> u8 {
         match self.mapper.cpu_read(address) {
-            (Some(address), _) => self.prg_rom()[address as usize],
+            (Some(address), _) => self.prg_rom()[address],
             (_, Some(data)) => data,
             _ => 0,
         }
@@ -265,7 +265,7 @@ impl Cartridge {
 
     pub fn ppu_read(&self, address: u16) -> u8 {
         match self.mapper.ppu_read(address) {
-            (Some(address), _) => self.chr_rom()[address as usize],
+            (Some(address), _) => self.chr_rom()[address],
             (_, Some(data)) => data,
             _ => 0,
         }
