@@ -11,6 +11,44 @@ macro_rules! log {
     }
 }
 
+macro_rules! bitfield {
+    ($s:ident, $t:ty, $u:ty) => {
+        struct $s {
+            register: $u
+        }
+
+        impl $s {
+            pub fn new() -> Self {
+                $s { register: 0 }
+            }
+
+            pub fn get_field(&self, bits: $t) -> u8 {
+                let mask = bits as $u;
+                let shift = mask.trailing_zeros();
+                (((self.register & mask) >> shift) & 0xFF) as u8
+            } 
+
+            pub fn set_field(&mut self, bits: $t, data: u8) {
+                let mask = bits as $u;
+                let shift = mask.trailing_zeros();
+                let data = (data as $u) << shift;
+                // First clear the bits
+                self.register &= !mask;
+                // Now set them (or leave them cleared)
+                self.register |= data & mask;
+            }
+
+            pub fn get(&self) -> $u {
+                self.register
+            }
+
+            pub fn get_mut(&mut self) -> &mut $u {
+                &mut self.register
+            }
+        }
+    };
+}
+
 mod assembler;
 pub mod cartridge;
 mod controller;

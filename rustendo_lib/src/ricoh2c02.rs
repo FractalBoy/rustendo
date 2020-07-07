@@ -182,36 +182,9 @@ enum RegisterBits {
     AddressLow = 0b00000000_11111111,
 }
 
-#[derive(Debug)]
-struct Register {
-    register: u16,
-}
+bitfield!(Register, RegisterBits, u16);
 
 impl Register {
-    pub fn new() -> Self {
-        Register { register: 0 }
-    }
-
-    pub fn get(&self) -> u16 {
-        self.register
-    }
-
-    pub fn get_field(&self, bits: RegisterBits) -> u8 {
-        let mask = bits as u16;
-        let shift = mask.trailing_zeros();
-        (((self.register & mask) >> shift) & 0xFF) as u8
-    }
-
-    pub fn set_field(&mut self, bits: RegisterBits, data: u8) {
-        let mask = bits as u16;
-        let shift = mask.trailing_zeros();
-        let data = (data as u16) << shift;
-        // First clear the bits
-        self.register &= !mask;
-        // Now set them (or leave them cleared)
-        self.register |= data & mask;
-    }
-
     pub fn toggle_horizontal_nametable(&mut self) {
         self.set_field(
             RegisterBits::NametableSelectX,
