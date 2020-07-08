@@ -497,7 +497,7 @@ impl Ricoh2c02 {
 
     pub fn ppu_read(&self, address: u16) -> u8 {
         // When the grayscale bit is set in the PPU mask,
-        // only the top 2 bits are used, meaning only gray colors
+        // only the top 2 bits of the palette are used, meaning only gray colors
         // are used: 0x00 (dark gray), 0x10 (light gray), 0x20 (white), 0x30 (white).
         let palette_mask = if self.ppu_mask.get_greyscale() {
             0x30
@@ -508,8 +508,10 @@ impl Ricoh2c02 {
         match address {
             0x0000..=0x3EFF => self.bus.borrow().ppu_read(address),
             0x3F00..=0x3FFF => match address & 0x1F {
-                0x10 | 0x14 | 0x18 | 0x1C => self.palette_ram[(address & 0x0F) as usize],
-                address => self.palette_ram[address as usize],
+                0x10 | 0x14 | 0x18 | 0x1C => {
+                    self.palette_ram[(address & 0x0F) as usize] & palette_mask
+                }
+                address => self.palette_ram[address as usize] & palette_mask,
             },
             _ => 0,
         }

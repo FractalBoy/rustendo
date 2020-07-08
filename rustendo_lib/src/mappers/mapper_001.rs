@@ -1,3 +1,4 @@
+use crate::cartridge::MirroringType;
 use super::Mapper;
 
 enum ControlBits {
@@ -164,5 +165,14 @@ impl Mapper for Mapper001 {
 
     fn ppu_write(&mut self, _address: u16, _data: u8) -> Option<usize> {
         None
+    }
+
+    fn mirroring_type(&self) -> Option<MirroringType> { 
+        match self.control.get_field(ControlBits::Mirroring) {
+            0x0 | 0x1 => Some(MirroringType::OneScreen),
+            0x2 => Some(MirroringType::Vertical),
+            0x3 => Some(MirroringType::Horizontal),
+            _ => unreachable!()
+        }
     }
 }

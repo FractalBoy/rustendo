@@ -6,6 +6,7 @@ use crate::mappers::Mapper;
 pub enum MirroringType {
     Vertical,
     Horizontal,
+    OneScreen
 }
 
 #[derive(Debug)]
@@ -197,10 +198,15 @@ impl Cartridge {
     }
 
     pub fn mirroring_type(&self) -> MirroringType {
-        if self.header()[6] & 0x1 == 0x1 {
-            MirroringType::Vertical
-        } else {
-            MirroringType::Horizontal
+        match self.mapper.mirroring_type() {
+            None => {
+                if self.header()[6] & 0x1 == 0x1 {
+                    MirroringType::Vertical
+                } else {
+                    MirroringType::Horizontal
+                }
+            },
+            Some(mirroring) => mirroring
         }
     }
 

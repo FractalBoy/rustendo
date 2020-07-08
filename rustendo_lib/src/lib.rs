@@ -22,12 +22,14 @@ macro_rules! bitfield {
                 $s { register: 0 }
             }
 
+            #[allow(dead_code)]
             pub fn get_field(&self, bits: $t) -> u8 {
                 let mask = bits as $u;
                 let shift = mask.trailing_zeros();
                 (((self.register & mask) >> shift) & 0xFF) as u8
             } 
 
+            #[allow(dead_code)]
             pub fn set_field(&mut self, bits: $t, data: u8) {
                 let mask = bits as $u;
                 let shift = mask.trailing_zeros();
@@ -38,10 +40,12 @@ macro_rules! bitfield {
                 self.register |= data & mask;
             }
 
+            #[allow(dead_code)]
             pub fn get(&self) -> $u {
                 self.register
             }
 
+            #[allow(dead_code)]
             pub fn get_mut(&mut self) -> &mut $u {
                 &mut self.register
             }

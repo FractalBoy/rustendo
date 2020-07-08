@@ -1,4 +1,4 @@
-use crate::cartridge::Cartridge;
+use crate::cartridge::{Cartridge, MirroringType};
 use crate::ppu_ram::Ram;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -17,8 +17,6 @@ impl Bus {
     }
 
     pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
-        self.ram
-            .set_mirroring_type(cartridge.borrow().mirroring_type());
         self.cartridge = Some(Rc::clone(cartridge));
     }
 
@@ -28,7 +26,10 @@ impl Bus {
                 Some(cartridge) => cartridge.borrow().ppu_read(address),
                 None => 0,
             },
-            0x2000..=0x3EFF => self.ram.read(address),
+            0x2000..=0x3EFF => match &self.cartridge {
+                Some(cartridge) => self.ram.read(cartridge.borrow().mirroring_type(), address),
+                None => self.ram.read(MirroringType::Vertical, address),
+            },
             _ => 0,
         }
     }
@@ -37,10 +38,16 @@ impl Bus {
         match address {
             0x0000..=0x1FFF => match &self.cartridge {
                 Some(cartridge) => cartridge.borrow_mut().ppu_write(address, data),
-                None => ()
-            }
-            0x2000..=0x3EFF => self.ram.write(address, data),
-            _ => ()
+                None => (),
+            },
+            0x2000..=0x3EFF => match &self.cartridge {
+                Some(cartridge) => {
+                    self.ram
+                        .write(cartridge.borrow().mirroring_type(), address, data)
+                }
+                None => self.ram.write(MirroringType::Vertical, address, data),
+            },
+            _ => (),
         }
     }
 }

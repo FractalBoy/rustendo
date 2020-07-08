@@ -1,4 +1,5 @@
 use super::Mapper;
+use crate::cartridge::MirroringType;
 
 pub struct Mapper000 {
     prg_rom_size: usize,
@@ -62,5 +63,9 @@ impl Mapper for Mapper000 {
                 None
             }
         }
+    }
+
+    fn mirroring_type(&self) -> Option<MirroringType> {
+        None
     }
 }
