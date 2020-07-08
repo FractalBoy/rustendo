@@ -1,5 +1,6 @@
 use crate::ppu_bus::Bus;
 use std::cell::RefCell;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
 #[derive(Debug, Copy, Clone)]
@@ -426,7 +427,7 @@ impl Ricoh2c02 {
             0x2005 => 0,
             0x2006 => 0,
             0x2007 => {
-                let address = self.vram_address.get();
+                let address = *self.vram_address;
                 self.vram_address
                     .increment(self.ppu_ctrl.get_increment_mode());
                 let ppu_data = self.ppu_data;
@@ -486,7 +487,7 @@ impl Ricoh2c02 {
                 }
             }
             0x2007 => {
-                let address = self.vram_address.get();
+                let address = *self.vram_address;
                 self.vram_address
                     .increment(self.ppu_ctrl.get_increment_mode());
                 self.ppu_write(address, data);

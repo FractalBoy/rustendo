@@ -41,7 +41,7 @@ impl Mapper001 {
 
     fn set_register(&mut self, address: u16, data: u8) {
         match (address & 0x6000) >> 13 {
-            0x0 => *self.control.get_mut() = data,
+            0x0 => *self.control = data,
             0x1 => match self.control.get_field(ControlBits::ChrRomBankMode) {
                 0x0 => {
                     // The lower bit is unused in 8 KiB mode.

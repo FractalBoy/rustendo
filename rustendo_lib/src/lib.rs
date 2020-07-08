@@ -14,7 +14,7 @@ macro_rules! log {
 macro_rules! bitfield {
     ($s:ident, $t:ty, $u:ty) => {
         struct $s {
-            register: $u
+            register: $u,
         }
 
         impl $s {
@@ -27,7 +27,7 @@ macro_rules! bitfield {
                 let mask = bits as $u;
                 let shift = mask.trailing_zeros();
                 (((self.register & mask) >> shift) & 0xFF) as u8
-            } 
+            }
 
             #[allow(dead_code)]
             pub fn set_field(&mut self, bits: $t, data: u8) {
@@ -39,14 +39,18 @@ macro_rules! bitfield {
                 // Now set them (or leave them cleared)
                 self.register |= data & mask;
             }
+        }
 
-            #[allow(dead_code)]
-            pub fn get(&self) -> $u {
-                self.register
+        impl std::ops::Deref for $s {
+            type Target = $u;
+
+            fn deref(&self) -> &$u {
+                &self.register
             }
+        }
 
-            #[allow(dead_code)]
-            pub fn get_mut(&mut self) -> &mut $u {
+        impl std::ops::DerefMut for $s {
+            fn deref_mut(&mut self) -> &mut $u {
                 &mut self.register
             }
         }
