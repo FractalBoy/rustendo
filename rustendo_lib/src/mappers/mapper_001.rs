@@ -65,8 +65,8 @@ impl Mapper001 {
                     // The lower bit is unused in 8 KiB mode
                     let bank = ((data & 0xE) >> 1) as usize;
                     // Each bank is always 0x4000 bytes in size and there are two banks.
-                    // Therefore, in 32 KiB mode, the low CHR bank always starts every 0x8000
-                    // bytes and the high CHR bank starts 0x4000 bytes after that
+                    // Therefore, in 32 KiB mode, the low PRG bank always starts every 0x8000
+                    // bytes and the high PRG bank starts 0x4000 bytes after that
                     self.low_prg_space = bank * 0x8000;
                     self.high_prg_space = bank * 0x8000 + 0x4000;
                 }
