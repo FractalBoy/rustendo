@@ -1,6 +1,7 @@
 use crate::ppu_bus::Bus;
 use std::cell::RefCell;
-use std::ops::{Deref, DerefMut};
+use std::ops::Index;
+use std::ops::IndexMut;
 use std::rc::Rc;
 
 #[derive(Debug, Copy, Clone)]
@@ -58,6 +59,13 @@ impl PpuCtrl {
 
     pub fn get_nmi_enable(&self) -> bool {
         self.nmi_enable
+    }
+
+    pub fn get_sprite_height(&self) -> u8 {
+        match self.sprite_size {
+            SpriteSize::EightByEight => 8,
+            SpriteSize::EightBySixteen => 16,
+        }
     }
 
     pub fn set(&mut self, byte: u8) {
@@ -155,6 +163,14 @@ impl PpuStatus {
 
     pub fn set_vertical_blank_started(&mut self, data: bool) {
         self.vertical_blank_started = data;
+    }
+
+    pub fn get_vertical_blank_started(&self) -> bool {
+        self.vertical_blank_started
+    }
+
+    pub fn set_sprite_overflow(&mut self, data: bool) {
+        self.sprite_overflow = data;
     }
 
     pub fn set(&mut self, byte: u8) {
@@ -267,10 +283,158 @@ impl Register {
     }
 }
 
+struct Sprite {
+    pub top_y_position: u8,
+    pub tile_id: u8,
+    pub attributes: u8,
+    pub left_x_position: u8,
+}
+
+impl Sprite {
+    fn _in_range(scanline: u32, height: u8, byte: u8) -> bool {
+        // We are evaluating the next scanline.
+        let scanline = scanline + 1;
+        let byte: u32 = byte.into();
+        let height: u32 = height.into();
+
+        scanline >= byte && scanline < byte + height
+    }
+    pub fn in_range(&self, scanline: u32, height: u8) -> bool {
+        Self::_in_range(scanline, height, self.top_y_position)
+    }
+
+    pub fn in_range_with_sprite_overflow_bug(
+        &self,
+        scanline: u32,
+        height: u8,
+        byte: usize,
+    ) -> bool {
+        Self::_in_range(scanline, height, self[byte])
+    }
+}
+
+impl Index<usize> for Sprite {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &u8 {
+        match index & 0x3 {
+            0 => &self.top_y_position,
+            1 => &self.tile_id,
+            2 => &self.attributes,
+            3 => &self.left_x_position,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl IndexMut<usize> for Sprite {
+    fn index_mut(&mut self, index: usize) -> &mut u8 {
+        match index & 0x3 {
+            0 => &mut self.top_y_position,
+            1 => &mut self.tile_id,
+            2 => &mut self.attributes,
+            3 => &mut self.left_x_position,
+            _ => unreachable!(),
+        }
+    }
+}
+
+struct Oam {
+    oam: Vec<u8>,
+    shift_registers: Vec<u8>,
+    counters: Vec<i16>,
+    num_sprites: usize,
+}
+
+impl Oam {
+    pub fn new(num_sprites: usize) -> Self {
+        Oam {
+            oam: vec![0; num_sprites * 4],
+            shift_registers: vec![0; num_sprites],
+            counters: vec![0; num_sprites],
+            num_sprites: 0,
+        }
+    }
+
+    pub fn get_sprite(&self, sprite: usize) -> Sprite {
+        let start = sprite * 4;
+        let end = (sprite + 1) * 4;
+        let slice = &self.oam[start..end];
+
+        Sprite {
+            top_y_position: slice[0],
+            tile_id: slice[1],
+            attributes: slice[2],
+            left_x_position: slice[3],
+        }
+    }
+
+    pub fn copy_sprite(&mut self, oam: &Oam, sprite_num: usize) {
+        if self.is_full() {
+            return;
+        }
+
+        let sprite = oam.get_sprite(sprite_num);
+        self.oam[self.num_sprites] = sprite.top_y_position;
+        self.oam[self.num_sprites + 1] = sprite.tile_id;
+        self.oam[self.num_sprites + 2] = sprite.attributes;
+        self.oam[self.num_sprites + 3] = sprite.left_x_position;
+
+        self.num_sprites += 1;
+    }
+
+    pub fn copy(&mut self, oam: &Oam) {
+        self.oam.copy_from_slice(&oam.oam);
+
+        // Initialize the counters, reset the shifters
+        for sprite in 0..self.oam.len() {
+            self.counters[sprite] = self.get_sprite(sprite).left_x_position.into();
+            self.shift_registers[sprite] = 0;
+        }
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.num_sprites == self.oam.len() / 4
+    }
+
+    pub fn decrement_counters(&mut self) {
+        for counter in &mut self.counters {
+            *counter -= 1;
+        }
+    }
+
+    pub fn shift_sprites_into_registers(&mut self) {
+        for sprite in 0..self.counters.len() {
+            // Only shift the ones in range.
+            if self.counters[sprite] <= 0 && self.counters[sprite] > -8 {
+                let register = &mut self.shift_registers[sprite];
+                // TODO: replace "bit" with next bit to shift into register
+                let bit = 1;
+                *register = (bit << 7) | ((*register >> 1) & 0x7F);
+            }
+        }
+    }
+}
+
+impl Index<usize> for Oam {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &u8 {
+        &self.oam[index]
+    }
+}
+
+impl IndexMut<usize> for Oam {
+    fn index_mut(&mut self, index: usize) -> &mut u8 {
+        &mut self.oam[index]
+    }
+}
+
 pub struct Ricoh2c02 {
     bus: Rc<RefCell<Bus>>,
-    primary_oam: [u8; 0x100],
-    secondary_oam: [u8; 0x20],
+    primary_oam: Oam,
+    secondary_oam: Oam,
+    current_scanline_oam: Oam,
     scanline: u32,
     cycle: u32,
     ppu_ctrl: PpuCtrl,
@@ -294,6 +458,8 @@ pub struct Ricoh2c02 {
     palette: [(u8, u8, u8); 0x40],
     screen: [[(u8, u8, u8); 0x100]; 0xF0],
     palette_ram: [u8; 0x20],
+    current_sprite_number: u8,
+    current_sprite_byte: u8,
 }
 
 const CYCLES_PER_SCANLINE: u32 = 341;
@@ -303,8 +469,9 @@ impl Ricoh2c02 {
     pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
         Ricoh2c02 {
             bus: Rc::clone(bus),
-            primary_oam: [0; 0x100],
-            secondary_oam: [0; 0x20],
+            primary_oam: Oam::new(64),
+            secondary_oam: Oam::new(8),
+            current_scanline_oam: Oam::new(8),
             cycle: 0,
             scanline: 261,
             ppu_ctrl: PpuCtrl::new(),
@@ -328,6 +495,8 @@ impl Ricoh2c02 {
             palette: Self::get_palette(),
             screen: [[(0, 0, 0); 0x100]; 0xF0],
             palette_ram: [0; 0x20],
+            current_sprite_number: 0,
+            current_sprite_byte: 0,
         }
     }
 
@@ -458,7 +627,12 @@ impl Ricoh2c02 {
             0x2003 => self.oam_addr = data,
             0x2004 => {
                 let address = self.oam_addr;
-                self.oam_addr = self.oam_addr.wrapping_add(1);
+
+                // Only allow writes to OAM when PPU is not rendering.
+                if self.rendering_enabled() && !self.ppu_status.get_vertical_blank_started() {
+                    return;
+                }
+
                 self.primary_oam[address as usize] = data;
             }
             0x2005 => {
@@ -745,6 +919,95 @@ impl Ricoh2c02 {
         }
     }
 
+    fn sprite_evaluation(&mut self) {
+        match self.scanline {
+            1..=239 | 261 => match self.cycle {
+                // Initialize secondary OAM to 0xFF, alternating reads and writes
+                1..=64 => match self.cycle % 2 {
+                    0 => self.secondary_oam[(self.cycle / 2) as usize] = 0xFF,
+                    // Fake reads on odd cycles
+                    1 => return,
+                    _ => unreachable!(),
+                },
+                65..=256 => {
+                    if self.cycle == 65 {
+                        self.current_sprite_number = 0;
+                        self.current_sprite_byte = 0;
+                    }
+
+                    // Don't do anything on fake odd read cycles
+                    if self.cycle % 2 != 0 {
+                        return;
+                    }
+
+                    // If the current sprite byte is non-zero, we're currently copying a
+                    // sprite into secondary OAM
+                    if self.current_sprite_byte > 0 {
+                        self.current_sprite_byte += 1;
+
+                        if self.current_sprite_byte == 4 {
+                            // If we hit 4 bytes, we're onto the next sprite.
+                            self.current_sprite_byte = 0;
+                            self.current_sprite_number += 1;
+                        } else if !self.secondary_oam.is_full() {
+                            // If we haven't hit 4 bytes yet, we're still on the current sprite.
+                            // We've already done the work to copy the sprite on the 0th byte,
+                            // so we can just return.
+                            //
+                            // We don't return when secondary OAM is full to allow sprite overflow
+                            // evaluation to still occur.
+                            return;
+                        }
+                    }
+
+                    // All 64 sprites have been evaluated.
+                    if self.current_sprite_number == 64 {
+                        return;
+                    }
+
+                    let next_sprite = self
+                        .primary_oam
+                        .get_sprite(self.current_sprite_number.into());
+
+                    if self.secondary_oam.is_full() {
+                        // Evaluate sprite overflow, with bug that treats the
+                        // other parts of the sprite as the top Y position.
+                        if next_sprite.in_range_with_sprite_overflow_bug(
+                            self.scanline,
+                            self.ppu_ctrl.get_sprite_height(),
+                            self.current_sprite_byte.into(),
+                        ) {
+                            self.current_sprite_byte += 1;
+                            self.ppu_status.set_sprite_overflow(true);
+                        } else {
+                            self.current_sprite_number += 1;
+                            // This is the sprite overflow bug.
+                            // The byte should really not be incremented.
+                            self.current_sprite_byte += 1;
+                        }
+                    }
+
+                    // If we get here, secondary OAM is not full
+                    // and we still have sprites to evaluate.
+                    if next_sprite.in_range(self.scanline, self.ppu_ctrl.get_sprite_height()) {
+                        self.secondary_oam
+                            .copy_sprite(&self.primary_oam, self.current_sprite_number.into());
+                        self.current_sprite_byte = 1;
+                    } else {
+                        // Not in range. Move onto the next one...
+                        self.current_sprite_number += 1;
+                    }
+                }
+                340 => {
+                    // Copy the entire secondary OAM into the OAM to be used for the next scanline.
+                    self.current_scanline_oam.copy(&self.secondary_oam);
+                }
+                _ => (),
+            },
+            _ => {}
+        }
+    }
+
     pub fn clock(&mut self, nmi_enable: &mut bool) -> bool {
         if self.scanline == 0 && self.cycle == 0 && self.odd_frame && self.rendering_enabled() {
             // Idle cycle, unless it's an odd frame and rendering is enabled.
@@ -789,6 +1052,11 @@ impl Ricoh2c02 {
             },
             _ => (),
         }
+
+        // Sprite evaluation and rendering
+        self.sprite_evaluation();
+        self.current_scanline_oam.decrement_counters();
+        self.current_scanline_oam.shift_sprites_into_registers();
 
         if self.cycle < 256 && self.scanline < 240 {
             self.screen[self.scanline as usize][self.cycle as usize] = self.calculate_pixel();
