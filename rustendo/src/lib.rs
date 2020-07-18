@@ -127,7 +127,7 @@ pub fn render(byte_array: Uint8Array) {
 }
 
 fn load_cartridge(byte_array: Uint8Array) -> Nes {
-    let nes = Nes::new();
+    let mut nes = Nes::new();
 
     let vec = byte_array.to_vec();
     let cartridge = Cartridge::new(vec);
@@ -175,9 +175,8 @@ fn setup_keydown_handler(nes: &Rc<RefCell<Nes>>) {
     let nes = Rc::clone(nes);
 
     let keydown_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        let nes = nes.borrow();
+        let mut nes = nes.borrow_mut();
         let controller = nes.controller();
-        let mut controller = controller.borrow_mut();
 
         match event.key().as_str() {
             "a" | "A" => controller.press_a(),
@@ -200,9 +199,8 @@ fn setup_keyup_handler(nes: &Rc<RefCell<Nes>>) {
     let nes = Rc::clone(nes);
 
     let keyup_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        let nes = nes.borrow();
+        let mut nes = nes.borrow_mut();
         let controller = nes.controller();
-        let mut controller = controller.borrow_mut();
 
         match event.key().as_str() {
             "a" | "A" => controller.lift_a(),

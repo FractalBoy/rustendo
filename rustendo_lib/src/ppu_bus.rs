@@ -1,53 +1,68 @@
 use crate::cartridge::{Cartridge, MirroringType};
 use crate::ppu_ram::Ram;
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::ricoh2c02::Ricoh2c02;
 
 pub struct Bus {
-    cartridge: Option<Rc<RefCell<Cartridge>>>,
     ram: Ram,
+    pub ppu: Ricoh2c02
 }
 
 impl Bus {
     pub fn new() -> Self {
         Bus {
-            cartridge: None,
             ram: Ram::new(),
+            ppu: Ricoh2c02::new()
         }
     }
 
-    pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
-        self.cartridge = Some(Rc::clone(cartridge));
-    }
-
-    pub fn ppu_read(&self, address: u16) -> u8 {
+    pub fn ppu_read(&self, cartridge: &Option<Cartridge>, address: u16) -> u8 {
         match address {
-            0x0000..=0x1FFF => match &self.cartridge {
-                Some(cartridge) => cartridge.borrow().ppu_read(address),
+            0x0000..=0x1FFF => match cartridge {
+                Some(cartridge) => cartridge.ppu_read(address),
                 None => 0,
             },
-            0x2000..=0x3EFF => match &self.cartridge {
-                Some(cartridge) => self.ram.read(cartridge.borrow().mirroring_type(), address),
+            0x2000..=0x3EFF => match cartridge {
+                Some(cartridge) => self.ram.read(cartridge.mirroring_type(), address),
                 None => self.ram.read(MirroringType::Vertical, address),
             },
             _ => 0,
         }
     }
 
-    pub fn ppu_write(&mut self, address: u16, data: u8) {
+    pub fn ppu_write(&mut self, cartridge: &mut Option<Cartridge>, address: u16, data: u8) {
         match address {
-            0x0000..=0x1FFF => match &self.cartridge {
-                Some(cartridge) => cartridge.borrow_mut().ppu_write(address, data),
+            0x0000..=0x1FFF => match cartridge {
+                Some(cartridge) => cartridge.ppu_write(address, data),
                 None => (),
             },
-            0x2000..=0x3EFF => match &self.cartridge {
+            0x2000..=0x3EFF => match cartridge {
                 Some(cartridge) => {
                     self.ram
-                        .write(cartridge.borrow().mirroring_type(), address, data)
+                        .write(cartridge.mirroring_type(), address, data)
                 }
                 None => self.ram.write(MirroringType::Vertical, address, data),
             },
             _ => (),
         }
+    }
+
+    pub fn cpu_read(&mut self, cartridge: &Option<Cartridge>, address: u16) -> u8 {
+        let mut ppu = std::mem::replace(&mut self.ppu, Ricoh2c02::new());
+        let data = ppu.cpu_read(self, cartridge, address);
+        self.ppu = ppu;
+        data
+    }
+
+    pub fn cpu_write(&mut self, cartridge: &mut Option<Cartridge>, address: u16, data: u8) {
+        let mut ppu = std::mem::replace(&mut self.ppu, Ricoh2c02::new());
+        ppu.cpu_write(self, cartridge, address, data);
+        self.ppu = ppu;
+    }
+
+    pub fn clock(&mut self, cartridge: &mut Option<Cartridge>, nmi_enable: &mut bool) -> bool {
+        let mut ppu = std::mem::replace(&mut self.ppu, Ricoh2c02::new());
+        let frame_complete = ppu.clock(self, cartridge, nmi_enable);
+        self.ppu = ppu;
+        frame_complete
     }
 }

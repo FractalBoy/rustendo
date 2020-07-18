@@ -1,27 +1,26 @@
 use crate::cartridge::Cartridge;
 use crate::controller::Controller;
 use crate::cpu_ram::Ram;
-use crate::ricoh2c02::Ricoh2c02;
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::ppu_bus::Bus as PpuBus;
+use crate::mos6502::Mos6502;
 
 pub struct Bus {
     ram: Ram,
-    ppu: Rc<RefCell<Ricoh2c02>>,
-    cartridge: Option<Rc<RefCell<Cartridge>>>,
-    controller: Rc<RefCell<Controller>>,
+    pub cpu: Mos6502,
+    pub ppu_bus: PpuBus,
+    controller: Controller,
     // This ram is used only for testing.
     test_ram: Option<[u8; 0x10000]>,
     dma_transfer: Option<u8>,
 }
 
 impl Bus {
-    pub fn new(ppu: &Rc<RefCell<Ricoh2c02>>) -> Self {
+    pub fn new() -> Self {
         let mut bus = Bus {
             ram: Ram::new(),
-            ppu: Rc::clone(ppu),
-            cartridge: None,
-            controller: Rc::new(RefCell::new(Controller::new())),
+            cpu: Mos6502::new(),
+            ppu_bus: PpuBus::new(),
+            controller: Controller::new(),
             test_ram: None,
             dma_transfer: None,
         };
@@ -34,8 +33,15 @@ impl Bus {
         bus
     }
 
-    pub fn controller(&self) -> Rc<RefCell<Controller>> {
-        Rc::clone(&self.controller)
+    pub fn clock(&mut self, cartridge: &mut Option<Cartridge>) -> bool {
+        let mut cpu = std::mem::replace(&mut self.cpu, Mos6502::new());
+        let instruction_complete = cpu.clock(self, cartridge);
+        self.cpu = cpu;
+        instruction_complete
+    }
+
+    pub fn controller(&mut self) -> &mut Controller {
+        &mut self.controller
     }
 
     pub fn get_dma_transfer(&self) -> Option<u8> {
@@ -46,18 +52,14 @@ impl Bus {
         self.dma_transfer = None;
     }
 
-    pub fn load_cartridge(&mut self, cartridge: &Rc<RefCell<Cartridge>>) {
-        self.cartridge = Some(Rc::clone(cartridge));
-    }
-
-    pub fn cpu_write(&mut self, address: u16, data: u8) {
+    pub fn cpu_write(&mut self, cartridge: &mut Option<Cartridge>, address: u16, data: u8) {
         match address {
             0x0000..=0x1FFF => self.ram.write(address, data),
-            0x2000..=0x3FFF => self.ppu.borrow_mut().cpu_write(address & 0x2007, data),
+            0x2000..=0x3FFF => self.ppu_bus.cpu_write(cartridge, address & 0x2007, data),
             0x4014 => self.dma_transfer = Some(data),
-            0x4016 => self.controller().borrow_mut().latch(),
-            0x4020..=0xFFFF => match &self.cartridge {
-                Some(mapper) => mapper.borrow_mut().cpu_write(address, data),
+            0x4016 => self.controller.latch(),
+            0x4020..=0xFFFF => match cartridge {
+                Some(mapper) => mapper.cpu_write(address, data),
                 None => self.set_test_ram(address, data),
             },
             _ => self.set_test_ram(address, data),
@@ -78,13 +80,13 @@ impl Bus {
         }
     }
 
-    pub fn cpu_read(&self, address: u16) -> u8 {
+    pub fn cpu_read(&mut self, cartridge: &Option<Cartridge>, address: u16) -> u8 {
         match address {
             0x0..=0x1FFF => self.ram.read(address),
-            0x2000..=0x3FFF => self.ppu.borrow_mut().cpu_read(address & 0x2007),
-            0x4016 => self.controller().borrow_mut().read_button(),
-            0x4020..=0xFFFF => match &self.cartridge {
-                Some(cartridge) => cartridge.borrow().cpu_read(address),
+            0x2000..=0x3FFF => self.ppu_bus.cpu_read(cartridge, address & 0x2007),
+            0x4016 => self.controller.read_button(),
+            0x4020..=0xFFFF => match cartridge {
+                Some(cartridge) => cartridge.cpu_read(address),
                 None => self.get_test_ram(address),
             },
             _ => self.get_test_ram(address),
