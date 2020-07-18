@@ -1479,7 +1479,7 @@ mod tests {
     use crate::assembler::{self, AssemblerError};
     use crate::cpu_bus::Bus as CpuBus;
 
-    fn run_program(program: &str) -> CpuBus {
+    fn run_program(program: &str) -> Box<CpuBus> {
         match assembler::run_program(program) {
             Ok(bus) => bus,
             Err(error) => {
