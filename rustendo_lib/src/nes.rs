@@ -74,26 +74,26 @@ impl Nes {
         }
 
         if self.clocks % 2 == 0 {
-            self.dma_data = self.cpu_bus.borrow().cpu_read(current_addr);
+            self.dma_data = self.bus.cpu_read(&self.cartridge, current_addr);
         } else {
-            self.ppu.borrow_mut().oam_dma(self.dma_cycle, self.dma_data);
+            self.bus.ppu_bus.ppu.oam_dma(self.dma_cycle, self.dma_data);
             self.dma_cycle = self.dma_cycle.wrapping_add(1);
         }
 
         // End the DMA transfer after 256 bytes are copied.
         if self.dma_cycle == 0x100 {
-            self.cpu_bus.borrow_mut().end_dma_transfer();
+            self.bus.end_dma_transfer();
             self.dma_dummy = true;
             self.dma_cycle = 0;
         }
     }
 
-    pub fn get_screen(&self) -> [[(u8, u8, u8); 0x100]; 0xF0] {
-        self.ppu.borrow().get_screen()
+    pub fn get_screen(&self) -> &[[(u8, u8, u8); 0x100]; 0xF0] {
+        self.bus.ppu_bus.ppu.get_screen()
     }
 
     pub fn reset(&mut self) {
-        self.cpu.reset();
+        self.bus.cpu.reset();
     }
 }
 
