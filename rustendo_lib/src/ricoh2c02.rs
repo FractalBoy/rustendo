@@ -398,13 +398,13 @@ impl Oam {
     }
 
     pub fn decrement_counters(&mut self) {
-        for counter in &mut self.counters {
-            *counter -= 1;
+        for sprite in 0..self.num_sprites {
+            self.counters[sprite] -= 1;
         }
     }
 
     pub fn shift_sprites_into_registers(&mut self) {
-        for sprite in 0..self.counters.len() {
+        for sprite in 0..self.num_sprites {
             // Only shift the ones in range.
             if self.counters[sprite] <= 0 && self.counters[sprite] > -8 {
                 let register = &mut self.shift_registers[sprite];
