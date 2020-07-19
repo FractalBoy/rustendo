@@ -384,9 +384,10 @@ impl Oam {
 
     pub fn copy(&mut self, oam: &Oam) {
         self.oam.copy_from_slice(&oam.oam);
+        self.num_sprites = oam.num_sprites;
 
         // Initialize the counters, reset the shifters
-        for sprite in 0..self.oam.len() {
+        for sprite in 0..self.num_sprites {
             self.counters[sprite] = self.get_sprite(sprite).left_x_position.into();
             self.shift_registers[sprite] = 0;
         }
@@ -927,11 +928,16 @@ impl Ricoh2c02 {
     }
 
     fn sprite_evaluation(&mut self) {
+        // Sprite evaluation only occurs if either background or sprite rendering is enabled
+        if !self.rendering_enabled() {
+            return;
+        }
+
         match self.scanline {
-            1..=239 | 261 => match self.cycle {
+            1..=239 => match self.cycle {
                 // Initialize secondary OAM to 0xFF, alternating reads and writes
                 1..=64 => match self.cycle % 2 {
-                    0 => self.secondary_oam[(self.cycle / 2) as usize] = 0xFF,
+                    0 => self.secondary_oam[((self.cycle - 1) / 2) as usize] = 0xFF,
                     // Fake reads on odd cycles
                     1 => return,
                     _ => unreachable!(),
@@ -948,8 +954,9 @@ impl Ricoh2c02 {
                     }
 
                     // If the current sprite byte is non-zero, we're currently copying a
-                    // sprite into secondary OAM
-                    if self.current_sprite_byte > 0 {
+                    // sprite into secondary OAM.
+                    // Only increment sprite byte / sprite number if the secondary OAM has space.
+                    if self.current_sprite_byte > 0 && self.current_sprite_number != 64 {
                         self.current_sprite_byte += 1;
 
                         if self.current_sprite_byte == 4 {
@@ -992,6 +999,8 @@ impl Ricoh2c02 {
                             // The byte should really not be incremented.
                             self.current_sprite_byte += 1;
                         }
+
+                        return;
                     }
 
                     // If we get here, secondary OAM is not full
