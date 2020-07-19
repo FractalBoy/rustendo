@@ -4,14 +4,16 @@ use crate::ricoh2c02::Ricoh2c02;
 
 pub struct Bus {
     ram: Ram,
-    pub ppu: Ricoh2c02
+    screen: [[(u8, u8, u8); 0x100]; 0xF0],
+    pub ppu: Option<Ricoh2c02>,
 }
 
 impl Bus {
     pub fn new() -> Self {
         Bus {
             ram: Ram::new(),
-            ppu: Ricoh2c02::new()
+            screen: [[(0, 0, 0); 0x100]; 0xF0],
+            ppu: Some(Ricoh2c02::new()),
         }
     }
 
@@ -36,10 +38,7 @@ impl Bus {
                 None => (),
             },
             0x2000..=0x3EFF => match cartridge {
-                Some(cartridge) => {
-                    self.ram
-                        .write(cartridge.mirroring_type(), address, data)
-                }
+                Some(cartridge) => self.ram.write(cartridge.mirroring_type(), address, data),
                 None => self.ram.write(MirroringType::Vertical, address, data),
             },
             _ => (),
@@ -47,22 +46,45 @@ impl Bus {
     }
 
     pub fn cpu_read(&mut self, cartridge: &Option<Cartridge>, address: u16) -> u8 {
-        let mut ppu = std::mem::replace(&mut self.ppu, Ricoh2c02::new());
-        let data = ppu.cpu_read(self, cartridge, address);
-        self.ppu = ppu;
+        let mut data = 0;
+
+        if let Some(mut ppu) = self.ppu.take() {
+            data = ppu.cpu_read(self, cartridge, address);
+            self.ppu = Some(ppu);
+        }
+
         data
     }
 
     pub fn cpu_write(&mut self, cartridge: &mut Option<Cartridge>, address: u16, data: u8) {
-        let mut ppu = std::mem::replace(&mut self.ppu, Ricoh2c02::new());
-        ppu.cpu_write(self, cartridge, address, data);
-        self.ppu = ppu;
+        if let Some(mut ppu) = self.ppu.take() {
+            ppu.cpu_write(self, cartridge, address, data);
+            self.ppu = Some(ppu);
+        }
     }
 
     pub fn clock(&mut self, cartridge: &mut Option<Cartridge>, nmi_enable: &mut bool) -> bool {
-        let mut ppu = std::mem::replace(&mut self.ppu, Ricoh2c02::new());
-        let frame_complete = ppu.clock(self, cartridge, nmi_enable);
-        self.ppu = ppu;
+        let mut frame_complete = false;
+
+        if let Some(mut ppu) = self.ppu.take() {
+            frame_complete = ppu.clock(self, cartridge, nmi_enable);
+            self.ppu = Some(ppu);
+        }
+
         frame_complete
+    }
+
+    pub fn get_screen(&self) -> Box<[[(u8, u8, u8); 0x100]; 0xF0]> {
+        if let Some(ppu) = &self.ppu {
+            ppu.get_screen()
+        } else {
+            Box::new(self.screen)
+        }
+    }
+
+    pub fn oam_dma(&mut self, address: u16, data: u8) {
+        if let Some(ppu) = &mut self.ppu {
+            ppu.oam_dma(address, data);
+        }
     }
 }

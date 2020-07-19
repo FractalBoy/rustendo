@@ -496,9 +496,8 @@ impl Ricoh2c02 {
             current_sprite_byte: 0,
         }
     }
-
-    pub fn get_screen(&self) -> &[[(u8, u8, u8); 0x100]; 0xF0] {
-        &self.screen
+    pub fn get_screen(&self) -> Box<[[(u8, u8, u8); 0x100]; 0xF0]> {
+        Box::new(self.screen)
     }
 
     fn get_palette() -> [(u8, u8, u8); 0x40] {

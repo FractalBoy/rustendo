@@ -6,7 +6,7 @@ use crate::mos6502::Mos6502;
 
 pub struct Bus {
     ram: Ram,
-    pub cpu: Mos6502,
+    cpu: Option<Mos6502>,
     pub ppu_bus: PpuBus,
     controller: Controller,
     // This ram is used only for testing.
@@ -18,7 +18,7 @@ impl Bus {
     pub fn new() -> Self {
         let mut bus = Bus {
             ram: Ram::new(),
-            cpu: Mos6502::new(),
+            cpu: Some(Mos6502::new()),
             ppu_bus: PpuBus::new(),
             controller: Controller::new(),
             test_ram: None,
@@ -34,10 +34,26 @@ impl Bus {
     }
 
     pub fn clock(&mut self, cartridge: &mut Option<Cartridge>) -> bool {
-        let mut cpu = std::mem::replace(&mut self.cpu, Mos6502::new());
-        let instruction_complete = cpu.clock(self, cartridge);
-        self.cpu = cpu;
+        let mut instruction_complete = false;
+
+        if let Some(mut cpu) = self.cpu.take() {
+            instruction_complete = cpu.clock(self, cartridge);
+            self.cpu = Some(cpu);
+        }
+
         instruction_complete
+    }
+
+    pub fn reset(&mut self) {
+        if let Some(cpu) = &mut self.cpu {
+            cpu.reset();
+        }
+    }
+
+    pub fn nmi(&mut self) {
+        if let Some(cpu) = &mut self.cpu {
+            cpu.nmi();
+        }
     }
 
     pub fn controller(&mut self) -> &mut Controller {

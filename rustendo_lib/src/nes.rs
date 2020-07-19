@@ -53,7 +53,7 @@ impl Nes {
         }
 
         if nmi_enable {
-            self.bus.cpu.nmi();
+            self.bus.nmi();
         }
 
         self.clocks = self.clocks.wrapping_add(1);
@@ -76,7 +76,7 @@ impl Nes {
         if self.clocks % 2 == 0 {
             self.dma_data = self.bus.cpu_read(&self.cartridge, current_addr);
         } else {
-            self.bus.ppu_bus.ppu.oam_dma(self.dma_cycle, self.dma_data);
+            self.bus.ppu_bus.oam_dma(self.dma_cycle, self.dma_data);
             self.dma_cycle = self.dma_cycle.wrapping_add(1);
         }
 
@@ -88,12 +88,12 @@ impl Nes {
         }
     }
 
-    pub fn get_screen(&self) -> &[[(u8, u8, u8); 0x100]; 0xF0] {
-        self.bus.ppu_bus.ppu.get_screen()
+    pub fn get_screen(&self) -> Box<[[(u8, u8, u8); 0x100]; 0xF0]> {
+        self.bus.ppu_bus.get_screen()
     }
 
     pub fn reset(&mut self) {
-        self.bus.cpu.reset();
+        self.bus.reset();
     }
 }
 
