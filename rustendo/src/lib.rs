@@ -2,7 +2,6 @@ use js_sys::Uint8Array;
 use rustendo_lib::cartridge::Cartridge;
 use rustendo_lib::nes::Nes;
 use std::cell::RefCell;
-use std::f64;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{Clamped, JsCast};
@@ -29,7 +28,7 @@ fn window() -> Window {
     web_sys::window().expect("no global `window` exists")
 }
 
-fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) {
+fn request_animation_frame(f: &Closure<dyn FnMut()>) {
     window()
         .request_animation_frame(f.as_ref().unchecked_ref())
         .unwrap();
@@ -143,29 +142,25 @@ fn setup_animation(nes: &Rc<RefCell<Nes>>) {
     let moved_nes = Rc::clone(nes);
     let nes = Rc::clone(&moved_nes);
 
-    let mut prev_timestamp = 0.0;
     let mut screen = [0; (NES_WIDTH * NES_HEIGHT * 4) as usize];
 
     let moved_closure = Rc::new(RefCell::new(None));
     let closure = Rc::clone(&moved_closure);
 
-    *closure.borrow_mut() = Some(Closure::wrap(Box::new(move |timestamp| {
+    *closure.borrow_mut() = Some(Closure::wrap(Box::new(move || {
         request_animation_frame(moved_closure.borrow().as_ref().unwrap());
 
-        // Only draw once every 1/60th of a second.
-        if timestamp - prev_timestamp >= 1000.0 / 60.0 {
-            while !moved_nes.borrow_mut().clock() {}
-            draw(
-                &mut screen,
-                &context,
-                &canvas,
-                &renderer_context,
-                &renderer,
-                &moved_nes.borrow(),
-            );
-            prev_timestamp = timestamp;
-        }
-    }) as Box<dyn FnMut(f64)>));
+        while !moved_nes.borrow_mut().clock() {}
+
+        draw(
+            &mut screen,
+            &context,
+            &canvas,
+            &renderer_context,
+            &renderer,
+            &moved_nes.borrow(),
+        );
+    }) as Box<dyn FnMut()>));
 
     nes.borrow_mut().reset();
     request_animation_frame(closure.borrow().as_ref().unwrap());
