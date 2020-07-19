@@ -5,9 +5,9 @@ use crate::ppu_bus::Bus as PpuBus;
 use crate::mos6502::Mos6502;
 
 pub struct Bus {
-    ram: Ram,
-    cpu: Option<Mos6502>,
-    pub ppu_bus: PpuBus,
+    ram: Box<Ram>,
+    cpu: Option<Box<Mos6502>>,
+    pub ppu_bus: Box<PpuBus>,
     controller: Controller,
     // This ram is used only for testing.
     test_ram: Option<[u8; 0x10000]>,
@@ -17,9 +17,9 @@ pub struct Bus {
 impl Bus {
     pub fn new() -> Self {
         let mut bus = Bus {
-            ram: Ram::new(),
-            cpu: Some(Mos6502::new()),
-            ppu_bus: PpuBus::new(),
+            ram: Box::new(Ram::new()),
+            cpu: Some(Box::new(Mos6502::new())),
+            ppu_bus: Box::new(PpuBus::new()),
             controller: Controller::new(),
             test_ram: None,
             dma_transfer: None,
@@ -53,6 +53,12 @@ impl Bus {
     pub fn nmi(&mut self) {
         if let Some(cpu) = &mut self.cpu {
             cpu.nmi();
+        }
+    }
+
+    pub fn irq(&mut self) {
+        if let Some(cpu) = &mut self.cpu {
+            cpu.irq();
         }
     }
 

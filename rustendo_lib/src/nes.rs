@@ -3,8 +3,8 @@ use crate::controller::Controller;
 use crate::cpu_bus::Bus as CpuBus;
 
 pub struct Nes {
-    bus: CpuBus,
-    cartridge: Option<Cartridge>,
+    bus: Box<CpuBus>,
+    cartridge: Box<Option<Cartridge>>,
     clocks: u32,
     dma_cycle: u16,
     dma_data: u8,
@@ -14,8 +14,8 @@ pub struct Nes {
 impl Nes {
     pub fn new() -> Self {
         Nes {
-            bus: CpuBus::new(),
-            cartridge: None,
+            bus: Box::new(CpuBus::new()),
+            cartridge: Box::new(None),
             clocks: 0,
             dma_cycle: 0,
             dma_data: 0,
@@ -28,7 +28,7 @@ impl Nes {
     }
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        self.cartridge = Some(cartridge);
+        self.cartridge = Box::new(Some(cartridge));
     }
 
     pub fn clock(&mut self) -> bool {

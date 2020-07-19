@@ -3,17 +3,17 @@ use crate::ppu_ram::Ram;
 use crate::ricoh2c02::Ricoh2c02;
 
 pub struct Bus {
-    ram: Ram,
-    screen: [[(u8, u8, u8); 0x100]; 0xF0],
-    pub ppu: Option<Ricoh2c02>,
+    ram: Box<Ram>,
+    screen: Box<[[(u8, u8, u8); 0x100]; 0xF0]>,
+    pub ppu: Option<Box<Ricoh2c02>>,
 }
 
 impl Bus {
     pub fn new() -> Self {
         Bus {
-            ram: Ram::new(),
-            screen: [[(0, 0, 0); 0x100]; 0xF0],
-            ppu: Some(Ricoh2c02::new()),
+            ram: Box::new(Ram::new()),
+            screen: Box::new([[(0, 0, 0); 0x100]; 0xF0]),
+            ppu: Some(Box::new(Ricoh2c02::new())),
         }
     }
 
@@ -78,7 +78,7 @@ impl Bus {
         if let Some(ppu) = &self.ppu {
             ppu.get_screen()
         } else {
-            Box::new(self.screen)
+            self.screen.clone()
         }
     }
 

@@ -704,6 +704,10 @@ impl Mos6502 {
         self.not_nmi = false;
     }
 
+    pub fn irq(&mut self) {
+        self.not_irq = false;
+    }
+
     fn write_address(&mut self, address_high: u8, address_low: u8) {
         self.address_bus.write(address_high, address_low);
     }
@@ -2479,7 +2483,7 @@ mod tests {
         }
 
         // Interrupt
-        bus.cpu.not_irq = false;
+        bus.irq();
 
         // Do interrupt and two instructions
         for _ in 0..3 {

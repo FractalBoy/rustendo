@@ -454,7 +454,7 @@ pub struct Ricoh2c02 {
     address_latch: bool,
     odd_frame: bool,
     palette: [(u8, u8, u8); 0x40],
-    screen: [[(u8, u8, u8); 0x100]; 0xF0],
+    screen: Box<[[(u8, u8, u8); 0x100]; 0xF0]>,
     palette_ram: [u8; 0x20],
     current_sprite_number: u8,
     current_sprite_byte: u8,
@@ -490,14 +490,14 @@ impl Ricoh2c02 {
             bg_attr_lsb_shifter: 0,
             fine_x_scroll: 0,
             palette: Self::get_palette(),
-            screen: [[(0, 0, 0); 0x100]; 0xF0],
+            screen: Box::new([[(0, 0, 0); 0x100]; 0xF0]),
             palette_ram: [0; 0x20],
             current_sprite_number: 0,
             current_sprite_byte: 0,
         }
     }
     pub fn get_screen(&self) -> Box<[[(u8, u8, u8); 0x100]; 0xF0]> {
-        Box::new(self.screen)
+        self.screen.clone()
     }
 
     fn get_palette() -> [(u8, u8, u8); 0x40] {
