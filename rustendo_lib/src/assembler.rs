@@ -1,11 +1,7 @@
 use crate::cpu_bus::Bus as CpuBus;
-use crate::ppu_bus::Bus as PpuBus;
-use crate::ricoh2c02::Ricoh2c02;
-use crate::mos6502::{AddressingMode, Mos6502};
+use crate::mos6502::AddressingMode;
 use regex::Regex;
 use std::borrow::Cow;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum AssemblerError {
@@ -236,7 +232,7 @@ pub fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
 }
 
 #[allow(dead_code)]
-pub fn run_program(program: &str) -> Result<Rc<RefCell<CpuBus>>, AssemblerError> {
+pub fn run_program(program: &str) -> Result<Box<CpuBus>, AssemblerError> {
     let program = match assemble_program(&program) {
         Ok(program) => program,
         Err(error) => return Err(error),
@@ -246,22 +242,20 @@ pub fn run_program(program: &str) -> Result<Rc<RefCell<CpuBus>>, AssemblerError>
         mem.extend_from_slice(&instruction);
     }
 
-    let ppu_bus = Rc::new(RefCell::new(PpuBus::new()));
-    let ppu = Rc::new(RefCell::new(Ricoh2c02::new(&ppu_bus)));
-    let cpu_bus = Rc::new(RefCell::new(CpuBus::new(&ppu)));
+    let mut bus = CpuBus::new();
 
     let mut location: u16 = 0;
 
     for byte in mem {
-        cpu_bus.borrow_mut().cpu_write(location, byte);
+        bus.cpu_write(&mut None, location, byte);
         location += 1;
     }
 
-    let mut cpu = Mos6502::new(&cpu_bus);
     for _ in 0..program.len() {
-        while !cpu.clock() {}
+        while !bus.clock(&mut None) {}
     }
-    Ok(Rc::clone(&cpu_bus))
+
+    Ok(Box::new(bus))
 }
 
 fn lookup_instruction(instruction: &str, addressing_mode: AddressingMode) -> Option<u8> {

@@ -1,8 +1,7 @@
+use crate::cartridge::Cartridge;
 use crate::cpu_bus::Bus;
-use std::cell::RefCell;
 use std::fmt::{Display, Error, Formatter};
 use std::ops::Deref;
-use std::rc::Rc;
 
 const NEGATIVE_ONE: u8 = !1 + 1;
 
@@ -50,30 +49,23 @@ impl AddressBus {
 struct ProgramCounter {
     pch: u8,
     pcl: u8,
-    data_bus: Rc<RefCell<DataBus>>,
-    address_bus: Rc<RefCell<AddressBus>>,
 }
 
 impl ProgramCounter {
-    pub fn new(data_bus: &Rc<RefCell<DataBus>>, address_bus: &Rc<RefCell<AddressBus>>) -> Self {
-        ProgramCounter {
-            pch: 0,
-            pcl: 0,
-            data_bus: Rc::clone(data_bus),
-            address_bus: Rc::clone(address_bus),
-        }
+    pub fn new() -> Self {
+        ProgramCounter { pch: 0, pcl: 0 }
     }
 
-    pub fn write_to_address_bus(&self) {
-        self.address_bus.borrow_mut().write(self.pch, self.pcl);
+    pub fn write_to_address_bus(&self, address_bus: &mut AddressBus) {
+        address_bus.write(self.pch, self.pcl);
     }
 
-    pub fn read_high_from_data_bus(&mut self) {
-        self.pch = self.data_bus.borrow().read();
+    pub fn read_high_from_data_bus(&mut self, data_bus: &DataBus) {
+        self.pch = data_bus.read();
     }
 
-    pub fn read_low_from_data_bus(&mut self) {
-        self.pcl = self.data_bus.borrow().read();
+    pub fn read_low_from_data_bus(&mut self, data_bus: &DataBus) {
+        self.pcl = data_bus.read();
     }
 
     pub fn read_low(&self) -> u8 {
@@ -174,19 +166,15 @@ impl Display for StatusRegister {
 
 struct InstructionRegister {
     data: u8,
-    data_bus: Rc<RefCell<DataBus>>,
 }
 
 impl InstructionRegister {
-    pub fn new(data_bus: &Rc<RefCell<DataBus>>) -> Self {
-        InstructionRegister {
-            data: 0,
-            data_bus: Rc::clone(data_bus),
-        }
+    pub fn new() -> Self {
+        InstructionRegister { data: 0 }
     }
 
-    pub fn read_from_bus(&mut self) {
-        self.data = self.data_bus.borrow().read();
+    pub fn read_from_bus(&mut self, data_bus: &DataBus) {
+        self.data = data_bus.read();
     }
 
     pub fn decode_instruction(&self) -> Instruction {
@@ -562,23 +550,19 @@ impl Display for Instruction {
 
 struct Accumulator {
     data: u8,
-    data_bus: Rc<RefCell<DataBus>>,
 }
 
 impl Accumulator {
-    pub fn new(data_bus: &Rc<RefCell<DataBus>>) -> Self {
-        Accumulator {
-            data: 0,
-            data_bus: Rc::clone(data_bus),
-        }
+    pub fn new() -> Self {
+        Accumulator { data: 0 }
     }
 
-    pub fn write_to_bus(&self) {
-        self.data_bus.borrow_mut().write(self.data);
+    pub fn write_to_bus(&self, data_bus: &mut DataBus) {
+        data_bus.write(self.data);
     }
 
-    pub fn read_from_bus(&mut self) {
-        self.data = self.data_bus.borrow().read();
+    pub fn read_from_bus(&mut self, data_bus: &DataBus) {
+        self.data = data_bus.read();
     }
 
     pub fn write(&mut self, data: u8) {
@@ -598,22 +582,21 @@ impl Deref for Accumulator {
     }
 }
 
-struct Alu {
-    data_bus: Rc<RefCell<DataBus>>,
-    accumulator: Rc<RefCell<Accumulator>>,
-}
+struct Alu;
 
 impl Alu {
-    pub fn new(data_bus: &Rc<RefCell<DataBus>>, accumulator: &Rc<RefCell<Accumulator>>) -> Self {
-        Alu {
-            data_bus: Rc::clone(data_bus),
-            accumulator: Rc::clone(accumulator),
-        }
+    pub fn new() -> Self {
+        Alu
     }
 
-    pub fn add_with_carry(&mut self, p: &mut StatusRegister) {
-        let accumulator_data = self.accumulator.borrow().read();
-        let bus_data = self.data_bus.borrow().read();
+    pub fn add_with_carry(
+        &mut self,
+        accumulator: &mut Accumulator,
+        data_bus: &mut DataBus,
+        p: &mut StatusRegister,
+    ) {
+        let accumulator_data = accumulator.read();
+        let bus_data = data_bus.read();
 
         let sum;
 
@@ -626,14 +609,19 @@ impl Alu {
         sum = (bin & 0xFF) as u8;
         p.zero = sum == 0;
 
-        self.accumulator.borrow_mut().write(sum);
+        accumulator.write(sum);
         p.negative = sum & 0x80 == 0x80;
         p.overflow = ((accumulator_data ^ sum) & (bus_data ^ sum) & 0x80) == 0x80
     }
 
-    pub fn subtract_with_borrow(&mut self, p: &mut StatusRegister) {
-        let accumulator_data = self.accumulator.borrow().read();
-        let bus_data = self.data_bus.borrow().read();
+    pub fn subtract_with_borrow(
+        &mut self,
+        accumulator: &mut Accumulator,
+        data_bus: &mut DataBus,
+        p: &mut StatusRegister,
+    ) {
+        let accumulator_data = accumulator.read();
+        let bus_data = data_bus.read();
 
         let bin = (accumulator_data as u16)
             .wrapping_add((!bus_data) as u16)
@@ -644,7 +632,7 @@ impl Alu {
 
         let sum = (bin & 0xFF) as u8;
 
-        self.accumulator.borrow_mut().write(sum);
+        accumulator.write(sum);
         p.zero = sum == 0;
         p.negative = sum & 0x80 == 0x80;
         p.overflow = ((accumulator_data ^ sum) & (!bus_data ^ sum) & 0x80) == 0x80
@@ -653,7 +641,7 @@ impl Alu {
 
 pub struct Mos6502 {
     /// Accumulator
-    a: Rc<RefCell<Accumulator>>,
+    a: Accumulator,
     /// ALU
     alu: Alu,
     /// X index register
@@ -661,7 +649,7 @@ pub struct Mos6502 {
     /// Y index register
     y: u8,
     /// Program counter
-    pc: Rc<RefCell<ProgramCounter>>,
+    pc: ProgramCounter,
     /// Stack register
     s: u8,
     /// Status register
@@ -669,11 +657,9 @@ pub struct Mos6502 {
     /// Instruction register
     instruction_register: InstructionRegister,
     /// Internal data bus buffer
-    data_bus: Rc<RefCell<DataBus>>,
+    data_bus: DataBus,
     /// Internal address bus
-    address_bus: Rc<RefCell<AddressBus>>,
-    /// External bus
-    bus: Rc<RefCell<Bus>>,
+    address_bus: AddressBus,
     /// Number of cycles remaining in current instruction
     cycles: u32,
     not_irq: bool,
@@ -690,36 +676,18 @@ enum IndexRegister {
 
 impl Mos6502 {
     /// Initializes a new `Mos6502` processor emulator.
-    pub fn new(bus: &Rc<RefCell<Bus>>) -> Self {
-        let data_bus = DataBus::new();
-        let data_bus = Rc::new(RefCell::new(data_bus));
-
-        let address_bus = AddressBus::new();
-        let address_bus = Rc::new(RefCell::new(address_bus));
-
-        let a = Accumulator::new(&data_bus);
-        let a = Rc::new(RefCell::new(a));
-
-        let pc = ProgramCounter::new(&data_bus, &address_bus);
-        let pc = Rc::new(RefCell::new(pc));
-
-        let p = StatusRegister::new();
-
-        let alu = Alu::new(&data_bus, &a);
-        let instruction_register = InstructionRegister::new(&data_bus);
-
+    pub fn new() -> Self {
         Mos6502 {
-            a,
-            alu,
-            instruction_register,
+            a: Accumulator::new(),
+            alu: Alu::new(),
+            instruction_register: InstructionRegister::new(),
             x: 0,
             y: 0,
-            pc,
+            pc: ProgramCounter::new(),
             s: 0xFF,
-            p,
-            data_bus,
-            address_bus,
-            bus: Rc::clone(bus),
+            p: StatusRegister::new(),
+            data_bus: DataBus::new(),
+            address_bus: AddressBus::new(),
             cycles: 0,
             not_irq: true,
             not_nmi: true,
@@ -736,24 +704,23 @@ impl Mos6502 {
         self.not_nmi = false;
     }
 
+    pub fn irq(&mut self) {
+        self.not_irq = false;
+    }
+
     fn write_address(&mut self, address_high: u8, address_low: u8) {
-        self.address_bus
-            .borrow_mut()
-            .write(address_high, address_low);
+        self.address_bus.write(address_high, address_low);
     }
 
-    fn read(&mut self) -> u8 {
-        let address = self.address_bus.borrow().address();
-        let data = self.bus.borrow_mut().cpu_read(address);
-        self.data_bus.borrow_mut().write(data);
-        self.data_bus.borrow().read()
+    fn read(&mut self, bus: &mut Bus, cartridge: &Option<Cartridge>) -> u8 {
+        let address = self.address_bus.address();
+        let data = bus.cpu_read(cartridge, address);
+        self.data_bus.write(data);
+        self.data_bus.read()
     }
 
-    fn write(&mut self) {
-        self.bus.borrow_mut().cpu_write(
-            self.address_bus.borrow().address(),
-            self.data_bus.borrow().read(),
-        );
+    fn write(&self, bus: &mut Bus, cartridge: &mut Option<Cartridge>) {
+        bus.cpu_write(cartridge, self.address_bus.address(), self.data_bus.read());
     }
 
     /// Runs the processor for a single clock cycle.
@@ -763,26 +730,26 @@ impl Mos6502 {
     /// the time doing nothing.
     ///
     /// Returns true if the instruction is complete.
-    pub fn clock(&mut self) -> bool {
+    pub fn clock(&mut self, bus: &mut Bus, cartridge: &mut Option<Cartridge>) -> bool {
         if self.cycles == 0 {
             if !self.not_nmi {
-                self.interrupt(7, 0, 0xFFFB, false, false);
+                self.interrupt(bus, cartridge, 7, 0, 0xFFFB, false, false);
                 // Assume NMI should end after reset is complete
                 self.not_nmi = true;
             } else if !self.not_reset {
-                self.interrupt(6, 0, 0xFFFD, true, false);
+                self.interrupt(bus, cartridge, 6, 0, 0xFFFD, true, false);
                 // Set stack pointer to 0xFD to mimic reset
                 self.s = 0xFD;
                 // Assume that reset should end after reset is complete
                 self.not_reset = true;
             } else if !self.not_irq && !self.p.irq_disable {
-                self.interrupt(7, 0, 0xFFFF, false, false);
+                self.interrupt(bus, cartridge, 7, 0, 0xFFFF, false, false);
                 // Assume that IRQ should end after interrupt is complete
                 self.not_irq = true;
             } else {
                 // No interrupt, execute instruction like normal.
-                self.read_instruction();
-                self.execute_instruction();
+                self.read_instruction(bus, cartridge);
+                self.execute_instruction(bus, cartridge);
             }
         }
 
@@ -790,15 +757,15 @@ impl Mos6502 {
         self.cycles == 0
     }
 
-    fn fetch_next_byte(&mut self) -> u8 {
-        self.pc.borrow_mut().increment();
-        self.pc.borrow().write_to_address_bus();
-        self.read()
+    fn fetch_next_byte(&mut self, bus: &mut Bus, cartridge: &Option<Cartridge>) -> u8 {
+        self.pc.increment();
+        self.pc.write_to_address_bus(&mut self.address_bus);
+        self.read(bus, cartridge)
     }
 
-    fn absolute_indexed_addressing(&mut self, index: IndexRegister) {
-        let address_low = self.fetch_next_byte();
-        let address_high = self.fetch_next_byte();
+    fn absolute_indexed_addressing(&mut self, bus: &mut Bus, cartridge: &Option<Cartridge>, index: IndexRegister) {
+        let address_low = self.fetch_next_byte(bus, cartridge);
+        let address_high = self.fetch_next_byte(bus, cartridge);
 
         let register: u8 = match index {
             IndexRegister::X => self.x,
@@ -814,62 +781,70 @@ impl Mos6502 {
             address_high
         };
 
-        self.address_bus
-            .borrow_mut()
-            .write(address_high, address_low);
+        self.address_bus.write(address_high, address_low);
     }
 
-    fn do_addressing_mode(&mut self, mode: AddressingMode) {
-        self.do_addressing_mode_with_branch(mode, false);
+    fn do_addressing_mode(&mut self, bus: &mut Bus, cartridge: &Option<Cartridge>, mode: AddressingMode) {
+        self.do_addressing_mode_with_branch(bus, cartridge, mode, false);
     }
 
-    fn do_addressing_mode_with_branch(&mut self, mode: AddressingMode, take_branch: bool) {
+    fn do_addressing_mode_with_branch(
+        &mut self,
+        bus: &mut Bus,
+        cartridge: &Option<Cartridge>,
+        mode: AddressingMode,
+        take_branch: bool,
+    ) {
         match mode {
             AddressingMode::Absolute => {
-                let address_low = self.fetch_next_byte();
-                let address_high = self.fetch_next_byte();
+                let address_low = self.fetch_next_byte(bus, cartridge);
+                let address_high = self.fetch_next_byte(bus, cartridge);
                 self.write_address(address_high, address_low);
             }
             AddressingMode::Indirect => {
-                let address_low = self.fetch_next_byte();
-                let address_high = self.fetch_next_byte();
+                let address_low = self.fetch_next_byte(bus, cartridge);
+                let address_high = self.fetch_next_byte(bus, cartridge);
 
                 self.write_address(address_high, address_low);
-                let new_address_low = self.read();
+                let new_address_low = self.read(bus, cartridge);
                 self.write_address(address_high, address_low.wrapping_add(1));
-                let new_address_high = self.read();
+                let new_address_high = self.read(bus, cartridge);
                 self.write_address(new_address_high, new_address_low);
             }
-            AddressingMode::AbsoluteX => self.absolute_indexed_addressing(IndexRegister::X),
-            AddressingMode::AbsoluteY => self.absolute_indexed_addressing(IndexRegister::Y),
+            AddressingMode::AbsoluteX => {
+                self.absolute_indexed_addressing(bus, cartridge, IndexRegister::X)
+            }
+            AddressingMode::AbsoluteY => {
+                self.absolute_indexed_addressing(bus, cartridge, IndexRegister::Y)
+            }
             AddressingMode::Accumulator => return,
             AddressingMode::Immediate => {
-                self.pc.borrow_mut().increment();
-                self.pc.borrow().write_to_address_bus();
+                self.pc.increment();
+                self.pc.write_to_address_bus(&mut self.address_bus);
             }
             AddressingMode::Implied => return,
             AddressingMode::IndirectX => {
                 // Indexed indirect addressing with register X
-                let zero_page_offset = self.fetch_next_byte();
+                let zero_page_offset = self.fetch_next_byte(bus, cartridge);
                 let zero_page_offset = zero_page_offset.wrapping_add(self.x);
                 self.write_address(0, zero_page_offset);
-                let address_low = self.read();
+                let address_low = self.read(bus, cartridge);
 
                 let zero_page_offset = zero_page_offset.wrapping_add(1);
                 self.write_address(0, zero_page_offset);
-                let address_high = self.read();
+                let address_high = self.read(bus, cartridge);
 
                 self.write_address(address_high, address_low);
             }
             AddressingMode::IndirectY => {
                 // Indirect indexed addressing with register Y
-                let zero_page_offset = self.fetch_next_byte();
+                let zero_page_offset = self.fetch_next_byte(bus, cartridge);
                 self.write_address(0, zero_page_offset);
-                let address_low = self.read();
+                let address_low = self.read(bus, cartridge);
 
                 let zero_page_offset = zero_page_offset.wrapping_add(1);
                 self.write_address(0, zero_page_offset);
-                let address_high = self.read();
+                let address_high = self.read(bus, cartridge);
 
                 let (address_low, carry) = address_low.overflowing_add(self.y);
                 let address_high = if carry {
@@ -883,16 +858,14 @@ impl Mos6502 {
                 self.write_address(address_high, address_low);
             }
             AddressingMode::Relative => {
-                let offset = self.fetch_next_byte();
+                let offset = self.fetch_next_byte(bus, cartridge);
                 let offset_negative = offset & 0x80 == 0x80;
 
-                let mut pc = self.pc.borrow_mut();
-
                 // PCL + offset -> PCL
-                let (pcl, carry) = pc.read_low().overflowing_add(offset);
+                let (pcl, carry) = self.pc.read_low().overflowing_add(offset);
                 if take_branch {
-                    self.data_bus.borrow_mut().write(pcl);
-                    pc.read_low_from_data_bus();
+                    self.data_bus.write(pcl);
+                    self.pc.read_low_from_data_bus(&self.data_bus);
                 }
 
                 // If the offset was negative, we expect a carry
@@ -912,31 +885,38 @@ impl Mos6502 {
 
                 // PCH + 0 + carry -> PCH
                 let increment = if offset_negative { NEGATIVE_ONE } else { 1 };
-                let pch = pc.read_high().wrapping_add(increment);
+                let pch = self.pc.read_high().wrapping_add(increment);
                 if take_branch {
                     self.cycles += 1;
-                    self.data_bus.borrow_mut().write(pch);
-                    pc.read_high_from_data_bus();
+                    self.data_bus.write(pch);
+                    self.pc.read_high_from_data_bus(&self.data_bus);
                 }
             }
             AddressingMode::ZeroPage => {
-                let zero_page_offset = self.fetch_next_byte();
+                let zero_page_offset = self.fetch_next_byte(bus, cartridge);
                 self.write_address(0, zero_page_offset);
             }
             AddressingMode::ZeroPageX => {
-                let old_zero_page_offset = self.fetch_next_byte();
+                let old_zero_page_offset = self.fetch_next_byte(bus, cartridge);
                 let zero_page_offset = old_zero_page_offset.wrapping_add(self.x);
                 self.write_address(0, zero_page_offset);
             }
             AddressingMode::ZeroPageY => {
-                let old_zero_page_offset = self.fetch_next_byte();
+                let old_zero_page_offset = self.fetch_next_byte(bus, cartridge);
                 let zero_page_offset = old_zero_page_offset.wrapping_add(self.y);
                 self.write_address(0, zero_page_offset);
             }
         }
     }
 
-    fn branch(&mut self, branch: bool, mode: AddressingMode, cycles: u32) {
+    fn branch(
+        &mut self,
+        bus: &mut Bus,
+        cartridge: &Option<Cartridge>,
+        branch: bool,
+        mode: AddressingMode,
+        cycles: u32,
+    ) {
         self.cycles = cycles;
 
         if branch {
@@ -944,15 +924,22 @@ impl Mos6502 {
             self.cycles += 1;
         }
 
-        self.do_addressing_mode_with_branch(mode, branch);
+        self.do_addressing_mode_with_branch(bus, cartridge, mode, branch);
     }
 
-    fn compare(&mut self, mode: AddressingMode, operand: u8, cycles: u32) {
+    fn compare(
+        &mut self,
+        bus: &mut Bus,
+        cartridge: &Option<Cartridge>,
+        mode: AddressingMode,
+        operand: u8,
+        cycles: u32,
+    ) {
         self.cycles = cycles;
 
-        self.do_addressing_mode(mode);
-        self.read();
-        let memory = self.data_bus.borrow().read();
+        self.do_addressing_mode(bus, cartridge, mode);
+        self.read(bus, cartridge);
+        let memory = self.data_bus.read();
 
         let result = operand.wrapping_sub(memory);
 
@@ -972,19 +959,21 @@ impl Mos6502 {
         result
     }
 
-    fn jump(&mut self, mode: AddressingMode, cycles: u32) {
+    fn jump(&mut self, bus: &mut Bus, cartridge: &Option<Cartridge>, mode: AddressingMode, cycles: u32) {
         self.cycles = cycles;
 
-        self.do_addressing_mode(mode);
-        let pc = self.address_bus.borrow().address();
+        self.do_addressing_mode(bus, cartridge, mode);
+        let pc = self.address_bus.address();
 
         // Subtract one to counteract the standard PC increment.
         let pc = pc.wrapping_sub(1);
-        self.pc.borrow_mut().write(pc);
+        self.pc.write(pc);
     }
 
     fn interrupt(
         &mut self,
+        bus: &mut Bus,
+        cartridge: &mut Option<Cartridge>,
         cycles: u32,
         bytes: u32,
         interrupt_vector: u16,
@@ -993,7 +982,7 @@ impl Mos6502 {
     ) {
         self.cycles = cycles;
 
-        let address = self.pc.borrow().wide();
+        let address = self.pc.wide();
         // Store the next instruction in the stack
         let address = address.wrapping_add(bytes as u16);
         let high = ((address & 0xFF00) >> 8) as u8;
@@ -1003,16 +992,16 @@ impl Mos6502 {
         if !suppress_writes {
             self.write_address(0x01, self.s);
             self.s = self.s.wrapping_sub(1);
-            self.data_bus.borrow_mut().write(high);
-            self.write();
+            self.data_bus.write(high);
+            self.write(bus, cartridge);
         }
 
         // A reset suppresses writes to memory.
         if !suppress_writes {
             self.write_address(0x01, self.s);
             self.s = self.s.wrapping_sub(1);
-            self.data_bus.borrow_mut().write(low);
-            self.write();
+            self.data_bus.write(low);
+            self.write(bus, cartridge);
         }
 
         // A reset suppresses writes to memory.
@@ -1029,96 +1018,107 @@ impl Mos6502 {
                 p &= !0x10;
             }
 
-            self.data_bus.borrow_mut().write(p);
-            self.write();
+            self.data_bus.write(p);
+            self.write(bus, cartridge);
         }
 
         let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
         let vector_low = (interrupt_vector & 0xFF) as u8;
 
         self.write_address(vector_high, vector_low);
-        self.read();
-        self.pc.borrow_mut().read_high_from_data_bus();
+        self.read(bus, cartridge);
+        self.pc.read_high_from_data_bus(&self.data_bus);
 
         let interrupt_vector = interrupt_vector.wrapping_sub(1);
         let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
         let vector_low = (interrupt_vector & 0xFF) as u8;
 
         self.write_address(vector_high, vector_low);
-        self.read();
-        self.pc.borrow_mut().read_low_from_data_bus();
+        self.read(bus, cartridge);
+        self.pc.read_low_from_data_bus(&self.data_bus);
 
         self.p.irq_disable = true;
     }
 
-    fn read_instruction(&mut self) {
-        self.pc.borrow().write_to_address_bus();
-        self.read();
-        self.instruction_register.read_from_bus();
+    fn read_instruction(&mut self, bus: &mut Bus, cartridge: &Option<Cartridge>) {
+        self.pc.write_to_address_bus(&mut self.address_bus);
+        self.read(bus, cartridge);
+        self.instruction_register.read_from_bus(&self.data_bus);
     }
 
-    fn execute_instruction(&mut self) {
+    fn execute_instruction(&mut self, bus: &mut Bus, cartridge: &mut Option<Cartridge>) {
         let instruction = self.instruction_register.decode_instruction();
 
         match instruction {
             Instruction::ADC(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
-                self.read();
-                self.alu.add_with_carry(&mut self.p);
+                self.do_addressing_mode(bus, cartridge, mode);
+                self.read(bus, cartridge);
+                self.alu
+                    .add_with_carry(&mut self.a, &mut self.data_bus, &mut self.p);
             }
             Instruction::AND(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                self.do_addressing_mode(bus, cartridge, mode);
 
-                let operand = self.read();
-                let result = operand & self.a.borrow().read();
+                let operand = self.read(bus, cartridge);
+                let result = operand & self.a.read();
 
-                self.a.borrow_mut().write(result);
+                self.a.write(result);
 
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
             }
             Instruction::ASL(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
+                self.do_addressing_mode(bus, cartridge, mode);
                 let operand = if mode == AddressingMode::Accumulator {
-                    self.a.borrow().read()
+                    self.a.read()
                 } else {
-                    self.read()
+                    self.read(bus, cartridge)
                 };
                 let result = operand << 1;
-                self.data_bus.borrow_mut().write(result);
+                self.data_bus.write(result);
 
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
                 self.p.carry = operand & 0x80 == 0x80;
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.borrow_mut().read_from_bus();
+                    self.a.read_from_bus(&self.data_bus);
                 } else {
-                    self.write();
+                    self.write(bus, cartridge);
                 }
             }
-            Instruction::BCC(mode, _, cycles) => self.branch(!self.p.carry, mode, cycles),
-            Instruction::BCS(mode, _, cycles) => self.branch(self.p.carry, mode, cycles),
-            Instruction::BEQ(mode, _, cycles) => self.branch(self.p.zero, mode, cycles),
+            Instruction::BCC(mode, _, cycles) => {
+                self.branch(bus, cartridge, !self.p.carry, mode, cycles)
+            }
+            Instruction::BCS(mode, _, cycles) => self.branch(bus, cartridge, self.p.carry, mode, cycles),
+            Instruction::BEQ(mode, _, cycles) => self.branch(bus, cartridge, self.p.zero, mode, cycles),
             Instruction::BIT(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
-                let operand = self.read();
+                self.do_addressing_mode(bus, cartridge, mode);
+                let operand = self.read(bus, cartridge);
                 self.p.negative = operand & 0x80 == 0x80;
                 self.p.overflow = operand & 0x40 == 0x40;
-                self.p.zero = operand & self.a.borrow().read() == 0;
+                self.p.zero = operand & self.a.read() == 0;
             }
-            Instruction::BMI(mode, _, cycles) => self.branch(self.p.negative, mode, cycles),
-            Instruction::BNE(mode, _, cycles) => self.branch(!self.p.zero, mode, cycles),
-            Instruction::BPL(mode, _, cycles) => self.branch(!self.p.negative, mode, cycles),
+            Instruction::BMI(mode, _, cycles) => {
+                self.branch(bus, cartridge, self.p.negative, mode, cycles)
+            }
+            Instruction::BNE(mode, _, cycles) => self.branch(bus, cartridge, !self.p.zero, mode, cycles),
+            Instruction::BPL(mode, _, cycles) => {
+                self.branch(bus, cartridge, !self.p.negative, mode, cycles)
+            }
             Instruction::BRK(_, bytes, cycles) => {
-                self.interrupt(cycles, bytes, 0xFFFF, false, true);
+                self.interrupt(bus, cartridge, cycles, bytes, 0xFFFF, false, true);
             }
-            Instruction::BVC(mode, _, cycles) => self.branch(!self.p.overflow, mode, cycles),
-            Instruction::BVS(mode, _, cycles) => self.branch(self.p.overflow, mode, cycles),
+            Instruction::BVC(mode, _, cycles) => {
+                self.branch(bus, cartridge, !self.p.overflow, mode, cycles)
+            }
+            Instruction::BVS(mode, _, cycles) => {
+                self.branch(bus, cartridge, self.p.overflow, mode, cycles)
+            }
             Instruction::CLC(_, _, cycles) => {
                 self.cycles = cycles;
                 self.p.carry = false;
@@ -1136,18 +1136,18 @@ impl Mos6502 {
                 self.p.overflow = false;
             }
             Instruction::CMP(mode, _, cycles) => {
-                let operand = self.a.borrow().read();
-                self.compare(mode, operand, cycles)
+                let operand = self.a.read();
+                self.compare(bus, cartridge, mode, operand, cycles)
             }
-            Instruction::CPX(mode, _, cycles) => self.compare(mode, self.x, cycles),
-            Instruction::CPY(mode, _, cycles) => self.compare(mode, self.y, cycles),
+            Instruction::CPX(mode, _, cycles) => self.compare(bus, cartridge, mode, self.x, cycles),
+            Instruction::CPY(mode, _, cycles) => self.compare(bus, cartridge, mode, self.y, cycles),
             Instruction::DEC(mode, _, cycles) => {
-                self.do_addressing_mode(mode);
-                let memory = self.read();
+                self.do_addressing_mode(bus, cartridge, mode);
+                let memory = self.read(bus, cartridge);
                 let result = self.increment(memory, NEGATIVE_ONE, cycles);
 
-                self.data_bus.borrow_mut().write(result);
-                self.write();
+                self.data_bus.write(result);
+                self.write(bus, cartridge);
             }
             Instruction::DEX(_, _, cycles) => {
                 self.x = self.increment(self.x, NEGATIVE_ONE, cycles);
@@ -1158,22 +1158,22 @@ impl Mos6502 {
             Instruction::EOR(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
-                let operand = self.read();
+                self.do_addressing_mode(bus, cartridge, mode);
+                let operand = self.read(bus, cartridge);
 
-                let result = self.a.borrow().read() ^ operand;
-                self.a.borrow_mut().write(result);
+                let result = self.a.read() ^ operand;
+                self.a.write(result);
 
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
             }
             Instruction::INC(mode, _, cycles) => {
-                self.do_addressing_mode(mode);
-                let operand = self.read();
+                self.do_addressing_mode(bus, cartridge, mode);
+                let operand = self.read(bus, cartridge);
 
                 let result = self.increment(operand, 1, cycles);
-                self.data_bus.borrow_mut().write(result);
-                self.write();
+                self.data_bus.write(result);
+                self.write(bus, cartridge);
             }
             Instruction::INX(_, _, cycles) => {
                 self.x = self.increment(self.x, 1, cycles);
@@ -1181,11 +1181,10 @@ impl Mos6502 {
             Instruction::INY(_, _, cycles) => {
                 self.y = self.increment(self.y, 1, cycles);
             }
-            Instruction::JMP(mode, _, cycles) => self.jump(mode, cycles),
+            Instruction::JMP(mode, _, cycles) => self.jump(bus, cartridge, mode, cycles),
             Instruction::JSR(mode, bytes, cycles) => {
                 let next_address = self
                     .pc
-                    .borrow()
                     .wide()
                     .wrapping_add((bytes & 0xFFFF) as u16)
                     // We want the next address to be the last byte of this instruction,
@@ -1196,63 +1195,63 @@ impl Mos6502 {
 
                 // Save next instruction location to the stack.
                 self.write_address(0x01, self.s);
-                self.data_bus.borrow_mut().write(next_address_high);
-                self.write();
+                self.data_bus.write(next_address_high);
+                self.write(bus, cartridge);
                 self.s = self.s.wrapping_sub(1);
 
                 self.write_address(0x01, self.s);
-                self.data_bus.borrow_mut().write(next_address_low);
-                self.write();
+                self.data_bus.write(next_address_low);
+                self.write(bus, cartridge);
                 self.s = self.s.wrapping_sub(1);
 
-                self.jump(mode, cycles);
+                self.jump(bus, cartridge, mode, cycles);
             }
             Instruction::LDA(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
-                self.read();
-                self.a.borrow_mut().read_from_bus();
-                let a = self.a.borrow().read();
+                self.do_addressing_mode(bus, cartridge, mode);
+                self.read(bus, cartridge);
+                self.a.read_from_bus(&self.data_bus);
+                let a = self.a.read();
                 self.p.negative = a & 0x80 == 0x80;
                 self.p.zero = a == 0;
             }
             Instruction::LDX(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
-                self.x = self.read();
+                self.do_addressing_mode(bus, cartridge, mode);
+                self.x = self.read(bus, cartridge);
                 self.p.negative = self.x & 0x80 == 0x80;
                 self.p.zero = self.x == 0;
             }
             Instruction::LDY(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
-                self.y = self.read();
+                self.do_addressing_mode(bus, cartridge, mode);
+                self.y = self.read(bus, cartridge);
                 self.p.negative = self.y & 0x80 == 0x80;
                 self.p.zero = self.y == 0;
             }
             Instruction::LSR(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                self.do_addressing_mode(bus, cartridge, mode);
                 let operand = if mode == AddressingMode::Accumulator {
-                    self.a.borrow().read()
+                    self.a.read()
                 } else {
-                    self.read()
+                    self.read(bus, cartridge)
                 };
                 self.p.carry = operand & 0x01 == 0x01;
 
                 let result = operand >> 1;
-                self.data_bus.borrow_mut().write(result);
+                self.data_bus.write(result);
                 self.p.zero = result == 0x00;
                 self.p.negative = false;
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.borrow_mut().read_from_bus();
+                    self.a.read_from_bus(&self.data_bus);
                 } else {
-                    self.write();
+                    self.write(bus, cartridge);
                 }
             }
             Instruction::NOP(_, _, cycles) => {
@@ -1261,12 +1260,12 @@ impl Mos6502 {
             Instruction::ORA(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                self.do_addressing_mode(bus, cartridge, mode);
 
-                let memory = self.read();
-                let result = self.a.borrow().read() | memory;
+                let memory = self.read(bus, cartridge);
+                let result = self.a.read() | memory;
 
-                self.a.borrow_mut().write(result);
+                self.a.write(result);
                 self.p.zero = result == 0;
                 self.p.negative = result & 0x80 == 0x80;
             }
@@ -1274,8 +1273,8 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 self.write_address(0x01, self.s);
-                self.a.borrow().write_to_bus();
-                self.write();
+                self.a.write_to_bus(&mut self.data_bus);
+                self.write(bus, cartridge);
 
                 self.s = self.s.wrapping_sub(1);
             }
@@ -1285,8 +1284,8 @@ impl Mos6502 {
                 self.write_address(0x01, self.s);
                 // Bit 4 is always set when pushing
                 let p = self.p.get() | 0x10;
-                self.data_bus.borrow_mut().write(p);
-                self.write();
+                self.data_bus.write(p);
+                self.write(bus, cartridge);
                 self.s = self.s.wrapping_sub(1);
             }
             Instruction::PLA(_, _, cycles) => {
@@ -1294,8 +1293,8 @@ impl Mos6502 {
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
-                let value = self.read();
-                self.a.borrow_mut().write(value);
+                let value = self.read(bus, cartridge);
+                self.a.write(value);
                 self.p.negative = value & 0x80 == 0x80;
                 self.p.zero = value == 0;
             }
@@ -1304,17 +1303,17 @@ impl Mos6502 {
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
-                let value = self.read();
+                let value = self.read(bus, cartridge);
                 self.p.set(value);
             }
             Instruction::ROL(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                self.do_addressing_mode(bus, cartridge, mode);
                 let operand = if mode == AddressingMode::Accumulator {
-                    self.a.borrow().read()
+                    self.a.read()
                 } else {
-                    self.read()
+                    self.read(bus, cartridge)
                 };
                 // Shift left and make bit 0 the carry bit
                 let result = operand << 1 | (self.p.carry as u8);
@@ -1323,22 +1322,22 @@ impl Mos6502 {
                 self.p.negative = result & 0x80 == 0x80;
                 self.p.zero = result == 0;
 
-                self.data_bus.borrow_mut().write(result);
+                self.data_bus.write(result);
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.borrow_mut().read_from_bus();
+                    self.a.read_from_bus(&self.data_bus);
                 } else {
-                    self.write();
+                    self.write(bus, cartridge);
                 }
             }
             Instruction::ROR(mode, _, cycles) => {
                 self.cycles = cycles;
 
-                self.do_addressing_mode(mode);
+                self.do_addressing_mode(bus, cartridge, mode);
                 let operand = if mode == AddressingMode::Accumulator {
-                    self.a.borrow().read()
+                    self.a.read()
                 } else {
-                    self.read()
+                    self.read(bus, cartridge)
                 };
                 // Shift right and make bit 7 the carry bit
                 let result = operand >> 1 | ((self.p.carry as u8) << 7);
@@ -1347,12 +1346,12 @@ impl Mos6502 {
                 self.p.negative = result & 0x80 == 0x80;
                 self.p.zero = result == 0;
 
-                self.data_bus.borrow_mut().write(result);
+                self.data_bus.write(result);
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.borrow_mut().read_from_bus();
+                    self.a.read_from_bus(&self.data_bus);
                 } else {
-                    self.write();
+                    self.write(bus, cartridge);
                 }
             }
             Instruction::RTI(_, _, cycles) => {
@@ -1360,42 +1359,43 @@ impl Mos6502 {
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
-                let data = self.read();
+                let data = self.read(bus, cartridge);
                 self.p.set(data);
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
-                self.read();
-                self.pc.borrow_mut().read_low_from_data_bus();
+                self.read(bus, cartridge);
+                self.pc.read_low_from_data_bus(&self.data_bus);
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
-                self.read();
-                self.pc.borrow_mut().read_high_from_data_bus();
+                self.read(bus, cartridge);
+                self.pc.read_high_from_data_bus(&self.data_bus);
 
                 // Subtract one from program counter to counteract
                 // standard increment
-                let pc = self.pc.borrow().wide();
-                self.pc.borrow_mut().write(pc.wrapping_sub(1));
+                let pc = self.pc.wide();
+                self.pc.write(pc.wrapping_sub(1));
             }
             Instruction::RTS(_, _, cycles) => {
                 self.cycles = cycles;
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
-                self.read();
-                self.pc.borrow_mut().read_low_from_data_bus();
+                self.read(bus, cartridge);
+                self.pc.read_low_from_data_bus(&self.data_bus);
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
-                self.read();
-                self.pc.borrow_mut().read_high_from_data_bus();
+                self.read(bus, cartridge);
+                self.pc.read_high_from_data_bus(&self.data_bus);
             }
             Instruction::SBC(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
-                self.read();
-                self.alu.subtract_with_borrow(&mut self.p);
+                self.do_addressing_mode(bus, cartridge, mode);
+                self.read(bus, cartridge);
+                self.alu
+                    .subtract_with_borrow(&mut self.a, &mut self.data_bus, &mut self.p);
             }
             Instruction::SEC(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1411,33 +1411,33 @@ impl Mos6502 {
             }
             Instruction::STA(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
-                self.a.borrow().write_to_bus();
-                self.write();
+                self.do_addressing_mode(bus, cartridge, mode);
+                self.a.write_to_bus(&mut self.data_bus);
+                self.write(bus, cartridge);
             }
             Instruction::STX(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
-                self.data_bus.borrow_mut().write(self.x);
-                self.write();
+                self.do_addressing_mode(bus, cartridge, mode);
+                self.data_bus.write(self.x);
+                self.write(bus, cartridge);
             }
             Instruction::STY(mode, _, cycles) => {
                 self.cycles = cycles;
-                self.do_addressing_mode(mode);
-                self.data_bus.borrow_mut().write(self.y);
-                self.write();
+                self.do_addressing_mode(bus, cartridge, mode);
+                self.data_bus.write(self.y);
+                self.write(bus, cartridge);
             }
             Instruction::TAX(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.x = self.a.borrow().read();
+                self.x = self.a.read();
                 self.p.negative = self.x & 0x80 == 0x80;
                 self.p.zero = self.x == 0;
             }
             Instruction::TAY(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.y = self.a.borrow().read();
+                self.y = self.a.read();
                 self.p.negative = self.y & 0x80 == 0x80;
                 self.p.zero = self.y == 0;
             }
@@ -1451,9 +1451,9 @@ impl Mos6502 {
             Instruction::TXA(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.a.borrow_mut().write(self.x);
-                self.p.negative = self.a.borrow().read() & 0x80 == 0x80;
-                self.p.zero = self.a.borrow().read() == 0x00;
+                self.a.write(self.x);
+                self.p.negative = self.a.read() & 0x80 == 0x80;
+                self.p.zero = self.a.read() == 0x00;
             }
             Instruction::TXS(_, _, cycles) => {
                 self.cycles = cycles;
@@ -1463,37 +1463,29 @@ impl Mos6502 {
             Instruction::TYA(_, _, cycles) => {
                 self.cycles = cycles;
 
-                self.a.borrow_mut().write(self.y);
-                self.p.negative = self.a.borrow().read() & 0x80 == 0x80;
-                self.p.zero = self.a.borrow().read() == 0x00;
+                self.a.write(self.y);
+                self.p.negative = self.a.read() & 0x80 == 0x80;
+                self.p.zero = self.a.read() == 0x00;
             }
             Instruction::KIL => panic!(
                 "{} instruction not implemented at address {:04X}",
                 self.instruction_register,
-                self.pc.borrow().wide()
+                self.pc.wide()
             ),
         };
 
-        self.pc.borrow_mut().increment();
+        self.pc.increment();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Mos6502;
     use crate::assembler::{self, AssemblerError};
     use crate::cpu_bus::Bus as CpuBus;
-    use crate::ppu_bus::Bus as PpuBus;
-    use crate::ricoh2c02::Ricoh2c02;
-    use std::cell::RefCell;
-    use std::rc::Rc;
 
-    fn run_program(program: &str) -> CpuBus {
+    fn run_program(program: &str) -> Box<CpuBus> {
         match assembler::run_program(program) {
-            Ok(bus) => match Rc::try_unwrap(bus) {
-                Ok(bus) => bus.into_inner(),
-                Err(_) => panic!("there is more than one strong reference"),
-            },
+            Ok(bus) => bus,
             Err(error) => {
                 match error {
                     AssemblerError::InvalidAddress(line) => {
@@ -1515,7 +1507,7 @@ mod tests {
 
     #[test]
     fn adc() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$01
         ADC #$01
@@ -1523,10 +1515,10 @@ mod tests {
         PHP
         ",
         );
-        assert_eq!(bus.cpu_read(0xFF), 2, "0x1 + 0x1 = 0x2");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x00, "carry bit cleared");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 2, "0x1 + 0x1 = 0x2");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x01, 0x00, "carry bit cleared");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$FF
             ADC #$FF
@@ -1534,13 +1526,13 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.cpu_read(0xFF), 0xFE, "0xFF + 0xFF = 0xFE");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFE, "0xFF + 0xFF = 0xFE");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x01, 0x01, "carry bit set");
     }
 
     #[test]
     fn and() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$FF
             STA $FF
@@ -1550,12 +1542,12 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "(0xAA & 0x55) = 0x00");
-        let status = bus.cpu_read(0x01FF);
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "(0xAA & 0x55) = 0x00");
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag cleared");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$FF
             AND #$80
@@ -1563,14 +1555,14 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.cpu_read(0xFF), 0x80, "0xFF & 0x80 = 0x80");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x80, 0x80, "negative bit set");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x02, 0x00, "zero bit not set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x80, "0xFF & 0x80 = 0x80");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x80, 0x80, "negative bit set");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x02, 0x00, "zero bit not set");
     }
 
     #[test]
     fn asl() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FF
         ASL
@@ -1578,8 +1570,8 @@ mod tests {
         PHP
         ",
         );
-        let status = bus.cpu_read(0x01FF);
-        assert_eq!(bus.cpu_read(0xFF), 0xFE, "asl result correct");
+        let status = bus.cpu_read(&None, 0x01FF);
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFE, "asl result correct");
         assert!(status & 0x80 == 0x80, "negative bit set");
         assert!(status & 0x02 == 0x00, "zero bit not set");
         assert!(status & 0x01 == 0x01, "carry bit set");
@@ -1587,7 +1579,7 @@ mod tests {
 
     #[test]
     fn bcc() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FE
         ADC #$03 // Result is 0x101, carry set
@@ -1597,9 +1589,9 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "branch not taken");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FE
         ADC #$01 // Result is 0xFF, carry cleared
@@ -1609,12 +1601,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "branch taken");
     }
 
     #[test]
     fn bcs() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FE
         ADC #$03 // Result is 0x101, carry set
@@ -1624,9 +1616,9 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x01, "branch taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x01, "branch taken");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FE
         ADC #$01 // Result is 0xFF, carry cleared
@@ -1636,12 +1628,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFA, "branch not taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFA, "branch not taken");
     }
 
     #[test]
     fn beq() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         SEC
         LDA #$FF
@@ -1652,8 +1644,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "branch taken");
-        let bus = run_program(
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "branch taken");
+        let mut bus = run_program(
             "
         SEC
         LDA #$FF
@@ -1664,12 +1656,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "branch not taken");
     }
 
     #[test]
     fn bit() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$AA
         STA $FF
@@ -1679,7 +1671,7 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x40, 0x00, "overflow flag unset");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
@@ -1687,7 +1679,7 @@ mod tests {
 
     #[test]
     fn bmi() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         SEC
         LDA #$00
@@ -1698,9 +1690,9 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "branch taken");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
         SEC
         LDA #$01
@@ -1711,12 +1703,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x02, "branch not taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x02, "branch not taken");
     }
 
     #[test]
     fn bne() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         SEC
         LDA #$FF
@@ -1727,9 +1719,9 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "branch not taken");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
         SEC
         LDA #$FF
@@ -1740,12 +1732,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x01, "branch taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x01, "branch taken");
     }
 
     #[test]
     fn bpl() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         SEC
         LDA #$00
@@ -1756,9 +1748,9 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x01, "branch taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x01, "branch taken");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
         SEC
         LDA #$04
@@ -1769,12 +1761,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x03, "branch not taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x03, "branch not taken");
     }
 
     #[test]
     fn brk() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             SEC
             LDA #$AA
@@ -1784,22 +1776,22 @@ mod tests {
         );
 
         assert_eq!(
-            bus.cpu_read(0x01FF),
+            bus.cpu_read(&None, 0x01FF),
             0x00,
             "address after BRK stored on stack"
         );
         assert_eq!(
-            bus.cpu_read(0x01FE),
+            bus.cpu_read(&None, 0x01FE),
             0x07,
             "address after BRK stored on stack"
         );
         assert_eq!(
-            bus.cpu_read(0x01FD) & 0x02,
+            bus.cpu_read(&None, 0x01FD) & 0x02,
             0x02,
             "zero flag stored on stack"
         );
         assert_eq!(
-            bus.cpu_read(0x01FD) & 0x01,
+            bus.cpu_read(&None, 0x01FD) & 0x01,
             0x01,
             "carry flag stored on stack"
         );
@@ -1807,7 +1799,7 @@ mod tests {
 
     #[test]
     fn bvc() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$80
             ADC #$80 // Result is 0x04, overflow set
@@ -1817,9 +1809,9 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch not taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "branch not taken");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$01
             ADC #$05 // Overflow not set
@@ -1829,12 +1821,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x06, "branch taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x06, "branch taken");
     }
 
     #[test]
     fn bvs() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$80
             ADC #$84 // Overflow set
@@ -1844,9 +1836,9 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x04, "branch taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x04, "branch taken");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$01
             ADC #$05 // Result is 0x06, overflow not set
@@ -1856,12 +1848,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "branch taken");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "branch taken");
     }
 
     #[test]
     fn cmp() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$10
             CMP #$05
@@ -1869,11 +1861,11 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$10
             CMP #$10
@@ -1881,11 +1873,11 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$10
             CMP #$11
@@ -1893,14 +1885,14 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
 
     #[test]
     fn cpx() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDX #$10
             CPX #$05
@@ -1908,11 +1900,11 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDX #$10
             CPX #$10
@@ -1920,11 +1912,11 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDX #$10
             CPX #$11
@@ -1932,14 +1924,14 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
 
     #[test]
     fn cpy() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDY #$10
             CPY #$05
@@ -1947,11 +1939,11 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDY #$10
             CPY #$10
@@ -1959,11 +1951,11 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x00, "negative flag not set");
         assert_eq!(status & 0x02, 0x02, "zero flag set");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDY #$10
             CPY #$11
@@ -1971,14 +1963,14 @@ mod tests {
             ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x80, "negative flag set");
         assert_eq!(status & 0x02, 0x00, "zero flag not set");
     }
 
     #[test]
     fn dec() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$02
             STA $FF
@@ -1989,12 +1981,12 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "correct result");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$02
             STA $FF
@@ -2005,15 +1997,15 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
     }
 
     #[test]
     fn dex() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDX #$02
             STX $FF
@@ -2025,12 +2017,12 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "correct result");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDX #$02
             STX $FF
@@ -2042,15 +2034,15 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
     }
 
     #[test]
     fn dey() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDY #$02
             STY $FF
@@ -2062,12 +2054,12 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "correct result");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDY #$02
             STY $FF
@@ -2079,15 +2071,15 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
     }
 
     #[test]
     fn eor() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$55
             EOR #$AA
@@ -2096,10 +2088,10 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "0x55 xor 0xAA = 0xFF");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x80, 0x80, "negative bit set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "0x55 xor 0xAA = 0xFF");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x80, 0x80, "negative bit set");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$FF
             EOR #$FF
@@ -2108,13 +2100,13 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "0xFF xor 0xFF = 0x00");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x02, 0x02, "zero bit set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "0xFF xor 0xFF = 0x00");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x02, 0x02, "zero bit set");
     }
 
     #[test]
     fn inc() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$02
             STA $FF
@@ -2125,12 +2117,12 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "correct result");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$02
             STA $FF
@@ -2141,15 +2133,15 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
     }
 
     #[test]
     fn inx() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDX #$02
             STX $FF
@@ -2161,12 +2153,12 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "correct result");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDX #$02
             STX $FF
@@ -2178,15 +2170,15 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
     }
 
     #[test]
     fn iny() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDY #$02
             STY $FF
@@ -2198,12 +2190,12 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x02, "zero flag set");
         assert_eq!(status & 0x80, 0x00, "negative flag unset");
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "correct result");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDY #$02
             STY $FF
@@ -2215,15 +2207,15 @@ mod tests {
         ",
         );
 
-        let status = bus.cpu_read(0x01FF);
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x02, 0x00, "zero flag unset");
         assert_eq!(status & 0x80, 0x80, "negative flag set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
     }
 
     #[test]
     fn jmp() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             JMP $0900
             NOP
@@ -2234,12 +2226,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "load and store jumped over");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "load and store jumped over");
     }
 
     #[test]
     fn jsr() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             JSR $0900
             LDA #$FF
@@ -2249,15 +2241,15 @@ mod tests {
         ",
         );
 
-        assert_ne!(bus.cpu_read(0xFF), 0xFF, "first store skipped");
-        assert_ne!(bus.cpu_read(0xFE), 0xFF, "second store skipped");
-        assert_eq!(bus.cpu_read(0x01FF), 0x00, "high byte = 0x00");
-        assert_eq!(bus.cpu_read(0x01FE), 0x02, "low byte = 0x02");
+        assert_ne!(bus.cpu_read(&None, 0xFF), 0xFF, "first store skipped");
+        assert_ne!(bus.cpu_read(&None, 0xFE), 0xFF, "second store skipped");
+        assert_eq!(bus.cpu_read(&None, 0x01FF), 0x00, "high byte = 0x00");
+        assert_eq!(bus.cpu_read(&None, 0x01FE), 0x02, "low byte = 0x02");
     }
 
     #[test]
     fn lsr() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FF
         STA $FF
@@ -2266,13 +2258,13 @@ mod tests {
        ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x7F, "0xFF >> 1 = 0x7F");
-        let status = bus.cpu_read(0x01FF);
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x7F, "0xFF >> 1 = 0x7F");
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x01, 0x01, "carry bit set");
         assert_eq!(status & 0x02, 0x00, "zero bit unset");
         assert_eq!(status & 0x80, 0x00, "negative bit unset");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$01
             STA $FF
@@ -2281,8 +2273,8 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "0x01 >> 1 = 0x00");
-        let status = bus.cpu_read(0x01FF);
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "0x01 >> 1 = 0x00");
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x01, 0x01, "carry bit set");
         assert_eq!(status & 0x02, 0x02, "zero bit set");
         assert_eq!(status & 0x80, 0x00, "negative bit unset");
@@ -2290,7 +2282,7 @@ mod tests {
 
     #[test]
     fn ora() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$AA
             STA $FF
@@ -2301,12 +2293,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "0xAA | 0x55 = 0xFF");
-        let status = bus.cpu_read(0x01FF);
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "0xAA | 0x55 = 0xFF");
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x80, "result negative");
         assert_eq!(status & 0x02, 0x00, "result not zero");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$00
             STA $FF
@@ -2316,27 +2308,27 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.cpu_read(0xFF), 0x00, "0x00 | 0x00 = 0x00");
-        let status = bus.cpu_read(0x01FF);
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x00, "0x00 | 0x00 = 0x00");
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x80, 0x00, "result not negative");
         assert_eq!(status & 0x02, 0x02, "result zero");
     }
 
     #[test]
     fn pha() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$FF
             PHA
         ",
         );
 
-        assert_eq!(bus.cpu_read(0x01FF), 0xFF, "accumulator pushed on stack");
+        assert_eq!(bus.cpu_read(&None, 0x01FF), 0xFF, "accumulator pushed on stack");
     }
 
     #[test]
     fn pla() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FF
         PHA
@@ -2346,12 +2338,12 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0x01FF), 0xFF, "accumulator pulled from stack");
+        assert_eq!(bus.cpu_read(&None, 0x01FF), 0xFF, "accumulator pulled from stack");
     }
 
     #[test]
     fn rol() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FF
         STA $FF
@@ -2360,10 +2352,10 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFE, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFE, "correct result");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
         LDA #$FF
         STA $FF
@@ -2373,13 +2365,13 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
     }
 
     #[test]
     fn ror() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$FF
             STA $FF
@@ -2388,10 +2380,10 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.cpu_read(0xFF), 0x7F, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x7F, "correct result");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$FF
             STA $FF
@@ -2401,13 +2393,13 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0x01FF) & 0x01, 0x01, "carry bit set");
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x01, 0x01, "carry bit set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
     }
 
     #[test]
     fn tax() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$FF
             TAX
@@ -2416,13 +2408,13 @@ mod tests {
         ",
         );
 
-        assert_eq!(bus.cpu_read(0xFF), 0xFF, "correct result");
-        assert_eq!(bus.cpu_read(0x01FF) & 0x80, 0x80, "negative bit set");
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFF, "correct result");
+        assert_eq!(bus.cpu_read(&None, 0x01FF) & 0x80, 0x80, "negative bit set");
     }
 
     #[test]
     fn sbc() {
-        let bus = run_program(
+        let mut bus = run_program(
             "
             LDA #$76
             SEC
@@ -2431,13 +2423,13 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.cpu_read(0xFF), 0x71, "0x76 - 0x05 = 0x71");
-        let status = bus.cpu_read(0x01FF);
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0x71, "0x76 - 0x05 = 0x71");
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x01, 0x01, "no borrow (carry set)");
         assert_eq!(status & 0x80, 0x00, "negative bit not set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
 
-        let bus = run_program(
+        let mut bus = run_program(
             "
             ADC #$05
             SEC
@@ -2446,8 +2438,8 @@ mod tests {
             PHP
         ",
         );
-        assert_eq!(bus.cpu_read(0xFF), 0xFB, "0x5 - 0xA = -0x5 (0xFB)");
-        let status = bus.cpu_read(0x01FF);
+        assert_eq!(bus.cpu_read(&None, 0xFF), 0xFB, "0x5 - 0xA = -0x5 (0xFB)");
+        let status = bus.cpu_read(&None, 0x01FF);
         assert_eq!(status & 0x01, 0x00, "borrow (carry not set)");
         assert_eq!(status & 0x80, 0x80, "negative bit set");
         assert_eq!(status & 0x02, 0x00, "zero bit not set");
@@ -2455,9 +2447,7 @@ mod tests {
 
     #[test]
     fn irq() {
-        let ppu_bus = Rc::new(RefCell::new(PpuBus::new()));
-        let ppu = Rc::new(RefCell::new(Ricoh2c02::new(&ppu_bus)));
-        let cpu_bus = Rc::new(RefCell::new(CpuBus::new(&ppu)));
+        let mut bus = CpuBus::new();
 
         let program = assembler::assemble_program(
             "
@@ -2479,29 +2469,27 @@ mod tests {
         let mut location = 0;
 
         for byte in mem {
-            cpu_bus.borrow_mut().cpu_write(location, byte);
+            bus.cpu_write(&mut None, location, byte);
             location += 1;
         }
 
         // Set interrupt vector to start at RTI
-        cpu_bus.borrow_mut().cpu_write(0xFFFF, 0x00); // Address high
-        cpu_bus.borrow_mut().cpu_write(0xFFFE, 0x06); // Address low
-
-        let mut cpu = Mos6502::new(&cpu_bus);
+        bus.cpu_write(&mut None, 0xFFFF, 0x00); // Address high
+        bus.cpu_write(&mut None, 0xFFFE, 0x06); // Address low
 
         // Do loop for a while
         for _ in 0..20 {
-            while !cpu.clock() {}
+            while !bus.clock(&mut None) {}
         }
 
         // Interrupt
-        cpu.not_irq = false;
+        bus.irq();
 
         // Do interrupt and two instructions
         for _ in 0..3 {
-            while !cpu.clock() {}
+            while !bus.clock(&mut None) {}
         }
 
-        assert_ne!(cpu_bus.borrow().cpu_read(0x00FF), 0, "data stored in 0xFF");
+        assert_ne!(bus.cpu_read(&None, 0x00FF), 0, "data stored in 0xFF");
     }
 }
