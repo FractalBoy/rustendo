@@ -10,6 +10,7 @@ enum ControlBits {
 bitfield!(Control, ControlBits, u8);
 
 pub struct Mapper001 {
+    #[allow(dead_code)]
     chr_ram: Vec<u8>,
     prg_ram: [u8; 0x1FFF],
     shift_register: u8,

@@ -1,7 +1,5 @@
-use crate::cpu_bus::Bus as CpuBus;
-use crate::mos6502::AddressingMode;
+use crate::mos6502::{AddressingMode, Mos6502};
 use regex::Regex;
-use std::borrow::Cow;
 
 #[derive(Debug)]
 pub enum AssemblerError {
@@ -31,10 +29,7 @@ pub fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
     let mut line_number = 0;
     for line in lines {
         line_number += 1;
-        let line = match whitespace_re.replace_all(line, "") {
-            Cow::Owned(line) => line,
-            Cow::Borrowed(line) => line.to_string(),
-        };
+        let line = whitespace_re.replace_all(line, "").to_owned().to_string();
         // Remove comments
         let line = comment_re.replace_all(line.as_str(), "");
         let fields: Vec<&str> = line.split_whitespace().collect();
@@ -232,7 +227,7 @@ pub fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
 }
 
 #[allow(dead_code)]
-pub fn run_program(program: &str) -> Result<Box<CpuBus>, AssemblerError> {
+pub fn run_program(program: &str) -> Result<Box<Mos6502>, AssemblerError> {
     let program = match assemble_program(&program) {
         Ok(program) => program,
         Err(error) => return Err(error),
@@ -242,20 +237,20 @@ pub fn run_program(program: &str) -> Result<Box<CpuBus>, AssemblerError> {
         mem.extend_from_slice(&instruction);
     }
 
-    let mut bus = CpuBus::new();
+    let mut cpu = Mos6502::new();
 
     let mut location: u16 = 0;
 
     for byte in mem {
-        bus.cpu_write(&mut None, location, byte);
+        cpu.cpu_write(location, byte);
         location += 1;
     }
 
     for _ in 0..program.len() {
-        while !bus.clock(&mut None) {}
+        while !cpu.clock() {}
     }
 
-    Ok(Box::new(bus))
+    Ok(Box::new(cpu))
 }
 
 fn lookup_instruction(instruction: &str, addressing_mode: AddressingMode) -> Option<u8> {
