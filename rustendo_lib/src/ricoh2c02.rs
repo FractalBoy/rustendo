@@ -1016,7 +1016,7 @@ impl Ricoh2c02 {
         }
     }
 
-    pub fn clock<'a>(
+    pub fn clock(
         &mut self,
         cartridge: Option<Box<Cartridge>>,
         nmi_enable: &mut bool,
