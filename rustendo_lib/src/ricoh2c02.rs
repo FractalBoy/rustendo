@@ -431,6 +431,7 @@ impl IndexMut<usize> for Oam {
 }
 
 pub struct Ricoh2c02 {
+    bus: Box<Bus>,
     primary_oam: Oam,
     secondary_oam: Oam,
     current_scanline_oam: Oam,
@@ -467,6 +468,7 @@ const SCANLINES_PER_FRAME: u32 = 262;
 impl Ricoh2c02 {
     pub fn new() -> Self {
         Ricoh2c02 {
+            bus: Box::new(Bus::new()),
             primary_oam: Oam::new(64),
             secondary_oam: Oam::new(8),
             current_scanline_oam: Oam::new(8),
@@ -497,6 +499,7 @@ impl Ricoh2c02 {
             current_sprite_byte: 0,
         }
     }
+
     pub fn get_screen(&self) -> Box<[[(u8, u8, u8); 0x100]; 0xF0]> {
         self.screen.clone()
     }
@@ -574,7 +577,7 @@ impl Ricoh2c02 {
         self.fine_x_scroll = data & 0x7;
     }
 
-    pub fn cpu_read(&mut self, bus: &Bus, cartridge: &Option<Cartridge>, address: u16) -> u8 {
+    pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
             0x2000 => 0,
             0x2001 => 0,
@@ -597,7 +600,7 @@ impl Ricoh2c02 {
                 self.vram_address
                     .increment(self.ppu_ctrl.get_increment_mode());
                 let ppu_data = self.ppu_data;
-                self.ppu_data = self.ppu_read(bus, cartridge, address);
+                self.ppu_data = self.ppu_read(address);
 
                 // Palette range returns data immediately,
                 // otherwise the data from the buffer is returned
@@ -610,7 +613,7 @@ impl Ricoh2c02 {
         }
     }
 
-    pub fn cpu_write(&mut self, bus: &mut Bus, cartridge: &mut Option<Cartridge>, address: u16, data: u8) {
+    pub fn cpu_write(&mut self, address: u16, data: u8) {
         match address {
             0x2000 => {
                 self.ppu_ctrl.set(data);
@@ -661,13 +664,13 @@ impl Ricoh2c02 {
                 let address = *self.vram_address;
                 self.vram_address
                     .increment(self.ppu_ctrl.get_increment_mode());
-                self.ppu_write(bus, cartridge, address, data);
+                self.ppu_write(address, data);
             }
             _ => (),
         }
     }
 
-    pub fn ppu_read(&self, bus: &Bus, cartridge: &Option<Cartridge>, address: u16) -> u8 {
+    pub fn ppu_read(&self, address: u16) -> u8 {
         // When the grayscale bit is set in the PPU mask,
         // only the top 2 bits of the palette are used, meaning only gray colors
         // are used: 0x00 (dark gray), 0x10 (light gray), 0x20 (white), 0x30 (white).
@@ -678,7 +681,7 @@ impl Ricoh2c02 {
         };
 
         match address {
-            0x0000..=0x3EFF => bus.ppu_read(cartridge, address),
+            0x0000..=0x3EFF => self.bus.ppu_read(address),
             0x3F00..=0x3FFF => match address & 0x1F {
                 0x10 | 0x14 | 0x18 | 0x1C => {
                     self.palette_ram[(address & 0x0F) as usize] & palette_mask
@@ -689,9 +692,9 @@ impl Ricoh2c02 {
         }
     }
 
-    pub fn ppu_write(&mut self, bus: &mut Bus, cartridge: &mut Option<Cartridge>, address: u16, data: u8) {
+    pub fn ppu_write(&mut self, address: u16, data: u8) {
         match address {
-            0x0000..=0x3EFF => bus.ppu_write(cartridge, address, data),
+            0x0000..=0x3EFF => self.bus.ppu_write(address, data),
             0x3F00..=0x3FFF => match address & 0x1F {
                 0x10 | 0x14 | 0x18 | 0x1C => self.palette_ram[(address & 0x0F) as usize] = data,
                 address => self.palette_ram[address as usize] = data,
@@ -709,20 +712,13 @@ impl Ricoh2c02 {
         self.ppu_mask.get_background_enable() || self.ppu_mask.get_sprite_enable()
     }
 
-    fn update_next_bg_tile_id(&mut self, bus: &Bus, cartridge: &Option<Cartridge>) {
-        self.next_bg_tile_id = self.ppu_read(
-            bus,
-            cartridge,
-            0x2000 | self.vram_address.get_nametable_offset(),
-        );
+    fn update_next_bg_tile_id(&mut self) {
+        self.next_bg_tile_id = self.ppu_read(0x2000 | self.vram_address.get_nametable_offset());
     }
 
-    fn update_next_bg_tile_attr(&mut self, bus: &Bus, cartridge: &Option<Cartridge>) {
-        self.next_bg_tile_attr = self.ppu_read(
-            bus,
-            cartridge,
-            0x23C0 | self.vram_address.get_attribute_memory_offset(),
-        );
+    fn update_next_bg_tile_attr(&mut self) {
+        self.next_bg_tile_attr =
+            self.ppu_read(0x23C0 | self.vram_address.get_attribute_memory_offset());
         // The attribute tile is 1 byte and applies
         // to a 4-byte by 4-byte region of the nametable.
         //
@@ -772,10 +768,8 @@ impl Ricoh2c02 {
     // |+-------------- H: Half of sprite table (0: "left"; 1: "right")
     // +--------------- 0: Pattern table is at $0000-$1FFF
     //
-    fn update_next_bg_tile_lsb(&mut self, bus: &Bus, cartridge: &Option<Cartridge>) {
+    fn update_next_bg_tile_lsb(&mut self) {
         self.next_bg_tile_lsb = self.ppu_read(
-            bus,
-            cartridge,
             self.ppu_ctrl.get_background_pattern_table_address()
                 | (self.next_bg_tile_id as u16) << 4
                 | 0 << 3
@@ -783,10 +777,8 @@ impl Ricoh2c02 {
         );
     }
 
-    fn update_next_bg_tile_msb(&mut self, bus: &Bus, cartridge: &Option<Cartridge>) {
+    fn update_next_bg_tile_msb(&mut self) {
         self.next_bg_tile_msb = self.ppu_read(
-            bus,
-            cartridge,
             self.ppu_ctrl.get_background_pattern_table_address()
                 | (self.next_bg_tile_id as u16) << 4
                 | 1 << 3
@@ -879,7 +871,7 @@ impl Ricoh2c02 {
         }
     }
 
-    fn calculate_pixel(&self, bus: &Bus, cartridge: &Option<Cartridge>) -> (u8, u8, u8) {
+    fn calculate_pixel(&self) -> (u8, u8, u8) {
         let (pixel, palette) = if self.ppu_mask.get_background_enable() {
             let mask = 0x8000 >> self.fine_x_scroll;
 
@@ -895,32 +887,32 @@ impl Ricoh2c02 {
             (0, 0)
         };
 
-        self.palette[(self.ppu_read(bus, cartridge, 0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
+        self.palette[(self.ppu_read(0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
     }
 
-    pub fn update_background(&mut self, bus: &Bus, cartridge: &Option<Cartridge>) {
+    pub fn update_background(&mut self) {
         match (self.cycle - 1) & 0x7 {
             0 => {
                 if self.cycle >= 9 {
                     self.load_background_shifters();
                 }
-                self.update_next_bg_tile_id(bus, cartridge);
+                self.update_next_bg_tile_id();
             }
             1 => (),
-            2 => self.update_next_bg_tile_attr(bus, cartridge),
+            2 => self.update_next_bg_tile_attr(),
             3 => (),
-            4 => self.update_next_bg_tile_lsb(bus, cartridge),
+            4 => self.update_next_bg_tile_lsb(),
             5 => (),
-            6 => self.update_next_bg_tile_msb(bus, cartridge),
+            6 => self.update_next_bg_tile_msb(),
             // At the end of each tile, increment right one.
             7 => self.increment_horizontal(),
             _ => unreachable!(),
         }
     }
 
-    fn visible_scanline(&mut self, bus: &Bus, cartridge: &Option<Cartridge>) {
+    fn visible_scanline(&mut self) {
         self.update_background_shifters();
-        self.update_background(bus, cartridge);
+        self.update_background();
 
         if self.cycle == 256 {
             self.increment_vertical();
@@ -1026,10 +1018,11 @@ impl Ricoh2c02 {
 
     pub fn clock(
         &mut self,
-        bus: &Bus,
-        cartridge: &Option<Cartridge>,
+        cartridge: Option<Box<Cartridge>>,
         nmi_enable: &mut bool,
-    ) -> bool {
+    ) -> (bool, Option<Box<Cartridge>>) {
+        self.bus.load_cartridge(cartridge);
+
         if self.scanline == 0 && self.cycle == 0 && self.odd_frame && self.rendering_enabled() {
             // Idle cycle, unless it's an odd frame and rendering is enabled.
             // If it's an odd frame, go directly to the next cycle.
@@ -1042,7 +1035,7 @@ impl Ricoh2c02 {
 
         match self.scanline {
             0..=239 | 261 => match self.cycle {
-                1..=256 | 321..=337 => self.visible_scanline(bus, cartridge),
+                1..=256 | 321..=337 => self.visible_scanline(),
                 257 => {
                     self.load_background_shifters();
                     if self.rendering_enabled() {
@@ -1057,7 +1050,7 @@ impl Ricoh2c02 {
                     }
                 }
                 // Garbage nametable bytes
-                338 | 340 => self.update_next_bg_tile_id(bus, cartridge),
+                338 | 340 => self.update_next_bg_tile_id(),
                 _ => (),
             },
             241 => match self.cycle {
@@ -1080,8 +1073,7 @@ impl Ricoh2c02 {
         self.current_scanline_oam.shift_sprites_into_registers();
 
         if self.cycle < 256 && self.scanline < 240 {
-            self.screen[self.scanline as usize][self.cycle as usize] =
-                self.calculate_pixel(bus, cartridge);
+            self.screen[self.scanline as usize][self.cycle as usize] = self.calculate_pixel();
         }
 
         self.cycle += 1;
@@ -1091,12 +1083,14 @@ impl Ricoh2c02 {
             self.cycle = 0;
         }
 
+        let mut frame_complete = false;
+
         if self.scanline == SCANLINES_PER_FRAME {
             self.scanline = 0;
             self.odd_frame = !self.odd_frame;
-            return true;
+            frame_complete = true;
         }
 
-        false
+        (frame_complete, self.bus.unload_cartridge())
     }
 }

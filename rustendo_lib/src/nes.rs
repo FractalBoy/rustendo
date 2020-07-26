@@ -1,10 +1,9 @@
 use crate::cartridge::Cartridge;
 use crate::controller::Controller;
-use crate::cpu_bus::Bus as CpuBus;
+use crate::mos6502::Mos6502;
 
 pub struct Nes {
-    bus: Box<CpuBus>,
-    cartridge: Box<Option<Cartridge>>,
+    cpu: Box<Mos6502>,
     clocks: u32,
     dma_cycle: u16,
     dma_data: u8,
@@ -14,8 +13,7 @@ pub struct Nes {
 impl Nes {
     pub fn new() -> Self {
         Nes {
-            bus: Box::new(CpuBus::new()),
-            cartridge: Box::new(None),
+            cpu: Box::new(Mos6502::new()),
             clocks: 0,
             dma_cycle: 0,
             dma_data: 0,
@@ -24,36 +22,33 @@ impl Nes {
     }
 
     pub fn controller(&mut self) -> &mut Controller {
-        self.bus.controller()
+        self.cpu.get_bus_mut().controller()
     }
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        self.cartridge = Box::new(Some(cartridge));
+        self.cpu.load_cartridge(cartridge);
     }
 
     pub fn clock(&mut self) -> bool {
         let mut nmi_enable = false;
 
         // PPU runs at 1/4 the master clock speed
-        let frame_complete =
-            self.bus
-                .ppu_bus
-                .clock(&mut self.cartridge, &mut nmi_enable);
+        let frame_complete = self.cpu.ppu_clock(&mut nmi_enable);
 
         // CPU runs at 1/12 the master clock speed, 3x as slow as the PPU
         if self.clocks % 3 == 0 {
-            let dma_transfer = self.bus.get_dma_transfer();
+            let dma_transfer = self.cpu.get_bus().get_dma_transfer();
 
             match dma_transfer {
                 Some(data) => self.dma_transfer(data),
                 None => {
-                    self.bus.clock(&mut self.cartridge);
+                    self.cpu.clock();
                 }
             }
         }
 
         if nmi_enable {
-            self.bus.nmi();
+            self.cpu.nmi();
         }
 
         self.clocks = self.clocks.wrapping_add(1);
@@ -74,26 +69,29 @@ impl Nes {
         }
 
         if self.clocks % 2 == 0 {
-            self.dma_data = self.bus.cpu_read(&self.cartridge, current_addr);
+            self.dma_data = self.cpu.cpu_read(current_addr);
         } else {
-            self.bus.ppu_bus.oam_dma(self.dma_cycle, self.dma_data);
+            self.cpu
+                .get_bus_mut()
+                .get_ppu_mut()
+                .oam_dma(self.dma_cycle, self.dma_data);
             self.dma_cycle = self.dma_cycle.wrapping_add(1);
         }
 
         // End the DMA transfer after 256 bytes are copied.
         if self.dma_cycle == 0x100 {
-            self.bus.end_dma_transfer();
+            self.cpu.get_bus_mut().end_dma_transfer();
             self.dma_dummy = true;
             self.dma_cycle = 0;
         }
     }
 
     pub fn get_screen(&self) -> Box<[[(u8, u8, u8); 0x100]; 0xF0]> {
-        self.bus.ppu_bus.get_screen()
+        self.cpu.get_bus().get_ppu().get_screen()
     }
 
     pub fn reset(&mut self) {
-        self.bus.reset();
+        self.cpu.reset();
     }
 }
 
