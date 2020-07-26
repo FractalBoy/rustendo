@@ -706,7 +706,6 @@ impl Mos6502 {
         &mut self.bus
     }
 
-    #[cfg(test)]
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         self.bus.cpu_read(address)
     }
