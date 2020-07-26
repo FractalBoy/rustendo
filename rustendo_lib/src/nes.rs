@@ -69,10 +69,7 @@ impl Nes {
         }
 
         if self.clocks % 2 == 0 {
-            self.dma_data = self
-                .cpu
-                .get_bus_mut()
-                .cpu_read(current_addr);
+            self.dma_data = self.cpu.get_bus_mut().cpu_read(current_addr);
         } else {
             self.cpu
                 .get_bus_mut()

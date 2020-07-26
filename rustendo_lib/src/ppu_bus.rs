@@ -43,10 +43,7 @@ impl Bus {
                 None => (),
             },
             0x2000..=0x3EFF => match &self.cartridge {
-                Some(cartridge) => {
-                    self.ram
-                        .write(cartridge.mirroring_type(), address, data)
-                }
+                Some(cartridge) => self.ram.write(cartridge.mirroring_type(), address, data),
                 None => self.ram.write(MirroringType::Vertical, address, data),
             },
             _ => (),

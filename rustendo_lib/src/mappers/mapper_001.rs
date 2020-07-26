@@ -1,5 +1,5 @@
-use crate::cartridge::MirroringType;
 use super::Mapper;
+use crate::cartridge::MirroringType;
 
 enum ControlBits {
     Mirroring = 0b00011,
@@ -168,12 +168,12 @@ impl Mapper for Mapper001 {
         None
     }
 
-    fn mirroring_type(&self) -> Option<MirroringType> { 
+    fn mirroring_type(&self) -> Option<MirroringType> {
         match self.control.get_field(ControlBits::Mirroring) {
             0x0 | 0x1 => Some(MirroringType::OneScreen),
             0x2 => Some(MirroringType::Vertical),
             0x3 => Some(MirroringType::Horizontal),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }

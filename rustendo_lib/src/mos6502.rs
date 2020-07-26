@@ -1,5 +1,5 @@
-use crate::cpu_bus::Bus;
 use crate::cartridge::Cartridge;
+use crate::cpu_bus::Bus;
 use std::fmt::{Display, Error, Formatter};
 use std::ops::Deref;
 
