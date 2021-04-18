@@ -10,18 +10,16 @@ pub struct Bus {
     // This ram is used only for testing.
     test_ram: Option<[u8; 0x10000]>,
     dma_transfer: Option<u8>,
-    cartridge: Option<Box<Cartridge>>,
 }
 
 impl Bus {
-    pub fn new() -> Self {
+    pub fn new(cartridge: Option<Box<Cartridge>>) -> Self {
         let mut bus = Bus {
             ram: Box::new(Ram::new()),
-            ppu: Box::new(Ricoh2c02::new()),
+            ppu: Box::new(Ricoh2c02::new(cartridge)),
             controller: Controller::new(),
             test_ram: None,
             dma_transfer: None,
-            cartridge: None,
         };
 
         // Set up some fake RAM to use for testing purposes only.
@@ -32,14 +30,8 @@ impl Bus {
         bus
     }
 
-    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        self.cartridge = Some(Box::new(cartridge));
-    }
-
     pub fn ppu_clock(&mut self, nmi_enable: &mut bool) -> bool {
-        let (frame_complete, cartridge) = self.ppu.clock(self.cartridge.take(), nmi_enable);
-        self.cartridge = cartridge;
-        frame_complete
+        self.ppu.clock(nmi_enable)
     }
 
     pub fn get_ppu(&self) -> &Ricoh2c02 {
@@ -67,10 +59,13 @@ impl Bus {
             0x0..=0x1FFF => self.ram.read(address),
             0x2000..=0x3FFF => self.ppu.cpu_read(address & 0x2007),
             0x4016 => self.controller.read_button(),
-            0x4020..=0xFFFF => match &self.cartridge {
-                Some(cartridge) => cartridge.cpu_read(address),
-                None => self.get_test_ram(address),
-            },
+            0x4020..=0xFFFF => {
+                if self.ppu.has_cartridge() {
+                    self.ppu.cartridge_cpu_read(address)
+                } else {
+                    self.get_test_ram(address)
+                }
+            }
             _ => self.get_test_ram(address),
         }
     }
@@ -81,10 +76,13 @@ impl Bus {
             0x2000..=0x3FFF => self.ppu.cpu_write(address & 0x2007, data),
             0x4014 => self.dma_transfer = Some(data),
             0x4016 => self.controller.latch(),
-            0x4020..=0xFFFF => match &mut self.cartridge {
-                Some(cartridge) => cartridge.cpu_write(address, data),
-                None => self.set_test_ram(address, data),
-            },
+            0x4020..=0xFFFF => {
+                if self.ppu.has_cartridge() {
+                    self.ppu.cartridge_cpu_write(address, data)
+                } else {
+                    self.set_test_ram(address, data)
+                }
+            }
             _ => self.set_test_ram(address, data),
         };
     }
