@@ -677,7 +677,7 @@ enum IndexRegister {
 
 impl Mos6502 {
     /// Initializes a new `Mos6502` processor emulator.
-    pub fn new() -> Self {
+    pub fn new(cartridge: Option<Box<Cartridge>>) -> Self {
         Mos6502 {
             a: Accumulator::new(),
             alu: Alu::new(),
@@ -694,7 +694,7 @@ impl Mos6502 {
             not_nmi: true,
             not_reset: true,
             not_set_overflow: true,
-            bus: Box::new(Bus::new()),
+            bus: Box::new(Bus::new(cartridge)),
         }
     }
 
@@ -725,10 +725,6 @@ impl Mos6502 {
     #[cfg(test)]
     pub fn irq(&mut self) {
         self.not_irq = false;
-    }
-
-    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        self.bus.load_cartridge(cartridge);
     }
 
     pub fn ppu_clock(&mut self, nmi_enable: &mut bool) -> bool {
@@ -1474,6 +1470,7 @@ impl Mos6502 {
 mod tests {
     use super::Mos6502;
     use crate::assembler::{self, AssemblerError};
+    use crate::cartridge::Cartridge;
 
     fn run_program(program: &str) -> Box<Mos6502> {
         match assembler::run_program(program) {
@@ -2439,7 +2436,7 @@ mod tests {
 
     #[test]
     fn irq() {
-        let mut cpu = Mos6502::new();
+        let mut cpu = Mos6502::new(None);
 
         let program = assembler::assemble_program(
             "

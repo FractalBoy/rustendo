@@ -1,5 +1,5 @@
-use crate::cartridge::Cartridge;
-use crate::ppu_bus::Bus;
+use crate::cartridge::{Cartridge, MirroringType};
+use crate::ppu_ram::Ram;
 use std::ops::Index;
 use std::ops::IndexMut;
 
@@ -431,7 +431,8 @@ impl IndexMut<usize> for Oam {
 }
 
 pub struct Ricoh2c02 {
-    bus: Box<Bus>,
+    ram: Box<Ram>,
+    pub cartridge: Option<Box<Cartridge>>,
     primary_oam: Oam,
     secondary_oam: Oam,
     current_scanline_oam: Oam,
@@ -466,9 +467,10 @@ const CYCLES_PER_SCANLINE: u32 = 341;
 const SCANLINES_PER_FRAME: u32 = 262;
 
 impl Ricoh2c02 {
-    pub fn new() -> Self {
+    pub fn new(cartridge: Option<Box<Cartridge>>) -> Self {
         Ricoh2c02 {
-            bus: Box::new(Bus::new()),
+            ram: Box::new(Ram::new()),
+            cartridge,
             primary_oam: Oam::new(64),
             secondary_oam: Oam::new(8),
             current_scanline_oam: Oam::new(8),
@@ -681,7 +683,14 @@ impl Ricoh2c02 {
         };
 
         match address {
-            0x0000..=0x3EFF => self.bus.ppu_read(address),
+            0x0000..=0x1FFF => match &self.cartridge {
+                Some(cartridge) => cartridge.ppu_read(address),
+                None => 0,
+            },
+            0x2000..=0x3EFF => match &self.cartridge {
+                Some(cartridge) => self.ram.read(cartridge.mirroring_type(), address),
+                None => self.ram.read(MirroringType::Vertical, address),
+            },
             0x3F00..=0x3FFF => match address & 0x1F {
                 0x10 | 0x14 | 0x18 | 0x1C => {
                     self.palette_ram[(address & 0x0F) as usize] & palette_mask
@@ -694,7 +703,14 @@ impl Ricoh2c02 {
 
     pub fn ppu_write(&mut self, address: u16, data: u8) {
         match address {
-            0x0000..=0x3EFF => self.bus.ppu_write(address, data),
+            0x0000..=0x1FFF => match &mut self.cartridge {
+                Some(cartridge) => cartridge.ppu_write(address, data),
+                None => (),
+            },
+            0x2000..=0x3EFF => match &self.cartridge {
+                Some(cartridge) => self.ram.write(cartridge.mirroring_type(), address, data),
+                None => self.ram.write(MirroringType::Vertical, address, data),
+            },
             0x3F00..=0x3FFF => match address & 0x1F {
                 0x10 | 0x14 | 0x18 | 0x1C => self.palette_ram[(address & 0x0F) as usize] = data,
                 address => self.palette_ram[address as usize] = data,
@@ -1016,13 +1032,7 @@ impl Ricoh2c02 {
         }
     }
 
-    pub fn clock(
-        &mut self,
-        cartridge: Option<Box<Cartridge>>,
-        nmi_enable: &mut bool,
-    ) -> (bool, Option<Box<Cartridge>>) {
-        self.bus.load_cartridge(cartridge);
-
+    pub fn clock(&mut self, nmi_enable: &mut bool) -> bool {
         if self.scanline == 0 && self.cycle == 0 && self.odd_frame && self.rendering_enabled() {
             // Idle cycle, unless it's an odd frame and rendering is enabled.
             // If it's an odd frame, go directly to the next cycle.
@@ -1091,6 +1101,6 @@ impl Ricoh2c02 {
             frame_complete = true;
         }
 
-        (frame_complete, self.bus.unload_cartridge())
+        frame_complete
     }
 }
