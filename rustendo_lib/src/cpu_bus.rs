@@ -59,10 +59,13 @@ impl Bus {
             0x0..=0x1FFF => self.ram.read(address),
             0x2000..=0x3FFF => self.ppu.cpu_read(address & 0x2007),
             0x4016 => self.controller.read_button(),
-            0x4020..=0xFFFF => match &self.ppu.cartridge {
-                Some(cartridge) => cartridge.cpu_read(address),
-                None => self.get_test_ram(address)
-            } 
+            0x4020..=0xFFFF => {
+                if self.ppu.has_cartridge() {
+                    self.ppu.cartridge_cpu_read(address)
+                } else {
+                    self.get_test_ram(address)
+                }
+            }
             _ => self.get_test_ram(address),
         }
     }
@@ -73,10 +76,13 @@ impl Bus {
             0x2000..=0x3FFF => self.ppu.cpu_write(address & 0x2007, data),
             0x4014 => self.dma_transfer = Some(data),
             0x4016 => self.controller.latch(),
-            0x4020..=0xFFFF => match &mut self.ppu.cartridge {
-                Some(cartridge) => cartridge.cpu_write(address, data),
-                None => self.set_test_ram(address, data)
-            },
+            0x4020..=0xFFFF => {
+                if self.ppu.has_cartridge() {
+                    self.ppu.cartridge_cpu_write(address, data)
+                } else {
+                    self.set_test_ram(address, data)
+                }
+            }
             _ => self.set_test_ram(address, data),
         };
     }

@@ -432,7 +432,7 @@ impl IndexMut<usize> for Oam {
 
 pub struct Ricoh2c02 {
     ram: Box<Ram>,
-    pub cartridge: Option<Box<Cartridge>>,
+    cartridge: Option<Box<Cartridge>>,
     primary_oam: Oam,
     secondary_oam: Oam,
     current_scanline_oam: Oam,
@@ -499,6 +499,13 @@ impl Ricoh2c02 {
             palette_ram: [0; 0x20],
             current_sprite_number: 0,
             current_sprite_byte: 0,
+        }
+    }
+
+    pub fn has_cartridge(&self) -> bool {
+        match &self.cartridge {
+            Some(_) => true,
+            None => false,
         }
     }
 
@@ -717,6 +724,20 @@ impl Ricoh2c02 {
             },
             _ => (),
         }
+    }
+
+    pub fn cartridge_cpu_read(&self, address: u16) -> u8 {
+        match &self.cartridge {
+            Some(cartridge) => cartridge.cpu_read(address),
+            None => 0,
+        }
+    }
+
+    pub fn cartridge_cpu_write(&mut self, address: u16, data: u8) {
+        match &mut self.cartridge {
+            Some(cartridge) => cartridge.cpu_write(address, data),
+            None => (),
+        };
     }
 
     pub fn oam_dma(&mut self, address: u16, data: u8) {
