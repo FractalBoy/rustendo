@@ -1470,7 +1470,6 @@ impl Mos6502 {
 mod tests {
     use super::Mos6502;
     use crate::assembler::{self, AssemblerError};
-    use crate::cartridge::Cartridge;
 
     fn run_program(program: &str) -> Box<Mos6502> {
         match assembler::run_program(program) {
