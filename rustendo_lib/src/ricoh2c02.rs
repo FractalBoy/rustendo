@@ -1129,3 +1129,18 @@ impl Ricoh2c02 {
         frame_complete
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Ricoh2c02;
+    #[test]
+    fn it_works() {
+        // Right now, this test does nothing - it just silences warnings.
+        let mut ppu = Ricoh2c02::new();
+        ppu.cpu_read(0);
+        ppu.cpu_write(0, 0);
+        ppu.has_cartridge();
+        ppu.cartridge_cpu_read(0);
+        ppu.cartridge_cpu_write(0, 0);
+    }
+}

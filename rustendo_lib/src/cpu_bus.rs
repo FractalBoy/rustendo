@@ -1,9 +1,11 @@
 use crate::cartridge::Cartridge;
 use crate::controller::Controller;
+#[cfg(not(test))]
 use crate::cpu_ram::Ram;
 use crate::ricoh2c02::Ricoh2c02;
 
 pub struct Bus {
+    #[cfg(not(test))]
     ram: Ram,
     ppu: Ricoh2c02,
     controller: Controller,
@@ -26,7 +28,6 @@ impl Bus {
     #[cfg(test)]
     pub fn new() -> Self {
         Bus {
-            ram: Ram::new(),
             ppu: Ricoh2c02::new(),
             controller: Controller::new(),
             dma_transfer: None,

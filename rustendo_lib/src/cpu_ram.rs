@@ -20,3 +20,16 @@ impl Ram {
         self.ram[address] = data;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Ram;
+
+    #[test]
+    fn it_works() {
+        // Right now, this test does nothing - it just silences warnings.
+        let mut ram = Ram::new();
+        ram.read(0);
+        ram.write(0, 0);
+    }
+}
