@@ -582,68 +582,9 @@ impl Deref for Accumulator {
     }
 }
 
-struct Alu;
-
-impl Alu {
-    pub fn new() -> Self {
-        Alu
-    }
-
-    pub fn add_with_carry(
-        &mut self,
-        accumulator: &mut Accumulator,
-        data_bus: &mut DataBus,
-        p: &mut StatusRegister,
-    ) {
-        let accumulator_data = accumulator.read();
-        let bus_data = data_bus.read();
-
-        let sum;
-
-        let bin = (accumulator_data as u16)
-            .wrapping_add(bus_data as u16)
-            .wrapping_add(p.carry as u16);
-
-        p.carry = bin & 0x100 == 0x100;
-
-        sum = (bin & 0xFF) as u8;
-        p.zero = sum == 0;
-
-        accumulator.write(sum);
-        p.negative = sum & 0x80 == 0x80;
-        p.overflow = ((accumulator_data ^ sum) & (bus_data ^ sum) & 0x80) == 0x80
-    }
-
-    pub fn subtract_with_borrow(
-        &mut self,
-        accumulator: &mut Accumulator,
-        data_bus: &mut DataBus,
-        p: &mut StatusRegister,
-    ) {
-        let accumulator_data = accumulator.read();
-        let bus_data = data_bus.read();
-
-        let bin = (accumulator_data as u16)
-            .wrapping_add((!bus_data) as u16)
-            .wrapping_add(p.carry as u16);
-
-        // Carry = inverse of borrow
-        p.carry = bin & 0x100 == 0x100;
-
-        let sum = (bin & 0xFF) as u8;
-
-        accumulator.write(sum);
-        p.zero = sum == 0;
-        p.negative = sum & 0x80 == 0x80;
-        p.overflow = ((accumulator_data ^ sum) & (!bus_data ^ sum) & 0x80) == 0x80
-    }
-}
-
 pub struct Mos6502 {
     /// Accumulator
     a: Accumulator,
-    /// ALU
-    alu: Alu,
     /// X index register
     x: u8,
     /// Y index register
@@ -680,7 +621,6 @@ impl Mos6502 {
     pub fn new(cartridge: Option<Box<Cartridge>>) -> Self {
         Mos6502 {
             a: Accumulator::new(),
-            alu: Alu::new(),
             instruction_register: InstructionRegister::new(),
             x: 0,
             y: 0,
@@ -1038,6 +978,45 @@ impl Mos6502 {
         self.p.irq_disable = true;
     }
 
+    pub fn add_with_carry(&mut self) {
+        let accumulator_data = self.a.read();
+        let bus_data = self.data_bus.read();
+
+        let sum;
+
+        let bin = (accumulator_data as u16)
+            .wrapping_add(bus_data as u16)
+            .wrapping_add(self.p.carry as u16);
+
+        self.p.carry = bin & 0x100 == 0x100;
+
+        sum = (bin & 0xFF) as u8;
+        self.p.zero = sum == 0;
+
+        self.a.write(sum);
+        self.p.negative = sum & 0x80 == 0x80;
+        self.p.overflow = ((accumulator_data ^ sum) & (bus_data ^ sum) & 0x80) == 0x80
+    }
+
+    pub fn subtract_with_borrow(&mut self) {
+        let accumulator_data = self.a.read();
+        let bus_data = self.data_bus.read();
+
+        let bin = (accumulator_data as u16)
+            .wrapping_add((!bus_data) as u16)
+            .wrapping_add(self.p.carry as u16);
+
+        // Carry = inverse of borrow
+        self.p.carry = bin & 0x100 == 0x100;
+
+        let sum = (bin & 0xFF) as u8;
+
+        self.a.write(sum);
+        self.p.zero = sum == 0;
+        self.p.negative = sum & 0x80 == 0x80;
+        self.p.overflow = ((accumulator_data ^ sum) & (!bus_data ^ sum) & 0x80) == 0x80
+    }
+
     fn read_instruction(&mut self) {
         self.pc.write_to_address_bus(&mut self.address_bus);
         self.read();
@@ -1052,8 +1031,7 @@ impl Mos6502 {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.read();
-                self.alu
-                    .add_with_carry(&mut self.a, &mut self.data_bus, &mut self.p);
+                self.add_with_carry();
             }
             Instruction::AND(mode, _, cycles) => {
                 self.cycles = cycles;
@@ -1382,8 +1360,7 @@ impl Mos6502 {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
                 self.read();
-                self.alu
-                    .subtract_with_borrow(&mut self.a, &mut self.data_bus, &mut self.p);
+                self.subtract_with_borrow();
             }
             Instruction::SEC(_, _, cycles) => {
                 self.cycles = cycles;
