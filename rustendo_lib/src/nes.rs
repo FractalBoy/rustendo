@@ -11,14 +11,18 @@ pub struct Nes {
 }
 
 impl Nes {
-    pub fn new(cartridge: Option<Box<Cartridge>>) -> Self {
+    pub fn new() -> Self {
         Nes {
-            cpu: Box::new(Mos6502::new(cartridge)),
+            cpu: Box::new(Mos6502::new()),
             clocks: 0,
             dma_cycle: 0,
             dma_data: 0,
             dma_dummy: true,
         }
+    }
+
+    pub fn load_cartridge(&mut self, cartridge: Box<Cartridge>) {
+        self.cpu.load_cartridge(cartridge)
     }
 
     pub fn controller(&mut self) -> &mut Controller {

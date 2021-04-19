@@ -237,7 +237,7 @@ pub fn run_program(program: &str) -> Result<Box<Mos6502>, AssemblerError> {
         mem.extend_from_slice(&instruction);
     }
 
-    let mut cpu = Mos6502::new(None);
+    let mut cpu = Mos6502::new();
 
     let mut location: u16 = 0;
 

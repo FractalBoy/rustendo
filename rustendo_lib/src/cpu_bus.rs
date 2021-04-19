@@ -13,10 +13,10 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new(cartridge: Option<Box<Cartridge>>) -> Self {
+    pub fn new() -> Self {
         let mut bus = Bus {
             ram: Box::new(Ram::new()),
-            ppu: Box::new(Ricoh2c02::new(cartridge)),
+            ppu: Box::new(Ricoh2c02::new()),
             controller: Controller::new(),
             test_ram: None,
             dma_transfer: None,
@@ -28,6 +28,10 @@ impl Bus {
         }
 
         bus
+    }
+
+    pub fn load_cartridge(&mut self, cartridge: Box<Cartridge>) {
+        self.ppu.load_cartridge(cartridge);
     }
 
     pub fn ppu_clock(&mut self, nmi_enable: &mut bool) -> bool {

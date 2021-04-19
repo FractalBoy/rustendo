@@ -467,10 +467,10 @@ const CYCLES_PER_SCANLINE: u32 = 341;
 const SCANLINES_PER_FRAME: u32 = 262;
 
 impl Ricoh2c02 {
-    pub fn new(cartridge: Option<Box<Cartridge>>) -> Self {
+    pub fn new() -> Self {
         Ricoh2c02 {
             ram: Box::new(Ram::new()),
-            cartridge,
+            cartridge: None,
             primary_oam: Oam::new(64),
             secondary_oam: Oam::new(8),
             current_scanline_oam: Oam::new(8),
@@ -500,6 +500,10 @@ impl Ricoh2c02 {
             current_sprite_number: 0,
             current_sprite_byte: 0,
         }
+    }
+
+    pub fn load_cartridge(&mut self, cartridge: Box<Cartridge>) {
+        self.cartridge = Some(cartridge);
     }
 
     pub fn has_cartridge(&self) -> bool {
