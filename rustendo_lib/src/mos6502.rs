@@ -56,18 +56,6 @@ impl ProgramCounter {
         ProgramCounter { pch: 0, pcl: 0 }
     }
 
-    pub fn write_to_address_bus(&self, address_bus: &mut AddressBus) {
-        address_bus.write(self.pch, self.pcl);
-    }
-
-    pub fn read_high_from_data_bus(&mut self, data_bus: &DataBus) {
-        self.pch = data_bus.read();
-    }
-
-    pub fn read_low_from_data_bus(&mut self, data_bus: &DataBus) {
-        self.pcl = data_bus.read();
-    }
-
     pub fn read_low(&self) -> u8 {
         self.pcl
     }
@@ -76,23 +64,31 @@ impl ProgramCounter {
         self.pch
     }
 
+    pub fn write_high(&mut self, data: u8) {
+        self.pch = data;
+    }
+
+    pub fn write_low(&mut self, data: u8) {
+        self.pcl = data;
+    }
+
     fn write(&mut self, value: u16) {
         self.pch = ((value & 0xFF00) >> 8) as u8;
         self.pcl = (value & 0x00FF) as u8;
     }
 
-    fn wide(&self) -> u16 {
+    fn read(&self) -> u16 {
         (self.pch as u16) << 8 | self.pcl as u16
     }
 
     pub fn increment(&mut self) {
-        self.write(self.wide().wrapping_add(1));
+        self.write(self.read().wrapping_add(1));
     }
 }
 
 impl Display for ProgramCounter {
     fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
-        write!(formatter, "{:04X}", self.wide())
+        write!(formatter, "{:04X}", self.read())
     }
 }
 
@@ -723,7 +719,8 @@ impl Mos6502 {
 
     fn fetch_next_byte(&mut self) -> u8 {
         self.pc.increment();
-        self.pc.write_to_address_bus(&mut self.address_bus);
+        self.address_bus
+            .write(self.pc.read_high(), self.pc.read_low());
         self.read()
     }
 
@@ -774,7 +771,8 @@ impl Mos6502 {
             AddressingMode::Accumulator => return,
             AddressingMode::Immediate => {
                 self.pc.increment();
-                self.pc.write_to_address_bus(&mut self.address_bus);
+                self.address_bus
+                    .write(self.pc.read_high(), self.pc.read_low());
             }
             AddressingMode::Implied => return,
             AddressingMode::IndirectX => {
@@ -819,7 +817,7 @@ impl Mos6502 {
                 let (pcl, carry) = self.pc.read_low().overflowing_add(offset);
                 if take_branch {
                     self.data_bus.write(pcl);
-                    self.pc.read_low_from_data_bus(&self.data_bus);
+                    self.pc.write_low(self.data_bus.read());
                 }
 
                 // If the offset was negative, we expect a carry
@@ -843,7 +841,7 @@ impl Mos6502 {
                 if take_branch {
                     self.cycles += 1;
                     self.data_bus.write(pch);
-                    self.pc.read_high_from_data_bus(&self.data_bus);
+                    self.pc.write_high(self.data_bus.read());
                 }
             }
             AddressingMode::ZeroPage => {
@@ -920,7 +918,7 @@ impl Mos6502 {
     ) {
         self.cycles = cycles;
 
-        let address = self.pc.wide();
+        let address = self.pc.read();
         // Store the next instruction in the stack
         let address = address.wrapping_add(bytes as u16);
         let high = ((address & 0xFF00) >> 8) as u8;
@@ -965,7 +963,7 @@ impl Mos6502 {
 
         self.write_address(vector_high, vector_low);
         self.read();
-        self.pc.read_high_from_data_bus(&self.data_bus);
+        self.pc.write_high(self.data_bus.read());
 
         let interrupt_vector = interrupt_vector.wrapping_sub(1);
         let vector_high = ((interrupt_vector & 0xFF00) >> 8) as u8;
@@ -973,7 +971,7 @@ impl Mos6502 {
 
         self.write_address(vector_high, vector_low);
         self.read();
-        self.pc.read_low_from_data_bus(&self.data_bus);
+        self.pc.write_low(self.data_bus.read());
 
         self.p.irq_disable = true;
     }
@@ -1018,7 +1016,8 @@ impl Mos6502 {
     }
 
     fn read_instruction(&mut self) {
-        self.pc.write_to_address_bus(&mut self.address_bus);
+        self.address_bus
+            .write(self.pc.read_high(), self.pc.read_low());
         self.read();
         self.instruction_register.read_from_bus(&self.data_bus);
     }
@@ -1151,7 +1150,7 @@ impl Mos6502 {
             Instruction::JSR(mode, bytes, cycles) => {
                 let next_address = self
                     .pc
-                    .wide()
+                    .read()
                     .wrapping_add((bytes & 0xFFFF) as u16)
                     // We want the next address to be the last byte of this instruction,
                     // not the first byte of the next, so we subtract one.
@@ -1331,16 +1330,16 @@ impl Mos6502 {
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 self.read();
-                self.pc.read_low_from_data_bus(&self.data_bus);
+                self.pc.write_low(self.data_bus.read());
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 self.read();
-                self.pc.read_high_from_data_bus(&self.data_bus);
+                self.pc.write_high(self.data_bus.read());
 
                 // Subtract one from program counter to counteract
                 // standard increment
-                let pc = self.pc.wide();
+                let pc = self.pc.read();
                 self.pc.write(pc.wrapping_sub(1));
             }
             Instruction::RTS(_, _, cycles) => {
@@ -1349,12 +1348,12 @@ impl Mos6502 {
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 self.read();
-                self.pc.read_low_from_data_bus(&self.data_bus);
+                self.pc.write_low(self.data_bus.read());
 
                 self.s = self.s.wrapping_add(1);
                 self.write_address(0x01, self.s);
                 self.read();
-                self.pc.read_high_from_data_bus(&self.data_bus);
+                self.pc.write_high(self.data_bus.read());
             }
             Instruction::SBC(mode, _, cycles) => {
                 self.cycles = cycles;
@@ -1435,7 +1434,7 @@ impl Mos6502 {
             Instruction::KIL => panic!(
                 "{} instruction not implemented at address {:04X}",
                 self.instruction_register,
-                self.pc.wide()
+                self.pc.read()
             ),
         };
 
