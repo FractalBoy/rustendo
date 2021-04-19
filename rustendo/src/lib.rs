@@ -129,7 +129,7 @@ fn load_cartridge(byte_array: Uint8Array) -> Nes {
     let vec = byte_array.to_vec();
     let cartridge = Cartridge::new(vec);
     let mut nes = Nes::new();
-    nes.load_cartridge(Box::new(cartridge));
+    nes.load_cartridge(cartridge);
     nes
 }
 

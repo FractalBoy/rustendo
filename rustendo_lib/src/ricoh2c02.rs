@@ -431,8 +431,8 @@ impl IndexMut<usize> for Oam {
 }
 
 pub struct Ricoh2c02 {
-    ram: Box<Ram>,
-    cartridge: Option<Box<Cartridge>>,
+    ram: Ram,
+    cartridge: Option<Cartridge>,
     primary_oam: Oam,
     secondary_oam: Oam,
     current_scanline_oam: Oam,
@@ -456,8 +456,8 @@ pub struct Ricoh2c02 {
     fine_x_scroll: u8,
     address_latch: bool,
     odd_frame: bool,
-    palette: [(u8, u8, u8); 0x40],
-    screen: Box<[[(u8, u8, u8); 0x100]; 0xF0]>,
+    palette: Vec<(u8, u8, u8)>,
+    screen: Vec<Vec<(u8, u8, u8)>>,
     palette_ram: [u8; 0x20],
     current_sprite_number: u8,
     current_sprite_byte: u8,
@@ -469,7 +469,7 @@ const SCANLINES_PER_FRAME: u32 = 262;
 impl Ricoh2c02 {
     pub fn new() -> Self {
         Ricoh2c02 {
-            ram: Box::new(Ram::new()),
+            ram: Ram::new(),
             cartridge: None,
             primary_oam: Oam::new(64),
             secondary_oam: Oam::new(8),
@@ -495,14 +495,14 @@ impl Ricoh2c02 {
             bg_attr_lsb_shifter: 0,
             fine_x_scroll: 0,
             palette: Self::get_palette(),
-            screen: Box::new([[(0, 0, 0); 0x100]; 0xF0]),
+            screen: vec![vec![(0, 0, 0); 0x100]; 0xF0],
             palette_ram: [0; 0x20],
             current_sprite_number: 0,
             current_sprite_byte: 0,
         }
     }
 
-    pub fn load_cartridge(&mut self, cartridge: Box<Cartridge>) {
+    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.cartridge = Some(cartridge);
     }
 
@@ -513,12 +513,12 @@ impl Ricoh2c02 {
         }
     }
 
-    pub fn get_screen(&self) -> &[[(u8, u8, u8); 0x100]; 0xF0] {
+    pub fn get_screen(&self) -> &Vec<Vec<(u8, u8, u8)>> {
         &self.screen
     }
 
-    fn get_palette() -> [(u8, u8, u8); 0x40] {
-        [
+    fn get_palette() -> Vec<(u8, u8, u8)> {
+        vec![
             (84, 84, 84),
             (0, 30, 116),
             (8, 16, 144),

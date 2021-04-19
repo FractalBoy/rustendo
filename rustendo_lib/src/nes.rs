@@ -3,7 +3,7 @@ use crate::controller::Controller;
 use crate::mos6502::Mos6502;
 
 pub struct Nes {
-    cpu: Box<Mos6502>,
+    cpu: Mos6502,
     clocks: u32,
     dma_cycle: u16,
     dma_data: u8,
@@ -13,7 +13,7 @@ pub struct Nes {
 impl Nes {
     pub fn new() -> Self {
         Nes {
-            cpu: Box::new(Mos6502::new()),
+            cpu: Mos6502::new(),
             clocks: 0,
             dma_cycle: 0,
             dma_data: 0,
@@ -21,7 +21,7 @@ impl Nes {
         }
     }
 
-    pub fn load_cartridge(&mut self, cartridge: Box<Cartridge>) {
+    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.cpu.load_cartridge(cartridge)
     }
 
@@ -86,7 +86,7 @@ impl Nes {
         }
     }
 
-    pub fn get_screen(&self) -> &[[(u8, u8, u8); 0x100]; 0xF0] {
+    pub fn get_screen(&self) -> &Vec<Vec<(u8, u8, u8)>> {
         self.cpu.get_bus().get_ppu().get_screen()
     }
 

@@ -227,7 +227,7 @@ pub fn assemble_program(program: &str) -> Result<Vec<Vec<u8>>, AssemblerError> {
 }
 
 #[allow(dead_code)]
-pub fn run_program(program: &str) -> Result<Box<Mos6502>, AssemblerError> {
+pub fn run_program(program: &str) -> Result<Mos6502, AssemblerError> {
     let program = match assemble_program(&program) {
         Ok(program) => program,
         Err(error) => return Err(error),
@@ -250,7 +250,7 @@ pub fn run_program(program: &str) -> Result<Box<Mos6502>, AssemblerError> {
         while !cpu.clock() {}
     }
 
-    Ok(Box::new(cpu))
+    Ok(cpu)
 }
 
 fn lookup_instruction(instruction: &str, addressing_mode: AddressingMode) -> Option<u8> {

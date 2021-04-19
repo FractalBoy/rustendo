@@ -4,33 +4,37 @@ use crate::cpu_ram::Ram;
 use crate::ricoh2c02::Ricoh2c02;
 
 pub struct Bus {
-    ram: Box<Ram>,
-    ppu: Box<Ricoh2c02>,
+    ram: Ram,
+    ppu: Ricoh2c02,
     controller: Controller,
-    // This ram is used only for testing.
-    test_ram: Option<[u8; 0x10000]>,
+    #[cfg(test)]
+    test_ram: Vec<u8>,
     dma_transfer: Option<u8>,
 }
 
 impl Bus {
+    #[cfg(not(test))]
     pub fn new() -> Self {
-        let mut bus = Bus {
-            ram: Box::new(Ram::new()),
-            ppu: Box::new(Ricoh2c02::new()),
+        Bus {
+            ram: Ram::new(),
+            ppu: Ricoh2c02::new(),
             controller: Controller::new(),
-            test_ram: None,
             dma_transfer: None,
-        };
-
-        // Set up some fake RAM to use for testing purposes only.
-        if cfg!(test) {
-            bus.test_ram = Some([0; 0x10000]);
         }
-
-        bus
     }
 
-    pub fn load_cartridge(&mut self, cartridge: Box<Cartridge>) {
+    #[cfg(test)]
+    pub fn new() -> Self {
+        Bus {
+            ram: Ram::new(),
+            ppu: Ricoh2c02::new(),
+            controller: Controller::new(),
+            dma_transfer: None,
+            test_ram: vec![0; 0x10000],
+        }
+    }
+
+    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.ppu.load_cartridge(cartridge);
     }
 
@@ -58,6 +62,7 @@ impl Bus {
         self.dma_transfer = None;
     }
 
+    #[cfg(not(test))]
     pub fn cpu_read(&mut self, address: u16) -> u8 {
         match address {
             0x0..=0x1FFF => self.ram.read(address),
@@ -67,13 +72,19 @@ impl Bus {
                 if self.ppu.has_cartridge() {
                     self.ppu.cartridge_cpu_read(address)
                 } else {
-                    self.get_test_ram(address)
+                    0
                 }
             }
-            _ => self.get_test_ram(address),
+            _ => 0,
         }
     }
 
+    #[cfg(test)]
+    pub fn cpu_read(&mut self, address: u16) -> u8 {
+        self.test_ram[address as usize]
+    }
+
+    #[cfg(not(test))]
     pub fn cpu_write(&mut self, address: u16, data: u8) {
         match address {
             0x0000..=0x1FFF => self.ram.write(address, data),
@@ -84,24 +95,15 @@ impl Bus {
                 if self.ppu.has_cartridge() {
                     self.ppu.cartridge_cpu_write(address, data)
                 } else {
-                    self.set_test_ram(address, data)
+                    ()
                 }
             }
-            _ => self.set_test_ram(address, data),
+            _ => (),
         };
     }
 
-    fn set_test_ram(&mut self, address: u16, data: u8) {
-        match &mut self.test_ram {
-            Some(fake_ram) => fake_ram[address as usize] = data,
-            None => return,
-        }
-    }
-
-    fn get_test_ram(&self, address: u16) -> u8 {
-        match &self.test_ram {
-            Some(fake_ram) => fake_ram[address as usize],
-            None => 0,
-        }
+    #[cfg(test)]
+    pub fn cpu_write(&mut self, address: u16, data: u8) {
+        self.test_ram[address as usize] = data;
     }
 }

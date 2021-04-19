@@ -1,13 +1,13 @@
 use crate::cartridge::MirroringType;
 
 pub struct Ram {
-    nametables: [[u8; 0x400]; 2],
+    nametables: Vec<Vec<u8>>
 }
 
 impl Ram {
     pub fn new() -> Self {
         Ram {
-            nametables: [[0; 0x400]; 2],
+            nametables: vec![vec![0; 0x400]; 2],
         }
     }
 

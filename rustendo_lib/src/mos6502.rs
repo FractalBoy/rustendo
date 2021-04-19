@@ -596,7 +596,7 @@ pub struct Mos6502 {
     #[allow(dead_code)]
     not_set_overflow: bool,
     not_reset: bool,
-    bus: Box<Bus>,
+    bus: Bus,
 }
 
 enum IndexRegister {
@@ -622,11 +622,11 @@ impl Mos6502 {
             not_nmi: true,
             not_reset: true,
             not_set_overflow: true,
-            bus: Box::new(Bus::new()),
+            bus: Bus::new(),
         }
     }
 
-    pub fn load_cartridge(&mut self, cartridge: Box<Cartridge>) {
+    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.bus.load_cartridge(cartridge)
     }
 
@@ -1443,7 +1443,7 @@ mod tests {
     use super::Mos6502;
     use crate::assembler::{self, AssemblerError};
 
-    fn run_program(program: &str) -> Box<Mos6502> {
+    fn run_program(program: &str) -> Mos6502 {
         match assembler::run_program(program) {
             Ok(cpu) => cpu,
             Err(error) => {
