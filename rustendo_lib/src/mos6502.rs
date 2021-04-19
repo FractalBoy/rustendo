@@ -169,8 +169,8 @@ impl InstructionRegister {
         InstructionRegister { data: 0 }
     }
 
-    pub fn read_from_bus(&mut self, data_bus: &DataBus) {
-        self.data = data_bus.read();
+    pub fn write(&mut self, data: u8) {
+        self.data = data;
     }
 
     pub fn decode_instruction(&self) -> Instruction {
@@ -551,14 +551,6 @@ struct Accumulator {
 impl Accumulator {
     pub fn new() -> Self {
         Accumulator { data: 0 }
-    }
-
-    pub fn write_to_bus(&self, data_bus: &mut DataBus) {
-        data_bus.write(self.data);
-    }
-
-    pub fn read_from_bus(&mut self, data_bus: &DataBus) {
-        self.data = data_bus.read();
     }
 
     pub fn write(&mut self, data: u8) {
@@ -1019,7 +1011,7 @@ impl Mos6502 {
         self.address_bus
             .write(self.pc.read_high(), self.pc.read_low());
         self.read();
-        self.instruction_register.read_from_bus(&self.data_bus);
+        self.instruction_register.write(self.data_bus.read());
     }
 
     fn execute_instruction(&mut self) {
@@ -1060,7 +1052,7 @@ impl Mos6502 {
                 self.p.carry = operand & 0x80 == 0x80;
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.read_from_bus(&self.data_bus);
+                    self.a.write(self.data_bus.read());
                 } else {
                     self.write();
                 }
@@ -1176,7 +1168,7 @@ impl Mos6502 {
 
                 self.do_addressing_mode(mode);
                 self.read();
-                self.a.read_from_bus(&self.data_bus);
+                self.a.write(self.data_bus.read());
                 let a = self.a.read();
                 self.p.negative = a & 0x80 == 0x80;
                 self.p.zero = a == 0;
@@ -1214,7 +1206,7 @@ impl Mos6502 {
                 self.p.negative = false;
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.read_from_bus(&self.data_bus);
+                    self.a.write(self.data_bus.read());
                 } else {
                     self.write();
                 }
@@ -1238,7 +1230,7 @@ impl Mos6502 {
                 self.cycles = cycles;
 
                 self.write_address(0x01, self.s);
-                self.a.write_to_bus(&mut self.data_bus);
+                self.data_bus.write(self.a.read());
                 self.write();
 
                 self.s = self.s.wrapping_sub(1);
@@ -1290,7 +1282,7 @@ impl Mos6502 {
                 self.data_bus.write(result);
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.read_from_bus(&self.data_bus);
+                    self.a.write(self.data_bus.read());
                 } else {
                     self.write();
                 }
@@ -1314,7 +1306,7 @@ impl Mos6502 {
                 self.data_bus.write(result);
 
                 if mode == AddressingMode::Accumulator {
-                    self.a.read_from_bus(&self.data_bus);
+                    self.a.write(self.data_bus.read());
                 } else {
                     self.write();
                 }
@@ -1376,7 +1368,7 @@ impl Mos6502 {
             Instruction::STA(mode, _, cycles) => {
                 self.cycles = cycles;
                 self.do_addressing_mode(mode);
-                self.a.write_to_bus(&mut self.data_bus);
+                self.data_bus.write(self.a.read());
                 self.write();
             }
             Instruction::STX(mode, _, cycles) => {
