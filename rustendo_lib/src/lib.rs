@@ -57,16 +57,6 @@ macro_rules! bitfield {
     };
 }
 
-pub trait PpuReadWrite {
-    fn ppu_read(&self, address: u16) -> u8;
-    fn ppu_write(&mut self, address: u16, data: u8);
-}
-
-pub trait CpuReadWrite {
-    fn cpu_read(&self, address: u16) -> u8;
-    fn cpu_write(&mut self, address: u16, data: u8);
-}
-
 mod assembler;
 pub mod cartridge;
 mod controller;

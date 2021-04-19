@@ -509,8 +509,8 @@ impl Ricoh2c02 {
         }
     }
 
-    pub fn get_screen(&self) -> Box<[[(u8, u8, u8); 0x100]; 0xF0]> {
-        self.screen.clone()
+    pub fn get_screen(&self) -> &[[(u8, u8, u8); 0x100]; 0xF0] {
+        &self.screen
     }
 
     fn get_palette() -> [(u8, u8, u8); 0x40] {

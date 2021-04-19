@@ -82,7 +82,7 @@ impl Nes {
         }
     }
 
-    pub fn get_screen(&self) -> Box<[[(u8, u8, u8); 0x100]; 0xF0]> {
+    pub fn get_screen(&self) -> &[[(u8, u8, u8); 0x100]; 0xF0] {
         self.cpu.get_bus().get_ppu().get_screen()
     }
 
