@@ -171,6 +171,10 @@ impl PpuStatus {
         self.sprite_overflow = data;
     }
 
+    pub fn set_sprite_zero_hit(&mut self, data: bool) {
+        self.sprite_zero_hit = data;
+    }
+
     pub fn set(&mut self, byte: u8) {
         let byte = byte >> 5;
         self.sprite_overflow = byte & 0x01 == 0x01;
@@ -339,7 +343,8 @@ impl IndexMut<usize> for Sprite {
 
 struct Oam {
     oam: Vec<u8>,
-    shift_registers: Vec<u8>,
+    hi_shift_registers: Vec<u8>,
+    lo_shift_registers: Vec<u8>,
     counters: Vec<i16>,
     num_sprites: usize,
 }
@@ -348,7 +353,8 @@ impl Oam {
     pub fn new(num_sprites: usize) -> Self {
         Oam {
             oam: vec![0; num_sprites * 4],
-            shift_registers: vec![0; num_sprites],
+            hi_shift_registers: vec![0; num_sprites],
+            lo_shift_registers: vec![0; num_sprites],
             counters: vec![0; num_sprites],
             num_sprites: 0,
         }
@@ -388,7 +394,8 @@ impl Oam {
         // Initialize the counters, reset the shifters
         for sprite in 0..self.num_sprites {
             self.counters[sprite] = self.get_sprite(sprite).left_x_position.into();
-            self.shift_registers[sprite] = 0;
+            self.hi_shift_registers[sprite] = 0;
+            self.lo_shift_registers[sprite] = 0;
         }
     }
 
@@ -414,10 +421,25 @@ impl Oam {
         for sprite in 0..self.num_sprites {
             // Only shift the ones in range.
             if self.counters[sprite] <= 0 && self.counters[sprite] > -8 {
-                let register = &mut self.shift_registers[sprite];
-                // TODO: replace "bit" with next bit to shift into register
-                let bit = 1;
-                *register = (bit << 7) | ((*register >> 1) & 0x7F);
+                // TODO: Update registers
+            }
+        }
+    }
+
+    pub fn loop_sprites<F>(&self, mut func: F)
+    where
+        F: FnMut(usize, Sprite, u8, u8) -> bool,
+    {
+        for sprite in 0..self.num_sprites {
+            if self.counters[sprite] <= 0 && self.counters[sprite] > -8 {
+                if func(
+                    sprite,
+                    self.get_sprite(sprite),
+                    self.lo_shift_registers[sprite],
+                    self.hi_shift_registers[sprite],
+                ) {
+                    break;
+                }
             }
         }
     }
@@ -466,7 +488,7 @@ pub struct Ricoh2c02 {
     palette: Vec<(u8, u8, u8)>,
     screen: Vec<Vec<(u8, u8, u8)>>,
     palette_ram: [u8; 0x20],
-    rendering_sprite_zero: bool
+    rendering_sprite_zero: bool,
 }
 
 const CYCLES_PER_SCANLINE: u32 = 341;
@@ -503,7 +525,7 @@ impl Ricoh2c02 {
             palette: Self::get_palette(),
             screen: vec![vec![(0, 0, 0); 0x100]; 0xF0],
             palette_ram: [0; 0x20],
-            rendering_sprite_zero: false
+            rendering_sprite_zero: false,
         }
     }
 
@@ -917,8 +939,8 @@ impl Ricoh2c02 {
         }
     }
 
-    fn calculate_pixel(&self) -> (u8, u8, u8) {
-        let (pixel, palette) = if self.ppu_mask.get_background_enable() {
+    fn calculate_pixel(&mut self) -> (u8, u8, u8) {
+        let (bg_pixel, bg_palette) = if self.ppu_mask.get_background_enable() {
             let mask = 0x8000 >> self.fine_x_scroll;
 
             let pixel_lsb = self.bg_tile_lsb_shifter & mask == mask;
@@ -931,6 +953,51 @@ impl Ricoh2c02 {
             (pixel, palette)
         } else {
             (0, 0)
+        };
+
+        let (fg_pixel, fg_palette, fg_priority) = if self.ppu_mask.get_sprite_enable() {
+            let mut pixel = 0;
+            let mut palette = 0;
+            let mut priority = false;
+            let mut sprite_zero_hit = false;
+
+            self.current_scanline_oam.loop_sprites(
+                |sprite_num, sprite, register_lo, register_hi| {
+                    let pixel_lsb = register_lo & 0x80;
+                    let pixel_msb = register_hi & 0x80;
+                    pixel = (pixel_msb as u16) << 1 | pixel_lsb as u16;
+
+                    palette = (sprite.attributes & 0x03) as u16;
+                    priority = sprite.attributes & 0x20 == 0;
+
+                    if pixel != 0 {
+                        if self.rendering_sprite_zero && sprite_num == 0 {
+                            sprite_zero_hit = true;
+                        }
+                        return true;
+                    }
+
+                    return false;
+                },
+            );
+
+            self.ppu_status.set_sprite_zero_hit(sprite_zero_hit);
+
+            (pixel, palette, priority)
+        } else {
+            (0, 0, false)
+        };
+
+        let (pixel, palette) = if bg_pixel == 0 && fg_pixel == 0 {
+            (0, 0)
+        } else if bg_pixel == 0 && fg_pixel != 0 {
+            (fg_pixel, fg_palette)
+        } else if bg_pixel != 0 && fg_pixel == 0 {
+            (bg_pixel, bg_palette)
+        } else if fg_priority {
+            (fg_pixel, fg_palette)
+        } else {
+            (bg_pixel, bg_palette)
         };
 
         self.palette[(self.ppu_read(0x3F00 | palette << 2 | pixel) & 0x3F) as usize]
