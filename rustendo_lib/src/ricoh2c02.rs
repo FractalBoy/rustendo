@@ -1,7 +1,6 @@
 use crate::cartridge::{Cartridge, MirroringType};
 use crate::ppu_ram::Ram;
-use std::ops::Index;
-use std::ops::IndexMut;
+use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Copy, Clone)]
 enum IncrementMode {
@@ -393,6 +392,14 @@ impl Oam {
         }
     }
 
+    pub fn reset(&mut self) {
+        for entry in &mut self.oam {
+            *entry = 0xFF;
+        }
+
+        self.num_sprites = 0;
+    }
+
     pub fn is_full(&self) -> bool {
         self.num_sprites == self.oam.len() / 4
     }
@@ -459,8 +466,7 @@ pub struct Ricoh2c02 {
     palette: Vec<(u8, u8, u8)>,
     screen: Vec<Vec<(u8, u8, u8)>>,
     palette_ram: [u8; 0x20],
-    current_sprite_number: u8,
-    current_sprite_byte: u8,
+    rendering_sprite_zero: bool
 }
 
 const CYCLES_PER_SCANLINE: u32 = 341;
@@ -497,8 +503,7 @@ impl Ricoh2c02 {
             palette: Self::get_palette(),
             screen: vec![vec![(0, 0, 0); 0x100]; 0xF0],
             palette_ram: [0; 0x20],
-            current_sprite_number: 0,
-            current_sprite_byte: 0,
+            rendering_sprite_zero: false
         }
     }
 
@@ -968,85 +973,65 @@ impl Ricoh2c02 {
 
         match self.scanline {
             1..=239 => match self.cycle {
-                // Initialize secondary OAM to 0xFF, alternating reads and writes
-                1..=64 => match self.cycle % 2 {
-                    0 => self.secondary_oam[((self.cycle - 1) / 2) as usize] = 0xFF,
-                    // Fake reads on odd cycles
-                    1 => return,
-                    _ => unreachable!(),
-                },
-                65..=256 => {
-                    if self.cycle == 65 {
-                        self.current_sprite_number = 0;
-                        self.current_sprite_byte = 0;
-                    }
+                // Cycles 1-64 fill the secondary OAM. Instead, just fill on cycle 1
+                // and do nothing on the remaining cycles.
+                1 => self.secondary_oam.reset(),
+                2..=64 => return,
+                65 => {
+                    let mut current_sprite_number: usize = 0;
+                    self.rendering_sprite_zero = false;
 
-                    // Don't do anything on fake odd read cycles
-                    if self.cycle % 2 != 0 {
-                        return;
-                    }
+                    loop {
+                        let next_sprite = self.primary_oam.get_sprite(current_sprite_number);
 
-                    // If the current sprite byte is non-zero, we're currently copying a
-                    // sprite into secondary OAM.
-                    // Only increment sprite byte / sprite number if the secondary OAM has space.
-                    if self.current_sprite_byte > 0 && self.current_sprite_number != 64 {
-                        self.current_sprite_byte += 1;
+                        if next_sprite.in_range(self.scanline, self.ppu_ctrl.get_sprite_height()) {
+                            self.secondary_oam
+                                .copy_sprite(&self.primary_oam, current_sprite_number);
 
-                        if self.current_sprite_byte == 4 {
-                            // If we hit 4 bytes, we're onto the next sprite.
-                            self.current_sprite_byte = 0;
-                            self.current_sprite_number += 1;
-                        } else if !self.secondary_oam.is_full() {
-                            // If we haven't hit 4 bytes yet, we're still on the current sprite.
-                            // We've already done the work to copy the sprite on the 0th byte,
-                            // so we can just return.
-                            //
-                            // We don't return when secondary OAM is full to allow sprite overflow
-                            // evaluation to still occur.
+                            if current_sprite_number == 0 {
+                                self.rendering_sprite_zero = true;
+                            }
+                        }
+
+                        current_sprite_number += 1;
+
+                        if self.secondary_oam.is_full() {
+                            break;
+                        }
+
+                        if current_sprite_number == 64 {
                             return;
                         }
                     }
 
-                    // All 64 sprites have been evaluated.
-                    if self.current_sprite_number == 64 {
-                        return;
-                    }
+                    let mut current_sprite_byte: usize = 0;
 
-                    let next_sprite = self
-                        .primary_oam
-                        .get_sprite(self.current_sprite_number.into());
+                    loop {
+                        let sprite = self.primary_oam.get_sprite(current_sprite_number);
 
-                    if self.secondary_oam.is_full() {
-                        // Evaluate sprite overflow, with bug that treats the
-                        // other parts of the sprite as the top Y position.
-                        if next_sprite.in_range_with_sprite_overflow_bug(
+                        if sprite.in_range_with_sprite_overflow_bug(
                             self.scanline,
                             self.ppu_ctrl.get_sprite_height(),
-                            self.current_sprite_byte.into(),
+                            current_sprite_byte,
                         ) {
-                            self.current_sprite_byte += 1;
                             self.ppu_status.set_sprite_overflow(true);
+                            return;
                         } else {
-                            self.current_sprite_number += 1;
-                            // This is the sprite overflow bug.
-                            // The byte should really not be incremented.
-                            self.current_sprite_byte += 1;
+                            // Sprite overflow bug - should not be incrementing byte
+                            current_sprite_byte += 1;
+                            current_sprite_number += 1;
+
+                            if current_sprite_byte == 4 {
+                                current_sprite_byte = 0;
+                            }
+
+                            if current_sprite_number >= 64 {
+                                return;
+                            }
                         }
-
-                        return;
-                    }
-
-                    // If we get here, secondary OAM is not full
-                    // and we still have sprites to evaluate.
-                    if next_sprite.in_range(self.scanline, self.ppu_ctrl.get_sprite_height()) {
-                        self.secondary_oam
-                            .copy_sprite(&self.primary_oam, self.current_sprite_number.into());
-                        self.current_sprite_byte = 1;
-                    } else {
-                        // Not in range. Move onto the next one...
-                        self.current_sprite_number += 1;
                     }
                 }
+                66..=256 => return,
                 340 => {
                     // Copy the entire secondary OAM into the OAM to be used for the next scanline.
                     self.current_scanline_oam.copy(&self.secondary_oam);
