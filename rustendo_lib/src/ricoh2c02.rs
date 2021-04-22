@@ -968,6 +968,8 @@ impl Ricoh2c02 {
                     pixel = (pixel_msb as u16) << 1 | pixel_lsb as u16;
 
                     palette = (sprite.attributes & 0x03) as u16;
+                    // Foreground palettes are bytes 4-7
+                    palette += 0x04;
                     priority = sprite.attributes & 0x20 == 0;
 
                     if pixel != 0 {
