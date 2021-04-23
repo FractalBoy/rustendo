@@ -93,14 +93,14 @@ impl Display for ProgramCounter {
 }
 
 struct StatusRegister {
-    pub carry: bool,
-    pub zero: bool,
-    pub irq_disable: bool,
-    pub decimal_mode: bool,
-    pub brk_command: bool,
+    carry: bool,
+    zero: bool,
+    irq_disable: bool,
+    decimal_mode: bool,
+    brk_command: bool,
     always_one: bool,
-    pub overflow: bool,
-    pub negative: bool,
+    overflow: bool,
+    negative: bool,
 }
 
 impl StatusRegister {
