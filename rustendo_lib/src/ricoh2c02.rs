@@ -104,18 +104,6 @@ impl PpuMask {
         }
     }
 
-    pub fn get_background_enable(&self) -> bool {
-        self.background_enable
-    }
-
-    pub fn get_sprite_enable(&self) -> bool {
-        self.sprite_enable
-    }
-
-    pub fn get_greyscale(&self) -> bool {
-        self.greyscale
-    }
-
     pub fn set(&mut self, byte: u8) {
         self.greyscale = byte & 0x01 == 0x01;
         self.background_left_column_enable = byte & 0x02 == 0x02;
@@ -141,22 +129,6 @@ impl PpuStatus {
             sprite_zero_hit: false,
             vertical_blank_started: false,
         }
-    }
-
-    pub fn set_vertical_blank_started(&mut self, data: bool) {
-        self.vertical_blank_started = data;
-    }
-
-    pub fn get_vertical_blank_started(&self) -> bool {
-        self.vertical_blank_started
-    }
-
-    pub fn set_sprite_overflow(&mut self, data: bool) {
-        self.sprite_overflow = data;
-    }
-
-    pub fn set_sprite_zero_hit(&mut self, data: bool) {
-        self.sprite_zero_hit = data;
     }
 
     pub fn set(&mut self, byte: u8) {
@@ -619,7 +591,7 @@ impl Ricoh2c02 {
                 let address = self.oam_addr;
 
                 // Only allow writes to OAM when PPU is not rendering.
-                if self.rendering_enabled() && !self.ppu_status.get_vertical_blank_started() {
+                if self.rendering_enabled() && !self.ppu_status.vertical_blank_started {
                     return;
                 }
 
@@ -663,11 +635,7 @@ impl Ricoh2c02 {
         // When the grayscale bit is set in the PPU mask,
         // only the top 2 bits of the palette are used, meaning only gray colors
         // are used: 0x00 (dark gray), 0x10 (light gray), 0x20 (white), 0x30 (white).
-        let palette_mask = if self.ppu_mask.get_greyscale() {
-            0x30
-        } else {
-            0xFF
-        };
+        let palette_mask = if self.ppu_mask.greyscale { 0x30 } else { 0xFF };
 
         match address {
             0x0000..=0x1FFF => match &self.cartridge {
@@ -726,7 +694,7 @@ impl Ricoh2c02 {
     }
 
     fn rendering_enabled(&self) -> bool {
-        self.ppu_mask.get_background_enable() || self.ppu_mask.get_sprite_enable()
+        self.ppu_mask.background_enable || self.ppu_mask.sprite_enable
     }
 
     fn update_next_bg_tile_id(&mut self) {
@@ -880,7 +848,7 @@ impl Ricoh2c02 {
     }
 
     fn update_background_shifters(&mut self) {
-        if self.ppu_mask.get_background_enable() {
+        if self.ppu_mask.background_enable {
             self.bg_tile_lsb_shifter <<= 1;
             self.bg_tile_msb_shifter <<= 1;
             self.bg_attr_lsb_shifter <<= 1;
@@ -889,7 +857,7 @@ impl Ricoh2c02 {
     }
 
     fn update_foreground_shifters(&mut self) {
-        if self.ppu_mask.get_sprite_enable() {
+        if self.ppu_mask.sprite_enable {
             for sprite in 0..self.scanline_sprites.len() {
                 if self.scanline_sprites[sprite].left_x_position > 0 {
                     self.scanline_sprites[sprite].left_x_position -= 1;
@@ -955,7 +923,7 @@ impl Ricoh2c02 {
     }
 
     fn calculate_pixel(&mut self) -> (u8, u8, u8) {
-        let (bg_pixel, bg_palette) = if self.ppu_mask.get_background_enable() {
+        let (bg_pixel, bg_palette) = if self.ppu_mask.background_enable {
             let mask = 0x8000 >> self.fine_x_scroll;
 
             let pixel_lsb = self.bg_tile_lsb_shifter & mask == mask;
@@ -970,7 +938,7 @@ impl Ricoh2c02 {
             (0, 0)
         };
 
-        let (fg_pixel, fg_palette, fg_priority) = if self.ppu_mask.get_sprite_enable() {
+        let (fg_pixel, fg_palette, fg_priority) = if self.ppu_mask.sprite_enable {
             let mut pixel = 0;
             let mut palette = 0;
             let mut priority = false;
@@ -993,7 +961,7 @@ impl Ricoh2c02 {
 
                 if pixel != 0 {
                     if self.rendering_sprite_zero && sprite_num == 0 {
-                        self.ppu_status.set_sprite_zero_hit(true);
+                        self.ppu_status.sprite_zero_hit = true;
                     }
 
                     break;
@@ -1103,7 +1071,7 @@ impl Ricoh2c02 {
                             self.ppu_ctrl.get_sprite_height(),
                             current_sprite_byte,
                         ) {
-                            self.ppu_status.set_sprite_overflow(true);
+                            self.ppu_status.sprite_overflow = true;
                             return;
                         } else {
                             // Sprite overflow bug - should not be incrementing byte
@@ -1136,9 +1104,9 @@ impl Ricoh2c02 {
         }
 
         if self.scanline == 261 && self.cycle == 1 {
-            self.ppu_status.set_vertical_blank_started(false);
-            self.ppu_status.set_sprite_overflow(false);
-            self.ppu_status.set_sprite_zero_hit(false);
+            self.ppu_status.vertical_blank_started = false;
+            self.ppu_status.sprite_overflow = false;
+            self.ppu_status.sprite_zero_hit = false;
             self.fg_sprite_lsb_shifters = [0; 8];
             self.fg_sprite_msb_shifters = [0; 8];
         }
@@ -1166,7 +1134,7 @@ impl Ricoh2c02 {
             241 => match self.cycle {
                 1 => {
                     // VBlank flag set here. VBlank NMI also occurs here.
-                    self.ppu_status.set_vertical_blank_started(true);
+                    self.ppu_status.vertical_blank_started = true;
 
                     if self.ppu_ctrl.nmi_enable {
                         *nmi_enable = true;
