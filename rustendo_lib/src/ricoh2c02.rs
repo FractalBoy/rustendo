@@ -43,22 +43,6 @@ impl PpuCtrl {
         }
     }
 
-    pub fn get_nametable_select(&self) -> u8 {
-        self.nametable_select
-    }
-
-    pub fn get_background_pattern_table_address(&self) -> u16 {
-        self.background_pattern_table_address
-    }
-
-    pub fn get_increment_mode(&self) -> IncrementMode {
-        self.increment_mode
-    }
-
-    pub fn get_nmi_enable(&self) -> bool {
-        self.nmi_enable
-    }
-
     pub fn get_sprite_height(&self) -> u8 {
         match self.sprite_size {
             SpriteSize::EightByEight => 8,
@@ -286,10 +270,10 @@ impl Register {
 }
 
 struct Sprite {
-    pub top_y_position: u8,
-    pub tile_id: u8,
-    pub attributes: u8,
-    pub left_x_position: u8,
+    top_y_position: u8,
+    tile_id: u8,
+    attributes: u8,
+    left_x_position: u8,
 }
 
 impl Sprite {
@@ -312,6 +296,14 @@ impl Sprite {
         byte: usize,
     ) -> bool {
         Self::_in_range(scanline, height, self[byte])
+    }
+
+    pub fn flipped_vertically(&self) -> bool {
+        return self.attributes & 0x80 == 0x80;
+    }
+
+    pub fn flipped_horizontally(&self) -> bool {
+        return self.attributes & 0x40 == 0x40;
     }
 }
 
@@ -343,9 +335,6 @@ impl IndexMut<usize> for Sprite {
 
 struct Oam {
     oam: Vec<u8>,
-    hi_shift_registers: Vec<u8>,
-    lo_shift_registers: Vec<u8>,
-    counters: Vec<i16>,
     num_sprites: usize,
 }
 
@@ -353,9 +342,6 @@ impl Oam {
     pub fn new(num_sprites: usize) -> Self {
         Oam {
             oam: vec![0; num_sprites * 4],
-            hi_shift_registers: vec![0; num_sprites],
-            lo_shift_registers: vec![0; num_sprites],
-            counters: vec![0; num_sprites],
             num_sprites: 0,
         }
     }
@@ -373,6 +359,12 @@ impl Oam {
         }
     }
 
+    pub fn get_sprites(&self) -> Vec<Sprite> {
+        (0..self.num_sprites)
+            .map(move |sprite_num| self.get_sprite(sprite_num))
+            .collect()
+    }
+
     pub fn copy_sprite(&mut self, oam: &Oam, sprite_num: usize) {
         if self.is_full() {
             return;
@@ -387,18 +379,6 @@ impl Oam {
         self.num_sprites += 1;
     }
 
-    pub fn copy(&mut self, oam: &Oam) {
-        self.oam.copy_from_slice(&oam.oam);
-        self.num_sprites = oam.num_sprites;
-
-        // Initialize the counters, reset the shifters
-        for sprite in 0..self.num_sprites {
-            self.counters[sprite] = self.get_sprite(sprite).left_x_position.into();
-            self.hi_shift_registers[sprite] = 0;
-            self.lo_shift_registers[sprite] = 0;
-        }
-    }
-
     pub fn reset(&mut self) {
         for entry in &mut self.oam {
             *entry = 0xFF;
@@ -409,39 +389,6 @@ impl Oam {
 
     pub fn is_full(&self) -> bool {
         self.num_sprites == self.oam.len() / 4
-    }
-
-    pub fn decrement_counters(&mut self) {
-        for sprite in 0..self.num_sprites {
-            self.counters[sprite] -= 1;
-        }
-    }
-
-    pub fn shift_sprites_into_registers(&mut self) {
-        for sprite in 0..self.num_sprites {
-            // Only shift the ones in range.
-            if self.counters[sprite] <= 0 && self.counters[sprite] > -8 {
-                // TODO: Update registers
-            }
-        }
-    }
-
-    pub fn loop_sprites<F>(&self, mut func: F)
-    where
-        F: FnMut(usize, Sprite, u8, u8) -> bool,
-    {
-        for sprite in 0..self.num_sprites {
-            if self.counters[sprite] <= 0 && self.counters[sprite] > -8 {
-                if func(
-                    sprite,
-                    self.get_sprite(sprite),
-                    self.lo_shift_registers[sprite],
-                    self.hi_shift_registers[sprite],
-                ) {
-                    break;
-                }
-            }
-        }
     }
 }
 
@@ -464,7 +411,6 @@ pub struct Ricoh2c02 {
     cartridge: Option<Cartridge>,
     primary_oam: Oam,
     secondary_oam: Oam,
-    current_scanline_oam: Oam,
     scanline: u32,
     cycle: u32,
     ppu_ctrl: PpuCtrl,
@@ -489,6 +435,9 @@ pub struct Ricoh2c02 {
     screen: Vec<Vec<(u8, u8, u8)>>,
     palette_ram: [u8; 0x20],
     rendering_sprite_zero: bool,
+    scanline_sprites: Vec<Sprite>,
+    fg_sprite_lsb_shifters: [u8; 8],
+    fg_sprite_msb_shifters: [u8; 8],
 }
 
 const CYCLES_PER_SCANLINE: u32 = 341;
@@ -501,7 +450,6 @@ impl Ricoh2c02 {
             cartridge: None,
             primary_oam: Oam::new(64),
             secondary_oam: Oam::new(8),
-            current_scanline_oam: Oam::new(8),
             cycle: 0,
             scanline: 261,
             ppu_ctrl: PpuCtrl::new(),
@@ -526,6 +474,9 @@ impl Ricoh2c02 {
             screen: vec![vec![(0, 0, 0); 0x100]; 0xF0],
             palette_ram: [0; 0x20],
             rendering_sprite_zero: false,
+            scanline_sprites: vec![],
+            fg_sprite_lsb_shifters: [0; 8],
+            fg_sprite_msb_shifters: [0; 8],
         }
     }
 
@@ -637,8 +588,7 @@ impl Ricoh2c02 {
             0x2006 => 0,
             0x2007 => {
                 let address = *self.vram_address;
-                self.vram_address
-                    .increment(self.ppu_ctrl.get_increment_mode());
+                self.vram_address.increment(self.ppu_ctrl.increment_mode);
                 let ppu_data = self.ppu_data;
                 self.ppu_data = self.ppu_read(address);
 
@@ -659,7 +609,7 @@ impl Ricoh2c02 {
                 self.ppu_ctrl.set(data);
                 self.temp_vram_address.set_field(
                     RegisterBits::NametableSelect,
-                    self.ppu_ctrl.get_nametable_select(),
+                    self.ppu_ctrl.nametable_select,
                 );
             }
             0x2001 => self.ppu_mask.set(data),
@@ -702,8 +652,7 @@ impl Ricoh2c02 {
             }
             0x2007 => {
                 let address = *self.vram_address;
-                self.vram_address
-                    .increment(self.ppu_ctrl.get_increment_mode());
+                self.vram_address.increment(self.ppu_ctrl.increment_mode);
                 self.ppu_write(address, data);
             }
             _ => (),
@@ -838,7 +787,7 @@ impl Ricoh2c02 {
     //
     fn update_next_bg_tile_lsb(&mut self) {
         self.next_bg_tile_lsb = self.ppu_read(
-            self.ppu_ctrl.get_background_pattern_table_address()
+            self.ppu_ctrl.background_pattern_table_address
                 | (self.next_bg_tile_id as u16) << 4
                 | 0 << 3
                 | self.vram_address.get_field(RegisterBits::FineY) as u16,
@@ -847,7 +796,7 @@ impl Ricoh2c02 {
 
     fn update_next_bg_tile_msb(&mut self) {
         self.next_bg_tile_msb = self.ppu_read(
-            self.ppu_ctrl.get_background_pattern_table_address()
+            self.ppu_ctrl.background_pattern_table_address
                 | (self.next_bg_tile_id as u16) << 4
                 | 1 << 3
                 | self.vram_address.get_field(RegisterBits::FineY) as u16,
@@ -939,6 +888,72 @@ impl Ricoh2c02 {
         }
     }
 
+    fn update_foreground_shifters(&mut self) {
+        if self.ppu_mask.get_sprite_enable() {
+            for sprite in 0..self.scanline_sprites.len() {
+                if self.scanline_sprites[sprite].left_x_position > 0 {
+                    self.scanline_sprites[sprite].left_x_position -= 1;
+                } else {
+                    self.fg_sprite_lsb_shifters[sprite] <<= 1;
+                    self.fg_sprite_msb_shifters[sprite] <<= 1;
+                }
+            }
+        }
+    }
+
+    fn load_foreground_shifters(&mut self) {
+        self.scanline_sprites.clear();
+
+        for sprite in self.secondary_oam.get_sprites() {
+            let sprite_pattern_addr_lo = match self.ppu_ctrl.sprite_size {
+                SpriteSize::EightByEight => {
+                    let pattern_table = self.ppu_ctrl.sprite_pattern_table_address << 12;
+                    let cell = (sprite.tile_id as u16) << 4;
+                    let row = if sprite.flipped_vertically() {
+                        7 - self.scanline as u16 - sprite.top_y_position as u16
+                    } else {
+                        self.scanline as u16 - sprite.top_y_position as u16
+                    };
+
+                    pattern_table | cell | row
+                }
+                SpriteSize::EightBySixteen => {
+                    let pattern_table = (sprite.tile_id as u16 & 0x01) << 12;
+
+                    let cell = if (self.scanline - sprite.top_y_position as u32) < 8 {
+                        sprite.tile_id as u16 & 0xFE
+                    } else {
+                        (sprite.tile_id as u16 & 0xFE) + 1
+                    };
+
+                    let row = if sprite.flipped_vertically() {
+                        (7 - self.scanline as u16 - sprite.top_y_position as u16) & 0x07
+                    } else {
+                        (self.scanline as u16 - sprite.top_y_position as u16) & 0x07
+                    };
+
+                    pattern_table | cell | row
+                }
+            };
+
+            let sprite_pattern_addr_hi = sprite_pattern_addr_lo + 8;
+
+            let mut sprite_pattern_lo = self.ppu_read(sprite_pattern_addr_lo);
+            let mut sprite_pattern_hi = self.ppu_read(sprite_pattern_addr_hi);
+
+            if sprite.flipped_horizontally() {
+                sprite_pattern_lo = sprite_pattern_lo.reverse_bits();
+                sprite_pattern_hi = sprite_pattern_hi.reverse_bits();
+            }
+
+            let sprite_num = self.scanline_sprites.len();
+            self.fg_sprite_lsb_shifters[sprite_num] = sprite_pattern_lo;
+            self.fg_sprite_msb_shifters[sprite_num] = sprite_pattern_hi;
+
+            self.scanline_sprites.push(sprite);
+        }
+    }
+
     fn calculate_pixel(&mut self) -> (u8, u8, u8) {
         let (bg_pixel, bg_palette) = if self.ppu_mask.get_background_enable() {
             let mask = 0x8000 >> self.fine_x_scroll;
@@ -959,31 +974,31 @@ impl Ricoh2c02 {
             let mut pixel = 0;
             let mut palette = 0;
             let mut priority = false;
-            let mut sprite_zero_hit = false;
 
-            self.current_scanline_oam.loop_sprites(
-                |sprite_num, sprite, register_lo, register_hi| {
-                    let pixel_lsb = register_lo & 0x80;
-                    let pixel_msb = register_hi & 0x80;
-                    pixel = (pixel_msb as u16) << 1 | pixel_lsb as u16;
+            for sprite_num in 0..self.scanline_sprites.len() {
+                let sprite = &self.scanline_sprites[sprite_num];
 
-                    palette = (sprite.attributes & 0x03) as u16;
-                    // Foreground palettes are bytes 4-7
-                    palette += 0x04;
-                    priority = sprite.attributes & 0x20 == 0;
+                if sprite.left_x_position > 0 {
+                    continue;
+                }
 
-                    if pixel != 0 {
-                        if self.rendering_sprite_zero && sprite_num == 0 {
-                            sprite_zero_hit = true;
-                        }
-                        return true;
+                let pixel_lsb = (self.fg_sprite_lsb_shifters[sprite_num] & 0x80) >> 7;
+                let pixel_msb = (self.fg_sprite_msb_shifters[sprite_num] & 0x80) >> 6;
+                pixel = pixel_msb as u16 | pixel_lsb as u16;
+
+                palette = (sprite.attributes & 0x03) as u16;
+                palette += 0x04;
+
+                priority = sprite.attributes & 0x20 == 0;
+
+                if pixel != 0 {
+                    if self.rendering_sprite_zero && sprite_num == 0 {
+                        self.ppu_status.set_sprite_zero_hit(true);
                     }
 
-                    return false;
-                },
-            );
-
-            self.ppu_status.set_sprite_zero_hit(sprite_zero_hit);
+                    break;
+                }
+            }
 
             (pixel, palette, priority)
         } else {
@@ -1028,6 +1043,11 @@ impl Ricoh2c02 {
     fn visible_scanline(&mut self) {
         self.update_background_shifters();
         self.update_background();
+
+        match self.cycle {
+            1..=257 => self.update_foreground_shifters(),
+            _ => (),
+        };
 
         if self.cycle == 256 {
             self.increment_vertical();
@@ -1101,10 +1121,7 @@ impl Ricoh2c02 {
                     }
                 }
                 66..=256 => return,
-                340 => {
-                    // Copy the entire secondary OAM into the OAM to be used for the next scanline.
-                    self.current_scanline_oam.copy(&self.secondary_oam);
-                }
+                340 => self.load_foreground_shifters(),
                 _ => (),
             },
             _ => {}
@@ -1120,6 +1137,10 @@ impl Ricoh2c02 {
 
         if self.scanline == 261 && self.cycle == 1 {
             self.ppu_status.set_vertical_blank_started(false);
+            self.ppu_status.set_sprite_overflow(false);
+            self.ppu_status.set_sprite_zero_hit(false);
+            self.fg_sprite_lsb_shifters = [0; 8];
+            self.fg_sprite_msb_shifters = [0; 8];
         }
 
         match self.scanline {
@@ -1147,7 +1168,7 @@ impl Ricoh2c02 {
                     // VBlank flag set here. VBlank NMI also occurs here.
                     self.ppu_status.set_vertical_blank_started(true);
 
-                    if self.ppu_ctrl.get_nmi_enable() {
+                    if self.ppu_ctrl.nmi_enable {
                         *nmi_enable = true;
                     }
                 }
@@ -1156,10 +1177,7 @@ impl Ricoh2c02 {
             _ => (),
         }
 
-        // Sprite evaluation and rendering
         self.sprite_evaluation();
-        self.current_scanline_oam.decrement_counters();
-        self.current_scanline_oam.shift_sprites_into_registers();
 
         if self.cycle < 256 && self.scanline < 240 {
             self.screen[self.scanline as usize][self.cycle as usize] = self.calculate_pixel();
