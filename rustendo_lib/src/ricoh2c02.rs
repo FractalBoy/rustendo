@@ -1029,7 +1029,7 @@ impl Ricoh2c02 {
         }
 
         match self.scanline {
-            1..=239 | 261 => match self.cycle {
+            0..=239 | 261 => match self.cycle {
                 // Cycles 1-64 fill the secondary OAM. Instead, just fill on cycle 1
                 // and do nothing on the remaining cycles.
                 1 => self.secondary_oam.reset(),
