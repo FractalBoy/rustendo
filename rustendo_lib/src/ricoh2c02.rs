@@ -878,7 +878,7 @@ impl Ricoh2c02 {
                     let pattern_table = self.ppu_ctrl.sprite_pattern_table_address << 12;
                     let cell = (sprite.tile_id as u16) << 4;
                     let row = if sprite.flipped_vertically() {
-                        7 - self.scanline as u16 - sprite.top_y_position as u16
+                        7 - (self.scanline as u16 - sprite.top_y_position as u16) as u16
                     } else {
                         self.scanline as u16 - sprite.top_y_position as u16
                     };
@@ -895,7 +895,7 @@ impl Ricoh2c02 {
                     };
 
                     let row = if sprite.flipped_vertically() {
-                        (7 - self.scanline as u16 - sprite.top_y_position as u16) & 0x07
+                        (7 - (self.scanline as u16 - sprite.top_y_position as u16)) & 0x07
                     } else {
                         (self.scanline as u16 - sprite.top_y_position as u16) & 0x07
                     };
