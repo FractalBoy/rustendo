@@ -888,18 +888,23 @@ impl Ricoh2c02 {
                 SpriteSize::EightBySixteen => {
                     let pattern_table = (sprite.tile_id as u16 & 0x01) << 12;
 
-                    let cell = if (self.scanline - sprite.top_y_position as u32) < 8 {
-                        sprite.tile_id as u16 & 0xFE
-                    } else {
-                        (sprite.tile_id as u16 & 0xFE) + 1
-                    };
+                    let mut cell = sprite.tile_id as u16 & 0xFE;
 
                     let row = if sprite.flipped_vertically() {
+                        if (self.scanline - sprite.top_y_position as u32) < 8 {
+                            cell += 1;
+                        }
+
                         (7 - (self.scanline as u16 - sprite.top_y_position as u16)) & 0x07
                     } else {
+                        if (self.scanline - sprite.top_y_position as u32) >= 8 {
+                            cell += 1;
+                        }
+
                         (self.scanline as u16 - sprite.top_y_position as u16) & 0x07
                     };
 
+                    cell <<= 4;
                     pattern_table | cell | row
                 }
             };
