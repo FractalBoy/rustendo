@@ -250,6 +250,8 @@ struct Sprite {
 
 impl Sprite {
     fn _in_range(scanline: u32, height: u8, byte: u8) -> bool {
+        // We're looking at the next scanline
+        let scanline = if scanline == 261 { 0 } else { scanline + 1 };
         let byte: u32 = byte.into();
         let height: u32 = height.into();
 
@@ -857,8 +859,14 @@ impl Ricoh2c02 {
     fn load_foreground_shifters(&mut self) {
         self.scanline_sprites.clear();
 
+        let scanline = if self.scanline == 261 {
+            0
+        } else {
+            self.scanline + 1
+        };
+
         for sprite in self.secondary_oam.get_sprites() {
-            let y_offset = self.scanline as u16 - sprite.top_y_position as u16;
+            let y_offset = scanline as u16 - sprite.top_y_position as u16;
             let row = if sprite.flipped_vertically() {
                 7 - y_offset
             } else {
@@ -1056,9 +1064,8 @@ impl Ricoh2c02 {
             0..=239 | 261 => match self.cycle {
                 // Cycles 1-64 fill the secondary OAM. Instead, just fill on cycle 1
                 // and do nothing on the remaining cycles.
-                1 => self.secondary_oam.reset(),
-                2..=64 => return,
-                65 => {
+                64 => self.secondary_oam.reset(),
+                256 => {
                     let mut current_sprite_number: usize = 0;
                     self.rendering_sprite_zero = false;
 
@@ -1112,8 +1119,7 @@ impl Ricoh2c02 {
                         }
                     }
                 }
-                66..=256 => return,
-                340 => self.load_foreground_shifters(),
+                320 => self.load_foreground_shifters(),
                 _ => (),
             },
             _ => {}
