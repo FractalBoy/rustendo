@@ -856,19 +856,6 @@ impl Ricoh2c02 {
         }
     }
 
-    fn update_foreground_shifters(&mut self) {
-        if self.ppu_mask.sprite_enable {
-            for sprite in 0..self.scanline_sprites.len() {
-                if self.scanline_sprites[sprite].left_x_position > 0 {
-                    self.scanline_sprites[sprite].left_x_position -= 1;
-                } else {
-                    self.fg_sprite_lsb_shifters[sprite] <<= 1;
-                    self.fg_sprite_msb_shifters[sprite] <<= 1;
-                }
-            }
-        }
-    }
-
     fn load_foreground_shifters(&mut self) {
         self.scanline_sprites.clear();
 
@@ -942,7 +929,7 @@ impl Ricoh2c02 {
             };
 
             let sprite_pattern_addr_hi = sprite_pattern_addr_lo | 0x08;
-            
+
             let mut sprite_pattern_lo = self.ppu_read(sprite_pattern_addr_lo);
             let mut sprite_pattern_hi = self.ppu_read(sprite_pattern_addr_hi);
 
@@ -982,9 +969,10 @@ impl Ricoh2c02 {
             let mut priority = false;
 
             for sprite_num in 0..self.scanline_sprites.len() {
-                let sprite = &self.scanline_sprites[sprite_num];
+                let mut sprite = &mut self.scanline_sprites[sprite_num];
 
                 if sprite.left_x_position > 0 {
+                    sprite.left_x_position -= 1;
                     continue;
                 }
 
@@ -992,18 +980,23 @@ impl Ricoh2c02 {
                 let pixel_msb = (self.fg_sprite_msb_shifters[sprite_num] & 0x80) >> 6;
                 pixel = pixel_msb as u16 | pixel_lsb as u16;
 
+                self.fg_sprite_lsb_shifters[sprite_num] <<= 1;
+                self.fg_sprite_msb_shifters[sprite_num] <<= 1;
+
+                if pixel == 0 {
+                    continue;
+                }
+
                 palette = (sprite.attributes & 0x03) as u16;
                 palette += 0x04;
 
                 priority = sprite.attributes & 0x20 == 0;
 
-                if pixel != 0 {
-                    if self.rendering_sprite_zero && sprite_num == 0 {
-                        self.ppu_status.sprite_zero_hit = true;
-                    }
-
-                    break;
+                if self.rendering_sprite_zero && sprite_num == 0 {
+                    self.ppu_status.sprite_zero_hit = true;
                 }
+
+                break;
             }
 
             (pixel, palette, priority)
@@ -1049,11 +1042,6 @@ impl Ricoh2c02 {
     fn visible_scanline(&mut self) {
         self.update_background_shifters();
         self.update_background();
-
-        match self.cycle {
-            1..=257 => self.update_foreground_shifters(),
-            _ => (),
-        };
 
         if self.cycle == 256 {
             self.increment_vertical();
