@@ -250,8 +250,6 @@ struct Sprite {
 
 impl Sprite {
     fn _in_range(scanline: u32, height: u8, byte: u8) -> bool {
-        // We are evaluating the next scanline.
-        let scanline = scanline + 1;
         let byte: u32 = byte.into();
         let height: u32 = height.into();
 
