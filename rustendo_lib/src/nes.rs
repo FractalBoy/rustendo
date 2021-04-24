@@ -105,7 +105,7 @@ impl Nes {
 //     #[test]
 //     fn it_works() {
 //         let current_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-//         let nes_test = current_dir.parent().unwrap().join("colors.nes");
+//         let nes_test = current_dir.parent().unwrap().join("donkey kong.nes");
 //         let buffer = fs::read(nes_test).unwrap();
 
 //         let mut nes = Nes::new();

@@ -873,47 +873,80 @@ impl Ricoh2c02 {
         self.scanline_sprites.clear();
 
         for sprite in self.secondary_oam.get_sprites() {
+            let y_offset = self.scanline as u16 - sprite.top_y_position as u16;
+            let row = if sprite.flipped_vertically() {
+                7 - y_offset
+            } else {
+                y_offset
+            };
+            let tile = sprite.tile_id as u16;
+
+            // Pattern table addresses are formatted as follows:
+            // 0H RRRR CCCC PTTT
+            //
+            // H - half of the pattern table - either 0x0000 or 0x1000, indicated
+            // by bit 7 in PPUCTRL (for 8x8 sprites), or by bit 0 of the sprite's
+            // tile ID.
+            //
+            // R - row of the tile
+            // C - column of the tile
+            // For 8x8 sprites, RRRR CCCC is just the tile ID.
+            // For 8x16 sprites, it could be the tile ID or the one below it.
+            //
+            // P - bit plane - will be 0 for the LSB and 1 for the MSB of the pixel color.
+            //
+            // T - row within the tile.
+            // For 8x8 sprites, this is the difference between the scanline and the top Y position
+            // of the sprite (the Y offset). Meaning, the top of the sprite is drawn when
+            // scanline == top Y position and the bottom of the sprite is drawn when
+            // scanline == top Y position + 7.
+            // For 8x16 sprites, the Y offset can be greater than 7 (0-15).
+            // If it is, then we need to move down to the next tile.
+            //
+            // For C and T, we need to also think about what happens when the sprite is flipped vertically
+            // (on the horizontal axis). If the sprite is flipped vertically, than the bottom of the sprite
+            // is drawn first (i.e., when scanline == top Y position), and the top of the sprite is drawn
+            // last (when scanline == top Y position + 7). So to get the appropriate row in the current tile,
+            // we subtract the row from 7.
+            // For 8x16 sprites, we also need to choose the appropriate 8x8 tile within the sprite.
+            // So, we draw the next tile from the bottom up when the Y offset is < 8 and the current
+            // tile from the bottom up when the Y offset is > 7
             let sprite_pattern_addr_lo = match self.ppu_ctrl.sprite_size {
                 SpriteSize::EightByEight => {
-                    let pattern_table = self.ppu_ctrl.sprite_pattern_table_address << 12;
-                    let cell = (sprite.tile_id as u16) << 4;
-                    let row = if sprite.flipped_vertically() {
-                        7 - (self.scanline as u16 - sprite.top_y_position as u16) as u16
-                    } else {
-                        self.scanline as u16 - sprite.top_y_position as u16
-                    };
-
-                    pattern_table | cell | row
+                    self.ppu_ctrl.sprite_pattern_table_address | tile << 4 | row
                 }
                 SpriteSize::EightBySixteen => {
+                    // For 8x16 sprites, the pattern table half is identified by the LSB
+                    // of the tile ID.
                     let pattern_table = (sprite.tile_id as u16 & 0x01) << 12;
 
-                    let mut cell = sprite.tile_id as u16 & 0xFE;
+                    // We only need 7 bits to identify an 8x16 region within a 16 bit space
+                    let tile = tile & 0xFE;
 
-                    let row = if sprite.flipped_vertically() {
-                        if (self.scanline - sprite.top_y_position as u32) < 8 {
-                            cell += 1;
-                        }
-
-                        (7 - (self.scanline as u16 - sprite.top_y_position as u16)) & 0x07
-                    } else {
-                        if (self.scanline - sprite.top_y_position as u32) >= 8 {
-                            cell += 1;
-                        }
-
-                        (self.scanline as u16 - sprite.top_y_position as u16) & 0x07
+                    // The half of the tile. 0 - top, 1 - bottom.
+                    // If not flipped vertically, 0 < y <= 7 => top and 8 < y <= 15 => bottom.
+                    // If flipped vertically, this is reversed.
+                    let half = match (sprite.flipped_vertically(), y_offset) {
+                        (false, 0..=7) => 0,
+                        (true, 0..=7) => 1,
+                        (false, 8..=15) => 1,
+                        (true, 8..=15) => 0,
+                        _ => unreachable!(),
                     };
 
-                    cell <<= 4;
-                    pattern_table | cell | row
+                    // Need to clamp the row so that we start back at zero
+                    // for the next tile.
+                    let row = row & 0x07;
+                    pattern_table | tile << 4 | half << 4 | row
                 }
             };
 
-            let sprite_pattern_addr_hi = sprite_pattern_addr_lo + 8;
-
+            let sprite_pattern_addr_hi = sprite_pattern_addr_lo | 0x08;
+            
             let mut sprite_pattern_lo = self.ppu_read(sprite_pattern_addr_lo);
             let mut sprite_pattern_hi = self.ppu_read(sprite_pattern_addr_hi);
 
+            // If the sprite is flipped horizontally, just reverse the order of the bits.
             if sprite.flipped_horizontally() {
                 sprite_pattern_lo = sprite_pattern_lo.reverse_bits();
                 sprite_pattern_hi = sprite_pattern_hi.reverse_bits();
