@@ -3,7 +3,8 @@ macro_rules! log {
     ( $( $t:tt )* ) => {
         if cfg!(feature = "debug") {
             if cfg!(target_arch = "wasm32") {
-                web_sys::console::log_1(&format!( $( $t )* ).into());
+                #[allow(unused_unsafe)]
+                unsafe { web_sys::console::log_1(&format!( $( $t )* ).into()) };
             } else {
                 print!( $( $t )* );
             }
