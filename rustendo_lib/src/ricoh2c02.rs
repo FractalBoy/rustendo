@@ -341,10 +341,10 @@ impl Oam {
         }
 
         let sprite = oam.get_sprite(sprite_num);
-        self.oam[self.num_sprites] = sprite.top_y_position;
-        self.oam[self.num_sprites + 1] = sprite.tile_id;
-        self.oam[self.num_sprites + 2] = sprite.attributes;
-        self.oam[self.num_sprites + 3] = sprite.left_x_position;
+        self.oam[self.num_sprites * 4] = sprite.top_y_position;
+        self.oam[self.num_sprites * 4 + 1] = sprite.tile_id;
+        self.oam[self.num_sprites * 4 + 2] = sprite.attributes;
+        self.oam[self.num_sprites * 4 + 3] = sprite.left_x_position;
 
         self.num_sprites += 1;
     }
