@@ -973,6 +973,7 @@ impl Ricoh2c02 {
             let mut pixel = 0;
             let mut palette = 0;
             let mut priority = false;
+            let mut found = false;
 
             for sprite_num in 0..self.scanline_sprites.len() {
                 let mut sprite = &mut self.scanline_sprites[sprite_num];
@@ -982,17 +983,24 @@ impl Ricoh2c02 {
                     continue;
                 }
 
-                let pixel_lsb = (self.fg_sprite_lsb_shifters[sprite_num] & 0x80) >> 7;
-                let pixel_msb = (self.fg_sprite_msb_shifters[sprite_num] & 0x80) >> 6;
-                pixel = pixel_msb as u16 | pixel_lsb as u16;
+                if !found {
+                    let pixel_lsb = (self.fg_sprite_lsb_shifters[sprite_num] & 0x80) >> 7;
+                    let pixel_msb = (self.fg_sprite_msb_shifters[sprite_num] & 0x80) >> 6;
+                    pixel = pixel_msb as u16 | pixel_lsb as u16;
+                }
 
                 self.fg_sprite_lsb_shifters[sprite_num] <<= 1;
                 self.fg_sprite_msb_shifters[sprite_num] <<= 1;
+
+                if found {
+                    continue;
+                }
 
                 if pixel == 0 {
                     continue;
                 }
 
+                found = true;
                 palette = (sprite.attributes & 0x03) as u16;
                 palette += 0x04;
 
@@ -1001,8 +1009,6 @@ impl Ricoh2c02 {
                 if self.rendering_sprite_zero && sprite_num == 0 {
                     self.ppu_status.sprite_zero_hit = true;
                 }
-
-                break;
             }
 
             (pixel, palette, priority)
