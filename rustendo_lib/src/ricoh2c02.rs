@@ -922,7 +922,7 @@ impl Ricoh2c02 {
                         (true, 0..=7) => 1,
                         (false, 8..=15) => 1,
                         (true, 8..=15) => 0,
-                        _ => unreachable!("y_offset too large"),
+                        _ => unreachable!(),
                     };
 
                     // Need to clamp the row so that we start back at zero
