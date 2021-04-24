@@ -320,14 +320,12 @@ impl Oam {
 
     pub fn get_sprite(&self, sprite: usize) -> Sprite {
         let start = sprite * 4;
-        let end = (sprite + 1) * 4;
-        let slice = &self.oam[start..end];
 
         Sprite {
-            top_y_position: slice[0],
-            tile_id: slice[1],
-            attributes: slice[2],
-            left_x_position: slice[3],
+            top_y_position: self.oam[start],
+            tile_id: self.oam[start + 1],
+            attributes: self.oam[start + 2],
+            left_x_position: self.oam[start + 3],
         }
     }
 
@@ -924,7 +922,7 @@ impl Ricoh2c02 {
                         (true, 0..=7) => 1,
                         (false, 8..=15) => 1,
                         (true, 8..=15) => 0,
-                        _ => unreachable!(),
+                        _ => unreachable!("y_offset too large"),
                     };
 
                     // Need to clamp the row so that we start back at zero
@@ -1089,12 +1087,12 @@ impl Ricoh2c02 {
 
                         current_sprite_number += 1;
 
-                        if self.secondary_oam.is_full() {
-                            break;
-                        }
-
                         if current_sprite_number == 64 {
                             return;
+                        }
+
+                        if self.secondary_oam.is_full() {
+                            break;
                         }
                     }
 
