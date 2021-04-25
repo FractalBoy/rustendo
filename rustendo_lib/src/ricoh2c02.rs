@@ -1138,7 +1138,9 @@ impl Ricoh2c02 {
             self.cycle = 1;
         }
 
-        if self.scanline == 261 && self.cycle == 1 {
+        // According to NES dev wiki, this clears on scanline 261 / cycle 1,
+        // but according to Blargg's PPU tests, it is cleared a little earlier.
+        if self.scanline == 260 && self.cycle == 330 {
             self.ppu_status.vertical_blank_started = false;
             self.ppu_status.sprite_overflow = false;
             self.ppu_status.sprite_zero_hit = false;
