@@ -593,6 +593,7 @@ impl Ricoh2c02 {
                     return;
                 }
 
+                self.oam_addr += 1;
                 self.primary_oam[address as usize] = data;
             }
             0x2005 => {
