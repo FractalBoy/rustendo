@@ -559,14 +559,24 @@ impl Ricoh2c02 {
             0x2007 => {
                 let address = *self.vram_address;
                 self.vram_address.increment(self.ppu_ctrl.increment_mode);
-                let ppu_data = self.ppu_data;
-                self.ppu_data = self.ppu_read(address);
 
                 // Palette range returns data immediately,
                 // otherwise the data from the buffer is returned
                 match address {
-                    0x3F00..=0x3FFF => self.ppu_data,
-                    _ => ppu_data,
+                    0x3F00..=0x3FFF => {
+                        // Reading from palette RAM still puts data from VRAM
+                        // into the buffer. 
+                        self.ppu_data = match &self.cartridge {
+                            Some(cartridge) => self.ram.read(cartridge.mirroring_type(), address),
+                            None => self.ram.read(MirroringType::Vertical, address),
+                        };
+                        self.ppu_read(address)
+                    }
+                    _ => {
+                        let ppu_data = self.ppu_data;
+                        self.ppu_data = self.ppu_read(address);
+                        ppu_data
+                    }
                 }
             }
             _ => 0,
